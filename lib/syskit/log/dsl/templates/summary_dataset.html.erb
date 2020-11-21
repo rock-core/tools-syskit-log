@@ -13,13 +13,16 @@
     <tr>
         <td>Name</td>
         <td>Model</td>
+        <td>Ports</td>
     </tr>
 </thead>
 
 <% tasks.each do |task_streams| %>
+    <% ports = task_streams.each_port_stream.map { |name, _| "#{name}_port " } %>
 <tr>
-    <td><%= task_streams.task_name %></td>
+    <td><%= task_streams.task_name %>_task</td>
     <td><%= task_streams.orogen_model_name %></td>
+    <td><%= ports.join(", ") %></td>
 </tr>
 <% end %>
 </table>
