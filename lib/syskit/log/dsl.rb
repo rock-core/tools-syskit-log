@@ -162,6 +162,31 @@ module Syskit
                 @interval[1]
             end
 
+            # Map a Time object into the interval value
+            #
+            # @return [nil,Integer] nil if the time is outside the interval's bounds,
+            #   the relative time otherwise
+            def interval_map_time(time)
+                return if time < @interval[0] || time > @interval[1]
+
+                time - @interval_zero_time
+            end
+
+            # Map the intersection of a time interval with the currently selected interval
+            #
+            # @return [nil,Integer] nil if the time is outside the interval's bounds,
+            #   the relative time otherwise
+            def interval_map_intersection(start, stop)
+                return if stop < interval_start || start > interval_end
+
+                min = interval_start - interval_zero_time
+                max = interval_end - interval_zero_time
+                [
+                    [start - interval_zero_time, min].max,
+                    [stop - interval_zero_time, max].min
+                ]
+            end
+
             # The zero time
             attr_reader :interval_zero_time
 
@@ -304,7 +329,7 @@ module Syskit
 
             # Generic entry point to see information about an object
             def summarize(object)
-                DSL::Summary.new(object)
+                DSL::Summary.new(object, interval_zero_time)
             end
 
             # Sample period information about a port or all ports of a task

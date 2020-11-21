@@ -5,8 +5,13 @@ module Syskit
         module DSL
             # @api private
             class Summary
-                def initialize(object)
+                def initialize(object, zero_time)
                     @object = object
+                    @zero_time = zero_time
+                end
+
+                def relative_time(time)
+                    time - @zero_time if @zero_time
                 end
 
                 def to_html
@@ -17,6 +22,8 @@ module Syskit
                         object_to_html(@object, "task_streams")
                     when LazyDataStream
                         object_to_html(@object, "data_stream")
+                    when RobySQLIndex::Accessors::TaskModel
+                        object_to_html(@object, "roby_task_model")
                     end
                 end
 

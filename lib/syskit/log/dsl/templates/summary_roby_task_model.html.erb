@@ -1,0 +1,31 @@
+<%= roby_task_model.name %>
+<table>
+<thead>
+<tr>
+    <td>ID</td>
+    <td>Start</td>
+    <td>Stop</td>
+    <td>Start (relative)</td>
+    <td>Stop (relative)</td>
+</tr>
+</thead>
+
+<% roby_task_model.each_task do |task| %>
+<%
+    if (start_t = task.start_event.first&.time)
+        start_t_relative = relative_time(start_t)
+    end
+
+    if (stop_t = task.stop_event.first&.time)
+        stop_t_relative = relative_time(stop_t)
+    end
+%>
+<tr>
+    <td><%= task.id %></td>
+    <td><%= start_t %></td>
+    <td><%= stop_t %></td>
+    <td><%= start_t_relative %></td>
+    <td><%= stop_t_relative %></td>
+</tr>
+<% end %>
+</table>
