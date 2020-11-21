@@ -43,7 +43,7 @@ module Syskit::Log
             (datastore_path + "core").mkpath
             (datastore_path + "cache").mkpath
             (datastore_path + "incoming").mkpath
-            store = Datastore.new(datastore_path)
+            Datastore.new(datastore_path)
         end
 
         class AmbiguousShortDigest < ArgumentError; end

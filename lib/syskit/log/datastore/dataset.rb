@@ -135,7 +135,7 @@ module Syskit::Log
                     raise InvalidDigest,
                           "#{digest} does not look like a valid SHA2 digest encoded "\
                           "with #{DIGEST_ENCODING_METHOD}. "\
-                          'Expected characters in 0-9a-zA-Z+'
+                          "Expected characters in 0-9a-zA-Z+"
                 end
                 digest
             end
