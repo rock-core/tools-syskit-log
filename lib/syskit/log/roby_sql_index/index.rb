@@ -31,10 +31,6 @@ module Syskit
                     @emitted_events = rom.relations[:emitted_events]
                 end
 
-                def dispose
-                    @db.close
-                end
-
                 # Access to models stored in the index
                 #
                 # @return [Models]
