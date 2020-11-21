@@ -55,20 +55,20 @@ module Syskit
                 end
 
                 it "selects it by complete digest" do
-                    @context.dataset_select @dataset.digest
-                    assert_equal @dataset.digest, @context.dataset.digest
+                    @context.dataset_select "exists"
+                    assert_equal "exists", @context.dataset.digest
                 end
 
                 it "selects it by a partial digest" do
-                    @context.dataset_select @dataset.digest[0, 5]
-                    assert_equal @dataset.digest, @context.dataset.digest
+                    @context.dataset_select "exi"
+                    assert_equal "exists", @context.dataset.digest
                 end
 
                 it "selects it by metadata" do
                     @dataset.metadata_set "key", "value"
                     @dataset.metadata_write_to_file
                     @context.dataset_select "key" => "value"
-                    assert_equal @dataset.digest, @context.dataset.digest
+                    assert_equal "exists", @context.dataset.digest
                 end
 
                 it "runs an interactive picker if more than one dataset matches "\

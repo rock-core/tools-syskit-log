@@ -374,6 +374,7 @@ module Syskit::Log
                 (dataset_path + BASENAME_IDENTITY_METADATA).open('w') do |io|
                     YAML.dump metadata, io
                 end
+                @digest = dataset_digest
             end
 
             # Reset all metadata associated with this dataset
