@@ -3,6 +3,7 @@
 require "test_helper"
 require "syskit/log/dsl"
 require "daru"
+require "iruby"
 
 module Syskit
     module Log # :nodoc:
@@ -102,6 +103,126 @@ module Syskit
                     assert_raises(ArgumentError) do
                         @context.dataset_select "bla" => "blo"
                     end
+                end
+
+                it "initializes the interval to the dataset interval" do
+                    now = create_simple_dataset "with_logs"
+                    @context.dataset_select "with_logs"
+                    assert_equal now, @context.interval_start
+                    assert_equal now + 1, @context.interval_end
+                    assert_equal now, @context.interval_zero_time
+                end
+            end
+
+            describe "#interval_select" do
+                before do
+                    @context = make_context
+                    @context.datastore_select @datastore_path
+
+                    @index = RobySQLIndex::Index.create(logfile_pathname("roby.sql"))
+                    @index.add_roby_log(roby_log_path("accessors"))
+                    create_simple_dataset "exists"
+                    @context.dataset_select "exists"
+                    flexmock(@context.dataset).should_receive(roby_sql_index: @index)
+                end
+
+                it "resolves two times as an interval" do
+                    from, to = @context.interval_select(Time.at(1), Time.at(2))
+                    assert_equal from, Time.at(1)
+                    assert_equal to, Time.at(2)
+                end
+
+                it "resolves a single time as an interval grown by 30s by default" do
+                    from, to = @context.interval_select(Time.at(0))
+                    assert_equal from, Time.at(0) - 30
+                    assert_equal to, Time.at(0) + 30
+                end
+
+                it "resolves two event emissions as an interval" do
+                    task = @context.roby.Namespace.M.each_task.first
+                    from, to = @context.interval_select(
+                        task.start_event, task.stop_event
+                    )
+                    assert_equal from, task.start_event.first.time
+                    assert_equal to, task.stop_event.first.time
+                end
+
+                it "resolves a single event emission as an interval grown "\
+                   "by DEFAULT_GROW" do
+                    task = @context.roby.Namespace.M.each_task.first
+                    from, to = @context.interval_select(task.start_event.first)
+                    assert_equal(
+                        from, task.start_event.first.time - DSL::INTERVAL_DEFAULT_GROW
+                    )
+                    assert_equal(
+                        to, task.start_event.first.time + DSL::INTERVAL_DEFAULT_GROW
+                    )
+                end
+
+                it "grows the interval from a single event emission by the grow "\
+                   "parameter if given" do
+                    task = @context.roby.Namespace.M.each_task.first
+                    from, to = @context.interval_select(task.start_event.first, grow: 10)
+                    assert_equal from, task.start_event.first.time - 10
+                    assert_equal to, task.start_event.first.time + 10
+                end
+
+                it "uses the start event of a task used as first parameter" do
+                    task = @context.roby.Namespace.M.each_task.first
+                    from, to = @context.interval_select(task, Time.at(200))
+                    assert_equal from, task.start_event.first.time
+                    assert_equal to, Time.at(200)
+                end
+
+                it "uses the stop event of a task used as first parameter" do
+                    task = @context.roby.Namespace.M.each_task.first
+                    from, to = @context.interval_select(Time.at(0), task)
+                    assert_equal from, Time.at(0)
+                    assert_equal to, task.stop_event.first.time
+                end
+
+                it "uses the start and stop event of a task used as sole parameter" do
+                    task = @context.roby.Namespace.M.each_task.first
+                    from, to = @context.interval_select(task)
+                    assert_equal from, task.start_event.first.time
+                    assert_equal to, task.stop_event.first.time
+                end
+
+                it "lets the user choose between multiple tasks" do
+                    model = @context.roby.Namespace.M
+                    flexmock(model)
+                        .should_receive(:each_task)
+                        .and_return(
+                            [flexmock(id: "t1", interval_lg: [Time.at(1), Time.at(2)]),
+                             flexmock(id: "t2", interval_lg: [Time.at(3), Time.at(4)])]
+                        )
+                    flexmock(IRuby).should_receive(:form)
+                                   .and_return(
+                                       { selected_task: "t2 #{Time.at(3)} #{Time.at(4)}" }
+                                   )
+
+                    from, to = @context.interval_select(model)
+                    assert_equal from, Time.at(3)
+                    assert_equal to, Time.at(4)
+                end
+
+                it "lets the user choose between multiple event emissions" do
+                    model = @context.roby.Namespace.M.start_event
+                    flexmock(model)
+                        .should_receive(:each_emission)
+                        .and_return(
+                            [flexmock(full_name: "e1", time: Time.at(2)),
+                             flexmock(full_name: "e2", time: Time.at(3))]
+                        )
+                    flexmock(IRuby).should_receive(:form)
+                                   .and_return(
+                                       { selected_event: "e2 #{Time.at(3)}" },
+                                       { selected_event: "e1 #{Time.at(2)}" }
+                                   )
+
+                    from, to = @context.interval_select(model, model)
+                    assert_equal from, Time.at(3)
+                    assert_equal to, Time.at(2)
                 end
             end
 
@@ -229,6 +350,31 @@ module Syskit
                 context = Object.new
                 context.extend DSL
                 context
+            end
+
+            def roby_log_path(name)
+                Pathname(__dir__) + "roby-logs" + "#{name}-events.log"
+            end
+
+            def create_simple_dataset(name)
+                now_nsec = Time.now
+                now = Time.at(now_nsec.tv_sec, now_nsec.tv_usec)
+
+                create_dataset(name) do
+                    create_logfile "test.0.log" do
+                        create_logfile_stream(
+                            "test", metadata: {
+                                "rock_task_name" => "task_test",
+                                "rock_task_object_name" => "port_test",
+                                "rock_stream_type" => "port"
+                            }
+                        )
+                        write_logfile_sample now, now, 10
+                        write_logfile_sample now + 10, now + 1, 20
+                    end
+                end
+
+                now
             end
         end
     end

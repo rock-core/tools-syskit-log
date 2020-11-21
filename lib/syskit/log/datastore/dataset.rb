@@ -538,6 +538,30 @@ module Syskit::Log
                 end
             end
 
+            # Whether there is actually something in this dataset
+            def empty?
+                interval_lg.empty?
+            end
+
+            # Return the logical time interval of the whole dataset
+            #
+            # That is, the min and max time of all streams in the set
+            #
+            # @return [(Time,Time)]
+            def interval_lg
+                return @interval_lg if @interval_lg
+
+                streams = each_pocolog_lazy_stream.map(&:interval_lg)
+
+                @interval_lg =
+                    if streams.empty?
+                        []
+                    else
+                        interval_start, interval_end = streams.transpose
+                        [interval_start.min, interval_end.max]
+                    end
+            end
+
             # Enumerate the pocolog streams available in this dataset, without
             # loading them
             #

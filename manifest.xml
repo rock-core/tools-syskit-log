@@ -11,5 +11,7 @@
 
     <test_depend package="minitest" />
     <test_depend package="flexmock" />
+    <test_depend package="data_processing/daru" />
+    <test_depend package="iruby" />
 </package>
 

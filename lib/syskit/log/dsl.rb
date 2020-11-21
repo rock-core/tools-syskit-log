@@ -53,13 +53,10 @@ module Syskit
             #   dataset digest. Otherwise, it is used as a metadata query and
             #   given to {Datastore#find}
             def dataset_select(query = nil)
-                if query.respond_to?(:to_str)
-                    @dataset = datastore.get(query)
-                    return summarize(@dataset)
-                end
-
                 matches =
-                    if query
+                    if query.respond_to?(:to_str)
+                        [datastore.get(query)]
+                    elsif query
                         datastore.find_all(query)
                     else
                         datastore.each_dataset.to_a
@@ -68,11 +65,12 @@ module Syskit
                 if matches.size == 1
                     @dataset = matches.first
                 elsif matches.empty?
-                    raise ArgumentError, "no dataset matches the given metadata"
+                    raise ArgumentError, "no dataset matches '#{query}'"
                 else
                     @dataset = __dataset_user_select(matches)
                 end
 
+                interval_select(*@dataset.interval_lg) unless @dataset.empty?
                 summarize(@dataset)
             end
 
@@ -110,22 +108,142 @@ module Syskit
                 "#{description} - #{metadata}"
             end
 
+            INTERVAL_DEFAULT_GROW = 30
+
             # Select the time interval that will be processed
-            def interval_select(start_time, end_time, reset_zero: true)
-                @base_interval = [start_time, end_time]
+            #
+            # The different forms of this method will attempt to resolve its arguments
+            # as either timepoints or intervals, following these rules:
+            #
+            # * Time objects are timepoints (obviously)
+            # * Roby's emitted events (RobySQLIndex::Accessors::EventEmission)
+            #   are timepoints
+            # * when Roby's event and event models are given, a widget is displayed
+            #   to pick an emission, which is then used as a timepoint
+            # * Roby tasks are resolved as intervals, using their start and stop events
+            # * when a Roby task model is given, a widget is displayed
+            #   to pick an instance, which is resolved as an interval
+            # * a data stream (e.g. `example_task.out_port`) is interpreted as an
+            #   interval, based on its first and last samples
+            #
+            # @param [Float] grow grow the resulting interval by this many seconds
+            #   The default is dependent on the object used to select the interval
+            #   (see below)
+            # @param [Boolean] reset_zero whether the current zero should be kept
+            #   (false), or set to the interval start (false)
+            #
+            # @overload interval_select(from, to, reset_zero: true)
+            #   @param from either a timepoint or an interval. In the latter case,
+            #      the interval's min time is used
+            #   @param to either a timepoint or an interval. In the latter case,
+            #      the interval's max time is used
+            #
+            # @overload interval_select(interval, reset_zero: true, grow: 0)
+            #   @param interval set the interval. If given a timepoint, it creates
+            #      an interval around this timepoint
+            #
+            # @overload interval_select(timepoint, reset_zero: true, grow: 30)
+            #   @param timepoint set an interval of `grow` seconds around the given
+            #      timepoint
+            #
+            def interval_select(*args, reset_zero: true, grow: nil)
+                if args.size == 2
+                    @base_interval = [
+                        __resolve_timepoint(args[0], 0),
+                        __resolve_timepoint(args[1], 1)
+                    ]
+                    grow ||= 0
+                elsif args.size == 1
+                    @base_interval = __resolve_interval(args[0])
+                    single_time = @base_interval[0] == @base_interval[1]
+                    grow ||= single_time ? INTERVAL_DEFAULT_GROW : 0
+                else
+                    raise ArgumentError, "expected 1 or 2 arguments, got #{args.size}"
+                end
+
                 interval_reset(reset_zero: reset_zero)
+                interval_grow(grow)
+            end
+            # @api private
+            #
+            # Try to resolve the given object as a time
+            #
+            # @return [Time,nil] the time, or nil if the object cannot
+            #   be interpreted as a time
+            # @see __resolve_timepoint
+            def __try_resolve_timepoint(obj)
+                if obj.respond_to?(:each_emission)
+                    __select_emitted_event(obj.each_emission.to_a).time
+                elsif obj.respond_to?(:time)
+                    obj.time
+                elsif obj.kind_of?(Time)
+                    obj
+                end
             end
 
-            # Select the time interval that will be processed using the start
-            # and end time of a stream
-            def interval_select_from_stream(stream, reset_zero: true)
-                @base_interval = stream.interval_lg
-                interval_reset(reset_zero: reset_zero)
+            # @api private
+            #
+            # Resolve the given object as a time point
+            #
+            # @param [Integer] interval_index when deducing a timepoint from an
+            #   interval, the index in the interval array (either 0 or 1)
+            # @return [Time] the time
+            # @raise ArgumentError if the object cannot be interpreted as a timepoint
+            # @see __try_resolve_timepoint
+            def __resolve_timepoint(obj, interval_index)
+                if (result = __try_resolve_timepoint(obj))
+                    result
+                elsif (interval = __try_resolve_interval(obj))
+                    interval[interval_index]
+                else
+                    raise ArgumentError, "cannot resolve #{obj} as a timepoint"
+                end
+            end
+
+            # @api private
+            #
+            # Try to resolve the given object as a time interval
+            #
+            # @return [(Time,Time),nil] the interval, or nil if the object cannot
+            #   be interpreted as an interval
+            # @see __resolve_interval
+            def __try_resolve_interval(obj)
+                case obj
+                when RobySQLIndex::Accessors::TaskModel
+                    obj = __select_task(obj.each_task.to_a)
+                end
+
+                obj.interval_lg if obj.respond_to?(:interval_lg)
+            end
+
+            # @api private
+            #
+            # Resolve the given object as a time interval
+            #
+            # @return [(Time,Time)] the interval
+            # @raise ArgumentError if the if the object cannot
+            #   be interpreted as an interval
+            # @see __try_resolve_interval
+            def __resolve_interval(obj)
+                if (interval = __try_resolve_interval(obj))
+                    interval
+                elsif (timepoint = __try_resolve_timepoint(obj))
+                    [timepoint, timepoint]
+                else
+                    raise ArgumentError, "cannot resolve #{obj} as an interval"
+                end
             end
 
             # Pick the zero time
             def interval_select_zero_time(time)
                 @interval_zero_time = time
+            end
+
+            # Grow the current interval by this many seconds
+            def interval_grow(seconds)
+                @interval[0] -= seconds
+                @interval[1] += seconds
+                @interval
             end
 
             # Select how often will a sample be picked by e.g. to_daru_frame
@@ -245,37 +363,32 @@ module Syskit
                 RobySQLIndex::Accessors::Root.new(dataset.roby_sql_index)
             end
 
-            # Select the interval before a given event
-            #
-            # @param [RobySQLIndex::Accessors::Event] accessor
-            def around_event(accessor, before: 60, after: 60, zero: true)
-                event = __select_emitted_event(accessor)
-
-                interval_select event.time - before, event.time + after
-                interval_select_zero_time event.time if zero
-            end
-
             # @api private
             #
-            # Selects a single emitted event from an event accessor
-            def __select_emitted_event(accessor)
-                return accessor if accessor.respond_to?(:time)
+            # Spawn a form to select an event emission among candidates
+            def __select_task(candidates)
+                raise ArgumentError, "found no tasks" if candidates.empty?
+                return candidates.first if candidates.size == 1
 
-                emissions = accessor.each_emission.to_a
-                if emissions.empty?
-                    raise ArgumentError,
-                          "found no emissions for #{event}"
-                elsif emissions.size > 1
-                    __emitted_event_select(emissions)
-                else
-                    emissions.first
+                candidates = candidates.each_with_object({}) do |task, h|
+                    format = "#{task.id} #{task.interval_lg[0]} #{task.interval_lg[1]}"
+                    h[format] = task
                 end
+
+                result = IRuby.form do
+                    radio(:selected_task, *candidates.keys)
+                    button
+                end
+                candidates.fetch(result[:selected_task])
             end
 
             # @api private
             #
             # Spawn a form to select an event emission among candidates
-            def __emitted_event_select(candidates)
+            def __select_emitted_event(candidates)
+                raise ArgumentError, "found no event emissions" if candidates.empty?
+                return candidates.first if candidates.size == 1
+
                 candidates = candidates.each_with_object({}) do |event, h|
                     format = "#{event.full_name} #{event.time}"
                     h[format] = event
