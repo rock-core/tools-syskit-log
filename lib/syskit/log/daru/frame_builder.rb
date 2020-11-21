@@ -6,7 +6,7 @@ module Syskit
             # Utility class that allows to create a Daru dataframe based on
             # fields from a pocolog stream
             class FrameBuilder
-                attr_reader :time_field
+                attr_reader :time_fields
                 attr_reader :vector_fields
 
                 def initialize(type)
@@ -36,7 +36,7 @@ module Syskit
                 # The field must represent microseconds in the same frame than
                 # center_time
                 def add_time_field(name = nil, &block)
-                    field = add(name, &block)
+                    add(name, &block)
                     @time_fields << (@fields.size - 1)
                 end
 
@@ -76,11 +76,38 @@ module Syskit
                         transform ? transform.call(v) : v
                     end
 
+                    def na_value
+                        if type <= Typelib::NumericType && !type.integer?
+                            Float::NAN
+                        else
+                            nil
+                        end
+                    end
+
                     def create_vector(size)
                         if type <= Typelib::NumericType && !type.integer?
                             GSL::Vector.alloc(size)
                         else
                             Array.new(size)
+                        end
+                    end
+
+                    def resize_vector(vector, size)
+                        if vector.respond_to?(:subvector) # GSL
+                            new = GSL::Vector.alloc(size)
+                            new[0, vector.size] = vector
+                            new
+                        else
+                            vector[size - 1] = nil
+                            vector
+                        end
+                    end
+
+                    def truncate_vector(vector, size)
+                        if vector.respond_to?(:subvector)
+                            vector.subvector(size).duplicate
+                        else
+                            vector[0, size]
                         end
                     end
 
@@ -118,10 +145,45 @@ module Syskit
 
                 # @api private
                 #
+                # Called during conversion to increase vector's size
+                def resize_vectors(vectors, size)
+                    vectors.zip(@fields).map { |v, f| f.resize_vector(v, size) }
+                end
+
+                # @api private
+                #
+                # Return the array of N/A values for each vectors in this frame
+                def na_values
+                    @fields.map(&:na_value)
+                end
+
+                # @api private
+                #
+                # Called during conversion to a frame to truncate the target vectors
+                # to their actual final size
+                def truncate_vectors(vectors, size)
+                    vectors.zip(@fields).map { |v, f| f.truncate_vector(v, size) }
+                end
+
+                # @api private
+                #
                 # Called during resolution to update a data row
                 def update_row(vectors, row, time, sample)
                     @fields.each_with_index do |f, i|
                         vectors[i][row] = f.resolve(time, sample)
+                    end
+                end
+
+                # @api private
+                #
+                # Set this row to N/A
+                #
+                # @param vectors the object returned by {#create_vectors}
+                # @param [Integer] row the row index
+                # @param na the array of N/A values as created by na_values
+                def update_row_na(vectors, row, values)
+                    vectors.each_with_index do |v, i|
+                        v[row] = values[i]
                     end
                 end
 
@@ -135,7 +197,8 @@ module Syskit
                     @time_fields.each do |field_index|
                         converted = GSL::Vector.alloc(vectors[0].size)
                         vectors[field_index].each_with_index do |us, i|
-                            converted[i] = Float(us - center_time_usec) / 1_000_000.0
+                            recentered = (Float(us - center_time_usec) / 1_000_000.0 if us)
+                            converted[i] = recentered || Float::NAN
                         end
                         vectors[field_index] = converted
                     end
@@ -148,10 +211,10 @@ module Syskit
                 # @param [#raw_each] samples the object that will enumerate samples
                 #   It must yield [realtime, logical_time, sample] the way
                 #   Pocolog::SampleEnumerator does
-                def to_daru_frame(center_time, streams)
+                def to_daru_frame(center_time, stream, timeout: nil)
                     Daru.create_aligned_frame(
-                        center_time, [self], SingleStreamAdapter.new(streams.first),
-                        streams.first.size
+                        center_time, [self], SingleStreamAdapter.new(stream),
+                        stream.size, timeout: timeout
                     )
                 end
 
@@ -171,6 +234,19 @@ module Syskit
 
                     def create_vector(size)
                         Array.new(size)
+                    end
+
+                    def na_value
+                        nil
+                    end
+
+                    def resize_vector(vector, size)
+                        vector[size - 1] = nil
+                        vector
+                    end
+
+                    def truncate_vector(vector, size)
+                        vector[0, size]
                     end
 
                     def apply_vector_transform(vector)

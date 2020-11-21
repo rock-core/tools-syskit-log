@@ -183,7 +183,7 @@ module Syskit
             end
 
             # Convert fields of a data stream into a Daru frame
-            def to_daru_frame(*streams)
+            def to_daru_frame(*streams, timeout: nil)
                 samples = streams.map { |s| samples_of(s) }
                 builders = streams.map { |s| Daru::FrameBuilder.new(s.type) }
                 yield(*builders)
@@ -191,12 +191,14 @@ module Syskit
                 @interval_zero_time ||= streams.first.interval_lg[0]
 
                 if builders.size == 1
-                    builders.first.to_daru_frame(@interval_zero_time, samples)
+                    builders.first.to_daru_frame(
+                        @interval_zero_time, samples, timeout: timeout
+                    )
                 else
                     joint_stream = Pocolog::StreamAligner.new(false, *samples)
                     Daru.create_aligned_frame(
                         @interval_zero_time, builders, joint_stream,
-                        samples.first.size
+                        samples.first.size, timeout: timeout
                     )
                 end
             end
