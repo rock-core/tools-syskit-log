@@ -20,7 +20,6 @@ module Syskit
             def __syskit_log_dsl_initialize
                 @datastore = Datastore.default if Datastore.default_defined?
                 @interval = []
-                @streams = {}
             end
 
             # Select a specific datastore
