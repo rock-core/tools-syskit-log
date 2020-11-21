@@ -68,8 +68,9 @@ module Syskit
                         data.each_slice(4) do |m, sec, usec, args|
                             rebuilder.process_one_event(m, sec, usec, args)
                         end
-                        rebuilder.plan.emitted_events.each do |ev|
-                            add_log_emitted_event(ev)
+
+                        @emitted_events.transaction do
+                            add_log_emitted_events(rebuilder.plan.emitted_events)
                         end
                         rebuilder&.clear_integrated
                         reporter.current = stream.tell
@@ -84,11 +85,13 @@ module Syskit
                 #
                 # @param [Roby::Event] ev
                 # @return [Integer] the record ID
-                def add_log_emitted_event(ev)
-                    task_id = add_log_task(ev.generator.task)
-                    @emitted_events.insert(
+                def add_log_emitted_events(events)
+                    task_ids = add_log_tasks(events.map { |e| e.generator.task })
+                    records = events.zip(task_ids).map do |ev, task_id|
                         { name: ev.symbol.to_s, time: ev.time, task_id: task_id }
-                    )
+                    end
+
+                    @emitted_events.command(:create, result: :many).call(records)
                 end
 
                 # @api private
@@ -97,15 +100,23 @@ module Syskit
                 #
                 # @param [Roby::Task] task
                 # @return [Integer] the record ID
-                def add_log_task(task)
-                    if (task_id = @registered_tasks[task.droby_id])
-                        return task_id
+                def add_log_tasks(tasks)
+                    unique_tasks = tasks.uniq(&:droby_id)
+                    new_tasks = unique_tasks.find_all do |task|
+                        !@registered_tasks[task.droby_id]
                     end
 
-                    model_id = add_model(task.model)
-                    @registered_tasks[task.droby_id] = @tasks.insert(
-                        { model_id: model_id }
-                    )
+                    model_ids = new_tasks.map { |t| { model_id: add_model(t.model) } }
+                    new_task_ids =
+                        @tasks
+                        .command(:create, result: :many)
+                        .call(model_ids)
+                        .map(&:id)
+                    new_tasks.zip(new_task_ids).each do |task, id|
+                        @registered_tasks[task.droby_id] = id
+                    end
+
+                    tasks.map { |t| @registered_tasks.fetch(t.droby_id) }
                 end
 
                 # @api private
