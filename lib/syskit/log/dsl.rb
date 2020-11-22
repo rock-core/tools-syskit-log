@@ -324,9 +324,19 @@ module Syskit
                 @interval
             end
 
+            TIME_EPSILON = 1/1_000_000r
+
             # Convert fields of a data stream into a Daru frame
             def to_daru_frame(*streams, timeout: nil)
-                samples = streams.map { |s| samples_of(s) }
+                interval_start, interval_end = streams.map(&:interval_lg).transpose
+                interval_start = interval_start.min
+                interval_end = interval_end.max
+                interval_start = [interval_start, @interval[0]].max if @interval[0]
+                interval_end = [interval_end, @interval[1]].min if @interval[1]
+
+                samples = streams.map do |s|
+                    samples_of(s, from: interval_start, to: interval_end)
+                end
                 builders = streams.map { |s| Daru::FrameBuilder.new(s.type) }
                 yield(*builders)
 
@@ -345,14 +355,18 @@ module Syskit
                 end
             end
 
-            # Resolve a sample enumerator from a stream object
-            def samples_of(stream)
+            # Restricts a data stream to the current interval and sample selection
+            #
+            # @see interval_select interval_shift_start interval_shift_end
+            def samples_of(stream, from: @interval[0], to: @interval[1])
                 stream = stream.syskit_eager_load if stream.syskit_eager_load
-                stream = stream.from_logical_time(@interval[0]) if @interval[0]
-                stream = stream.to_logical_time(@interval[1]) if @interval[1]
+                stream = stream.from_logical_time(from) if from
+                stream = stream.to_logical_time(to + TIME_EPSILON) if to
+
                 if @interval_sample_by_sample
                     stream = stream.resample_by_index(@interval_sample_by_sample)
                 end
+
                 if @interval_sample_by_time
                     stream = stream.resample_by_time(@interval_sample_by_time)
                 end
