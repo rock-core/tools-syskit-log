@@ -7,16 +7,23 @@ require "syskit/log/dsl/summary"
 
 module Syskit
     module Log
-        # Toplevel module that defines a DSL for log manipulation in e.g. Jupyter
-        # notebooks
+        # Implementation of high-level functionality for log inspection and analysis
         #
-        # All the DSL methods are prefixed with `ds_`
+        # It is specifically designed to be used in a Jupyter notebook using IRuby,
+        # but (almost) all the functionality can also be used in simple Ruby scripts
+        #
+        # A template notebooks can be found in this repository's
+        # [examples/](https://github.com/rock-core/tools-syskit-log/tree/master/examples)
         module DSL
             def self.extend_object(object)
                 super
                 object.__syskit_log_dsl_initialize
             end
 
+            # @api private
+            #
+            # Method called when {DSL} is included, to initialize its instance
+            # variables
             def __syskit_log_dsl_initialize
                 @datastore = Datastore.default if Datastore.default_defined?
                 @interval = []
@@ -49,9 +56,21 @@ module Syskit
 
             # Select the curent dataset
             #
+            # The method resets the interval and zero time to the dataset's interval
+            #
             # @param [String,Hash] query if a string, this is interpreted as a
             #   dataset digest. Otherwise, it is used as a metadata query and
             #   given to {Datastore#find}
+            #
+            # If more than one dataset matches the given query, a widget is shown
+            # to select it interactively
+            #
+            # The returned value will display summary information about the
+            # dataset and its various streams. When in a jupyter notebook, it
+            # is recommended to call {#dataset_select} last in a cell to have that
+            # information displayed
+            #
+            # @see {dataset}
             def dataset_select(query = nil)
                 matches =
                     if query.respond_to?(:to_str)
@@ -74,6 +93,10 @@ module Syskit
                 summarize(@dataset)
             end
 
+            # @api private
+            #
+            # Ask the user to select a dataset among candidates. Nothing is
+            # shown if the set of candidates has exactly one element
             def __dataset_user_select(candidates)
                 this = self
                 candidates = candidates.each_with_object({}) do |dataset, h|
@@ -164,6 +187,7 @@ module Syskit
                 interval_reset(reset_zero: reset_zero)
                 interval_grow(grow)
             end
+
             # @api private
             #
             # Try to resolve the given object as a time
@@ -373,6 +397,9 @@ module Syskit
                 stream
             end
 
+            # Access the information contained in the Roby index
+            #
+            # @return [RobySQLIndex::Accessors::Root]
             def roby
                 RobySQLIndex::Accessors::Root.new(dataset.roby_sql_index)
             end
