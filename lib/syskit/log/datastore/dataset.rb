@@ -551,7 +551,9 @@ module Syskit::Log
             def interval_lg
                 return @interval_lg if @interval_lg
 
-                streams = each_pocolog_lazy_stream.map(&:interval_lg)
+                streams = each_pocolog_lazy_stream
+                          .map(&:interval_lg)
+                          .reject(&:empty?)
 
                 @interval_lg =
                     if streams.empty?
