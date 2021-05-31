@@ -11,3 +11,16 @@ Rake::TestTask.new(:test) do |t|
 end
 
 task :default
+
+RUBOCOP_REQUIRED = (ENV["RUBOCOP"] == "1")
+USE_RUBOCOP = (ENV["RUBOCOP"] != "0")
+
+if USE_RUBOCOP
+    begin
+        require "rubocop/rake_task"
+        RuboCop::RakeTask.new
+        task "test" => "rubocop"
+    rescue LoadError
+        raise if RUBOCOP_REQUIRED
+    end
+end
