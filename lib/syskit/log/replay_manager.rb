@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     # The object that manages the replay itself
     #
@@ -123,7 +125,7 @@ module Syskit::Log
 
         # Start replaying in realtime
         def start(replay_speed: 1)
-            raise StateMismatch, 'already running' if running?
+            raise StateMismatch, "already running" if running?
 
             reset_replay_base_times
             @handler_id = execution_engine.add_side_work_handler(
@@ -132,7 +134,7 @@ module Syskit::Log
         end
 
         def stop
-            raise StateMismatch, 'not running' unless running?
+            raise StateMismatch, "not running" unless running?
 
             execution_engine.remove_side_work_handler(@handler_id)
             @handler_id = nil
@@ -156,7 +158,7 @@ module Syskit::Log
         #
         # Play samples required by the current execution engine's time
         def process_in_realtime(replay_speed,
-                                limit_real_time: end_of_current_engine_cycle)
+            limit_real_time: end_of_current_engine_cycle)
             limit_logical_time = base_logical_time +
                                  (limit_real_time - base_real_time) * replay_speed
 

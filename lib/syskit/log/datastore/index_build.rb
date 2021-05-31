@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require 'roby/droby/logfile/index'
+require "roby/droby/logfile/index"
 
 module Syskit::Log
     class Datastore
         def self.index_build(datastore, dataset,
-                             force: false, reporter: Pocolog::CLI::NullReporter.new)
+            force: false, reporter: Pocolog::CLI::NullReporter.new)
             IndexBuild.new(datastore, dataset)
                       .rebuild(force: force, reporter: reporter)
         end
@@ -39,11 +39,11 @@ module Syskit::Log
             def rebuild_pocolog_indexes(
                 force: false, reporter: Pocolog::CLI::NullReporter.new
             )
-                pocolog_index_dir = (dataset.cache_path + 'pocolog')
+                pocolog_index_dir = (dataset.cache_path + "pocolog")
                 pocolog_index_dir.mkpath
                 if force
                     # Just delete pocolog/*.idx from the cache
-                    Pathname.glob(pocolog_index_dir + '*.idx', &:unlink)
+                    Pathname.glob(pocolog_index_dir + "*.idx", &:unlink)
                 end
 
                 dataset.each_pocolog_path do |logfile_path|

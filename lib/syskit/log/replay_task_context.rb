@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit
     module Log
         # Tasks that replay data streams
@@ -16,4 +18,3 @@ module Syskit
         end
     end
 end
-

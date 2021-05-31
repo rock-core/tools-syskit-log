@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     # Exception raised in resolution methods when one match was expected but more
     # than one was found

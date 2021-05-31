@@ -1,19 +1,21 @@
-require 'roby'
-require 'syskit'
-require 'thor'
+# frozen_string_literal: true
 
-require 'syskit/log'
-require 'syskit/log/datastore/normalize'
-require 'syskit/log/datastore/import'
-require 'syskit/log/datastore/index_build'
-require 'tty-progressbar'
-require 'pocolog/cli/null_reporter'
-require 'pocolog/cli/tty_reporter'
+require "roby"
+require "syskit"
+require "thor"
+
+require "syskit/log"
+require "syskit/log/datastore/normalize"
+require "syskit/log/datastore/import"
+require "syskit/log/datastore/index_build"
+require "tty-progressbar"
+require "pocolog/cli/null_reporter"
+require "pocolog/cli/tty_reporter"
 
 module Syskit::Log
     module CLI
         class Datastore < Thor
-            namespace 'datastore'
+            namespace "datastore"
 
             class_option :silent, type: :boolean, default: false
             class_option :colors, type: :boolean, default: TTY::Color.color?
@@ -22,7 +24,7 @@ module Syskit::Log
 
             no_commands do
                 def create_reporter(
-                    format = '',
+                    format = "",
                     progress: options[:progress],
                     colors: options[:colors],
                     silent: options[:silent],
@@ -42,11 +44,11 @@ module Syskit::Log
                 end
 
                 def datastore_path
-                    unless (path = options[:store] || ENV['SYSKIT_LOG_STORE'])
+                    unless (path = options[:store] || ENV["SYSKIT_LOG_STORE"])
                         raise ArgumentError,
-                              'you must provide a path to a datastore either '\
-                              'with the --store option or through the '\
-                              'SYSKIT_LOG_STORE environment variable'
+                              "you must provide a path to a datastore either "\
+                              "with the --store option or through the "\
+                              "SYSKIT_LOG_STORE environment variable"
                     end
                     Pathname.new(path)
                 end
@@ -61,7 +63,7 @@ module Syskit::Log
 
                 def show_dataset(pastel, store, dataset, long_digest: false)
                     description = dataset.metadata_fetch_all(
-                        'description', '<no description>'
+                        "description", "<no description>"
                     )
                     digest = store.short_digest(dataset) unless long_digest
                     format = "% #{digest.size}s"
@@ -70,7 +72,7 @@ module Syskit::Log
                     end
                     metadata = dataset.metadata
                     metadata.each do |k, v|
-                        next if k == 'description'
+                        next if k == "description"
 
                         if v.size == 1
                             puts "  #{k}: #{v.first}"
@@ -84,15 +86,15 @@ module Syskit::Log
                 end
 
                 def format_date(time)
-                    time.strftime('%Y-%m-%d')
+                    time.strftime("%Y-%m-%d")
                 end
 
                 def format_time(time)
-                    time.strftime('%H:%M:%S.%6N %z')
+                    time.strftime("%H:%M:%S.%6N %z")
                 end
 
                 def format_duration(time)
-                    '%4i:%02i:%02i.%06i' % [
+                    "%4i:%02i:%02i.%06i" % [
                         Integer(time / 3600),
                         Integer((time % 3600) / 60),
                         Integer(time % 60),
@@ -112,10 +114,10 @@ module Syskit::Log
                     end
                     objects.each_with_index do |(name, stream), i|
                         if stream.empty?
-                            puts format % ["#{name}:", 'empty']
+                            puts format % ["#{name}:", "empty"]
                         else
                             interval_lg = stream.interval_lg.map do |t|
-                                format_date(t) + ' ' + format_time(t)
+                                format_date(t) + " " + format_time(t)
                             end
                             duration_lg = format_duration(stream.duration_lg)
                             puts format % [
@@ -127,7 +129,7 @@ module Syskit::Log
                     end
                 end
 
-                def show_dataset_pocolog(pastel, store, dataset)
+                def show_dataset_pocolog(dataset)
                     tasks = dataset.each_task(
                         load_models: false, skip_tasks_without_models: false
                     ).to_a
@@ -143,11 +145,11 @@ module Syskit::Log
                             properties.map { |name, _| name.size }
                         ).max
                         unless ports.empty?
-                            puts '    Ports:'
+                            puts "    Ports:"
                             show_task_objects(ports, name_field_size)
                         end
                         unless properties.empty?
-                            puts '    Properties:'
+                            puts "    Properties:"
                             show_task_objects(properties, name_field_size)
                         end
                     end
@@ -158,7 +160,7 @@ module Syskit::Log
                 # Parse a metadata option such as --set some=value some-other=value
                 def parse_metadata_option(hash)
                     hash.each_with_object({}) do |arg, metadata|
-                        key, value = arg.split('=')
+                        key, value = arg.split("=")
                         unless value
                             raise ArgumentError,
                                   "metadata setters need to be specified as "\
@@ -325,23 +327,23 @@ module Syskit::Log
                 end
             end
 
-            desc 'normalize PATH [--out OUTPUT]', 'normalizes a data stream into a format that is suitable for the other log management commands to work'
-            method_option :out, desc: 'output directory (defaults to a normalized/ folder under the source folder)',
-                default: 'normalized'
-            method_option :override, desc: 'whether existing files in the output directory should be overriden',
-                type: :boolean, default: false
+            desc "normalize PATH [--out OUTPUT]", "normalizes a data stream into a format that is suitable for the other log management commands to work"
+            method_option :out, desc: "output directory (defaults to a normalized/ folder under the source folder)",
+                                default: "normalized"
+            method_option :override, desc: "whether existing files in the output directory should be overriden",
+                                     type: :boolean, default: false
 
             def normalize(path)
                 path = Pathname.new(path).realpath
-                output_path = Pathname.new(options['out']).expand_path(path)
+                output_path = Pathname.new(options["out"]).expand_path(path)
                 output_path.mkpath
 
                 paths = Syskit::Log.logfiles_in_dir(path)
-                bytes_total = paths.inject(0) do |total, path|
-                    total + path.size
+                bytes_total = paths.inject(0) do |total, logfile_path|
+                    total + logfile_path.size
                 end
                 reporter = create_reporter(
-                    '|:bar| :current_byte/:total_byte :eta (:byte_rate/s)',
+                    "|:bar| :current_byte/:total_byte :eta (:byte_rate/s)",
                     total: bytes_total
                 )
 
@@ -351,20 +353,20 @@ module Syskit::Log
                 end
             end
 
-            desc 'import PATH [DESCRIPTION]',
-                 'normalize and import a raw dataset into a syskit-pocolog datastore'
-            method_option :auto, desc: 'import all datasets under PATH',
+            desc "import PATH [DESCRIPTION]",
+                 "normalize and import a raw dataset into a syskit-pocolog datastore"
+            method_option :auto, desc: "import all datasets under PATH",
                                  type: :boolean, default: false
-            method_option :force, desc: 'overwrite existing datasets',
+            method_option :force, desc: "overwrite existing datasets",
                                   type: :boolean, default: false
-            method_option :min_duration, desc: 'skip datasets whose duration is lower '\
-                                               'than this (in seconds)',
+            method_option :min_duration, desc: "skip datasets whose duration is lower "\
+                                               "than this (in seconds)",
                                          type: :numeric, default: 60
-            method_option :tags, desc: 'tags to be added to the dataset',
+            method_option :tags, desc: "tags to be added to the dataset",
                                  type: :array, default: []
-            method_option :metadata, desc: 'metadata values as key=value pairs',
+            method_option :metadata, desc: "metadata values as key=value pairs",
                                      type: :array, default: []
-            method_option :merge, desc: 'create a single dataset from multiple log dirs',
+            method_option :merge, desc: "create a single dataset from multiple log dirs",
                                   type: :boolean, default: false
             def import(root_path, description = nil)
                 root_path = Pathname.new(root_path).realpath
@@ -373,8 +375,8 @@ module Syskit::Log
                     root_path.find do |p|
                         is_raw_dataset =
                             p.directory? &&
-                            Pathname.enum_for(:glob, p + '*-events.log').any? { true } &&
-                            Pathname.enum_for(:glob, p + '*.0.log').any? { true }
+                            Pathname.enum_for(:glob, p + "*-events.log").any? { true } &&
+                            Pathname.enum_for(:glob, p + "*.0.log").any? { true }
                         if is_raw_dataset
                             paths << p
                             Find.prune
@@ -399,9 +401,9 @@ module Syskit::Log
                 end
             end
 
-            desc 'index [DATASETS]', 'refreshes or rebuilds (with --force) the datastore indexes'
-            method_option :force, desc: 'force rebuilding even indexes that look up-to-date',
-                type: :boolean, default: false
+            desc "index [DATASETS]", "refreshes or rebuilds (with --force) the datastore indexes"
+            method_option :force, desc: "force rebuilding even indexes that look up-to-date",
+                                  type: :boolean, default: false
             def index(*datasets)
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
@@ -414,9 +416,9 @@ module Syskit::Log
                 end
             end
 
-            desc 'path [QUERY]', 'list path to datasets'
+            desc "path [QUERY]", "list path to datasets"
             method_option :long_digests,
-                          desc: 'display digests in full, instead of shortening them',
+                          desc: "display digests in full, instead of shortening them",
                           type: :boolean, default: false
             def path(*query)
                 store = open_store
@@ -433,17 +435,17 @@ module Syskit::Log
                 end
             end
 
-            desc 'list [QUERY]', 'list datasets and their information'
-            method_option :digest, desc: 'only show the digest and no other information (for scripting)',
-                type: :boolean, default: false
-            method_option :long_digests, desc: 'display digests in full form, instead of shortening them',
-                type: :boolean, default: false
-            method_option :pocolog, desc: 'show detailed information about the pocolog streams in the dataset(s)',
-                type: :boolean, default: false
-            method_option :roby, desc: 'show detailed information about the Roby log in the dataset(s)',
-                type: :boolean, default: false
-            method_option :all, desc: 'show all available information (implies --pocolog and --roby)',
-                aliases: 'a', type: :boolean, default: false
+            desc "list [QUERY]", "list datasets and their information"
+            method_option :digest, desc: "only show the digest and no other information (for scripting)",
+                                   type: :boolean, default: false
+            method_option :long_digests, desc: "display digests in full form, instead of shortening them",
+                                         type: :boolean, default: false
+            method_option :pocolog, desc: "show detailed information about the pocolog streams in the dataset(s)",
+                                    type: :boolean, default: false
+            method_option :roby, desc: "show detailed information about the Roby log in the dataset(s)",
+                                 type: :boolean, default: false
+            method_option :all, desc: "show all available information (implies --pocolog and --roby)",
+                                aliases: "a", type: :boolean, default: false
             def list(*query)
                 store = open_store
                 datasets = resolve_datasets(store, *query)
@@ -462,20 +464,20 @@ module Syskit::Log
                             show_dataset_roby(pastel, store, dataset)
                         end
                         if options[:all] || options[:pocolog]
-                            show_dataset_pocolog(pastel, store, dataset)
+                            show_dataset_pocolog(dataset)
                         end
                     end
                 end
             end
 
-            desc 'metadata [QUERY] [--set=KEY=VALUE KEY=VALUE|--get=KEY]',
-                'sets or gets metadata values for a dataset or datasets'
-            method_option :set, desc: 'the key=value associations to set',
-                type: :array
-            method_option :get, desc: 'the keys to get',
-                type: :array, lazy_default: []
-            method_option :long_digest, desc: 'display digests in full form, instead of shortening them',
-                type: :boolean, default: false
+            desc "metadata [QUERY] [--set=KEY=VALUE KEY=VALUE|--get=KEY]",
+                 "sets or gets metadata values for a dataset or datasets"
+            method_option :set, desc: "the key=value associations to set",
+                                type: :array
+            method_option :get, desc: "the keys to get",
+                                type: :array, lazy_default: []
+            method_option :long_digest, desc: "display digests in full form, instead of shortening them",
+                                        type: :boolean, default: false
             def metadata(*query)
                 if !options[:get] && !options[:set]
                     raise ArgumentError, "provide either --get or --set"
@@ -503,19 +505,19 @@ module Syskit::Log
                     end
                 elsif options[:get].empty?
                     datasets.each do |set|
-                        metadata = set.metadata.map { |k, v| [k, v.to_a.sort.join(",")] }.
-                            sort_by(&:first).
-                            map { |k, v| "#{k}=#{v}" }.
-                            join(" ")
+                        metadata = set.metadata.map { |k, v| [k, v.to_a.sort.join(",")] }
+                                      .sort_by(&:first)
+                                      .map { |k, v| "#{k}=#{v}" }
+                                      .join(" ")
                         puts "#{digest_to_s[set]} #{metadata}"
                     end
                 else
                     datasets.each do |set|
-                        metadata = options[:get].map do |k, v|
+                        metadata = options[:get].map do |k, _|
                             [k, set.metadata_fetch_all(k, "<unset>")]
                         end
-                        metadata = metadata.map { |k, v| "#{k}=#{v.to_a.sort.join(",")}" }.
-                            join(" ")
+                        metadata = metadata.map { |k, v| "#{k}=#{v.to_a.sort.join(",")}" }
+                                           .join(" ")
                         puts "#{digest_to_s[set]} #{metadata}"
                     end
                 end
@@ -558,7 +560,7 @@ module Syskit::Log
                 streams = resolve_streams(datasets, *query)
 
                 if streams.empty?
-                    puts 'no streams match the query'
+                    puts "no streams match the query"
                     return
                 end
 

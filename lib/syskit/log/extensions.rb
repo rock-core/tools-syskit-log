@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     # Set of modules used to extend Roby and Syskit's own classes
     module Extensions
@@ -6,10 +8,10 @@ module Syskit::Log
     end
 end
 
-require 'syskit/log/extensions/deployment_group'
-require 'syskit/log/extensions/instance_requirements'
-require 'syskit/log/extensions/configuration'
-require 'syskit/log/extensions/execution_engine'
+require "syskit/log/extensions/deployment_group"
+require "syskit/log/extensions/instance_requirements"
+require "syskit/log/extensions/configuration"
+require "syskit/log/extensions/execution_engine"
 
 Syskit::Models::DeploymentGroup.class_eval do
     prepend Syskit::Log::Extensions::DeploymentGroup
@@ -23,4 +25,3 @@ end
 Roby::ExecutionEngine.class_eval do
     prepend Syskit::Log::Extensions::ExecutionEngine
 end
-

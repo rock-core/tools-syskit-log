@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     # Placeholder for Pocolog::DataStream that does not load any actual data /
     # index from the stream.

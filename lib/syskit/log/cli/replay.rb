@@ -1,8 +1,10 @@
-require 'roby'
-require 'syskit'
-require 'roby/cli/base'
+# frozen_string_literal: true
 
-require 'syskit/log'
+require "roby"
+require "syskit"
+require "roby/cli/base"
+
+require "syskit/log"
 
 module Syskit::Log
     class << self
@@ -17,16 +19,16 @@ module Syskit::Log
             no_commands do
                 def setup_roby_for_running(run_controllers: false)
                     super
-                    app.using 'syskit'
-                    app.using 'syskit-log'
+                    app.using "syskit"
+                    app.using "syskit-log"
                 end
             end
 
-            desc 'start [SCRIPTS] [DATASETS]',
-                 'replays a data replay script. If no script is given, allows '\
-                 'to replay streams using profile definitions'
-            option :robot, aliases: 'r', type: :string,
-                           desc: 'the robot configuration to load'
+            desc "start [SCRIPTS] [DATASETS]",
+                 "replays a data replay script. If no script is given, allows "\
+                 "to replay streams using profile definitions"
+            option :robot, aliases: "r", type: :string,
+                           desc: "the robot configuration to load"
             def start(*path)
                 paths = path.map { |p| Pathname.new(p) }
                 if (non_existent = paths.find { |p| !p.exist? })
@@ -36,7 +38,7 @@ module Syskit::Log
                 setup_common
                 setup_roby_for_running(run_controllers: true)
                 script_paths, dataset_paths =
-                    paths.partition { |p| p.extname == '.rb' }
+                    paths.partition { |p| p.extname == ".rb" }
 
                 app.setup
                 begin
@@ -58,7 +60,6 @@ module Syskit::Log
                         script_paths.each { |p| require p.to_s }
                     end
                     app.run
-
                 ensure
                     Syskit::Log.streams = nil
                     app.cleanup

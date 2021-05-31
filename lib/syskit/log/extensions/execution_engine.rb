@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     module Extensions
         # Extension of the Roby::ExecutionEngine class to add the engine's
@@ -10,4 +12,3 @@ module Syskit::Log
         end
     end
 end
-

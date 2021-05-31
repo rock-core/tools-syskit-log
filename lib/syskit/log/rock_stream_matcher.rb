@@ -36,40 +36,40 @@ module Syskit::Log
 
         # Match ports
         def ports
-            add_regex('rock_stream_type', /^port$/)
+            add_regex("rock_stream_type", /^port$/)
         end
 
         # Match properties
         def properties
-            add_regex('rock_stream_type', /^property$/)
+            add_regex("rock_stream_type", /^property$/)
         end
 
         # Match the object (port/property) name
         #
         # @param [String] name the object name to match
         def object_name(name)
-            add_regex('rock_task_object_name', name)
+            add_regex("rock_task_object_name", name)
         end
 
         # Match the task name
         #
         # @param [String] name the task name to match
         def task_name(name)
-            add_regex('rock_task_name', name)
+            add_regex("rock_task_name", name)
         end
 
         # Match the task model
         #
         # @param [Syskit::Models::TaskContext] model
         def task_model(model)
-            add_regex('rock_task_model', model.orogen_model.name)
+            add_regex("rock_task_model", model.orogen_model.name)
         end
 
         # Match the type name
         #
         # @param [String,Regexp] name
         def type(name)
-            add_regex('type', name)
+            add_regex("type", name)
         end
 
         # Tests whether a stream matches this query
@@ -78,7 +78,7 @@ module Syskit::Log
         # @return [Boolean]
         def ===(stream)
             query.all? do |key, matcher|
-                if key == 'type'
+                if key == "type"
                     matcher === stream.type.name
                 elsif (metadata = stream.metadata[key])
                     matcher === metadata

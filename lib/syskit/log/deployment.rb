@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     # Task supporting the replay process
     #
@@ -36,7 +38,7 @@ module Syskit::Log
             executed_task.start_event.on do
                 model.each_stream_mapping do |stream, model_port|
                     orocos_port = model_port.bind(executed_task).to_orocos_port
-                    unless orocos_port.name == 'state'
+                    unless orocos_port.name == "state"
                         stream_to_port[stream] = orocos_port
                     end
                 end

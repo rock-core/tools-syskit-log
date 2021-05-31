@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     # Functionality related to building and using data stores
     #
@@ -79,7 +81,8 @@ module Syskit::Log
 
         # Enumerate the store's datasets
         def each_dataset_digest
-            return enum_for(__method__) if !block_given?
+            return enum_for(__method__) unless block_given?
+
             core_path = (datastore_path + "core")
             core_path.each_entry do |dataset_path|
                 if Dataset.dataset?(core_path + dataset_path)
@@ -90,7 +93,8 @@ module Syskit::Log
 
         # Enumerate the store's datasets
         def each_dataset
-            return enum_for(__method__) if !block_given?
+            return enum_for(__method__) unless block_given?
+
             each_dataset_digest do |digest|
                 yield(get(digest))
             end
@@ -195,7 +199,6 @@ module Syskit::Log
                 end
             end
         end
-
     end
 end
 

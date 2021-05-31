@@ -1,5 +1,7 @@
-require 'test_helper'
-require 'tmpdir'
+# frozen_string_literal: true
+
+require "test_helper"
+require "tmpdir"
 
 module Syskit::Log
     class Datastore
@@ -14,23 +16,23 @@ module Syskit::Log
             before do
                 @root_path = Pathname.new(Dir.mktmpdir)
                 @store = Datastore.new(root_path)
-                @dataset_path = store.core_path_of('dataset')
-                (dataset_path + 'pocolog').mkpath
-                (dataset_path + 'text').mkpath
-                (dataset_path + 'ignored').mkpath
-                @cache_path = store.cache_path_of('dataset')
+                @dataset_path = store.core_path_of("dataset")
+                (dataset_path + "pocolog").mkpath
+                (dataset_path + "text").mkpath
+                (dataset_path + "ignored").mkpath
+                @cache_path = store.cache_path_of("dataset")
                 @dataset = Dataset.new(dataset_path, cache: cache_path)
 
                 move_logfile_path (dataset_path + "pocolog").to_s
-                create_logfile 'task0::port.0.log' do
-                    create_logfile_stream 'test',
-                        metadata: Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'port']
+                create_logfile "task0::port.0.log" do
+                    create_logfile_stream "test",
+                                          metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
                 end
-                FileUtils.touch dataset_pathname('text', 'test.txt')
-                dataset_pathname('roby-events.0.log').open('w') { |io| io.write "ROBY" }
-                FileUtils.touch dataset_pathname('ignored', 'not_recognized_file')
-                dataset_pathname('ignored', 'not_recognized_dir').mkpath
-                FileUtils.touch dataset_pathname('ignored', 'not_recognized_dir', 'test')
+                FileUtils.touch dataset_pathname("text", "test.txt")
+                dataset_pathname("roby-events.0.log").open("w") { |io| io.write "ROBY" }
+                FileUtils.touch dataset_pathname("ignored", "not_recognized_file")
+                dataset_pathname("ignored", "not_recognized_dir").mkpath
+                FileUtils.touch dataset_pathname("ignored", "not_recognized_dir", "test")
             end
             after do
                 root_path.rmtree
@@ -58,8 +60,8 @@ module Syskit::Log
                 it "lists the full paths to the pocolog and roby files" do
                     files = dataset.each_important_file.to_set
                     expected = [
-                        dataset_pathname('roby-events.0.log'),
-                        dataset_pathname('pocolog', 'task0::port.0.log')
+                        dataset_pathname("roby-events.0.log"),
+                        dataset_pathname("pocolog", "task0::port.0.log")
                     ].to_set
                     assert_equal expected, files
                 end
@@ -79,7 +81,7 @@ module Syskit::Log
                     end
                 end
                 it "raises if the string contains invalid characters for base64" do
-                    sha2[3, 1] = '_'
+                    sha2[3, 1] = "_"
                     assert_raises(Dataset::InvalidDigest) do
                         Dataset.validate_encoded_short_digest(sha2)
                     end
@@ -105,7 +107,7 @@ module Syskit::Log
                     end
                 end
                 it "raises if the string contains invalid characters for base64" do
-                    sha2[3, 1] = '_'
+                    sha2[3, 1] = "_"
                     assert_raises(Dataset::InvalidDigest) do
                         Dataset.validate_encoded_sha2(sha2)
                     end
@@ -117,11 +119,12 @@ module Syskit::Log
 
             describe "#compute_dataset_identity_from_files" do
                 it "returns a list of entries with full path, size and sha256 digest" do
-                    roby_path = dataset_pathname('roby-events.0.log')
+                    roby_path = dataset_pathname("roby-events.0.log")
                     roby_digest = Digest::SHA256.hexdigest(roby_path.read)
-                    pocolog_path = dataset_pathname('pocolog', 'task0::port.0.log')
+                    pocolog_path = dataset_pathname("pocolog", "task0::port.0.log")
                     pocolog_digest = Digest::SHA256.hexdigest(
-                        pocolog_path.read[Pocolog::Format::Current::PROLOGUE_SIZE..-1])
+                        pocolog_path.read[Pocolog::Format::Current::PROLOGUE_SIZE..-1]
+                    )
                     expected = Set[
                         Dataset::IdentityEntry.new(roby_path, roby_path.size, roby_digest),
                         Dataset::IdentityEntry.new(pocolog_path, pocolog_path.size, pocolog_digest)]
@@ -132,43 +135,43 @@ module Syskit::Log
             it "saves and loads the identity information in the dataset" do
                 dataset.write_dataset_identity_to_metadata_file
                 assert_equal dataset.compute_dataset_identity_from_files.to_set,
-                    dataset.read_dataset_identity_from_metadata_file.to_set
+                             dataset.read_dataset_identity_from_metadata_file.to_set
             end
 
             describe "#write_dataset_identity_to_metadata_file" do
                 it "validates that the provided identity entries have paths within the dataset" do
-                    entry = Dataset::IdentityEntry.new(Pathname.new('/'), 10, Digest::SHA256.hexdigest(''))
+                    entry = Dataset::IdentityEntry.new(Pathname.new("/"), 10, Digest::SHA256.hexdigest(""))
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.write_dataset_identity_to_metadata_file([entry])
                     end
                 end
                 it "validates that the provided identity entries have sizes that are integers" do
-                    entry = Dataset::IdentityEntry.new(dataset_path + "file", 'not_a_number', Digest::SHA256.hexdigest(''))
+                    entry = Dataset::IdentityEntry.new(dataset_path + "file", "not_a_number", Digest::SHA256.hexdigest(""))
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.write_dataset_identity_to_metadata_file([entry])
                     end
                 end
                 it "validates that the provided identity entries have sizes that are positive" do
-                    entry = Dataset::IdentityEntry.new(dataset_path + "file", -20, Digest::SHA256.hexdigest(''))
+                    entry = Dataset::IdentityEntry.new(dataset_path + "file", -20, Digest::SHA256.hexdigest(""))
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.write_dataset_identity_to_metadata_file([entry])
                     end
                 end
                 it "validates that the provided identity entries have valid-looking sha256 digests" do
-                    entry = Dataset::IdentityEntry.new(dataset_path + "file", 10, 'invalid_digest')
+                    entry = Dataset::IdentityEntry.new(dataset_path + "file", 10, "invalid_digest")
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.write_dataset_identity_to_metadata_file([entry])
                     end
                 end
                 it "saves the result to the identity file" do
-                    file_digest = Digest::SHA256.hexdigest('file')
-                    dataset_digest = Digest::SHA256.hexdigest('dataset')
+                    file_digest = Digest::SHA256.hexdigest("file")
+                    dataset_digest = Digest::SHA256.hexdigest("dataset")
                     entry = Dataset::IdentityEntry.new(dataset_path + "file", 10, file_digest)
                     flexmock(dataset).should_receive(:compute_dataset_digest).with([entry]).and_return(dataset_digest)
                     dataset.write_dataset_identity_to_metadata_file([entry])
                     data = YAML.load((dataset_path + Dataset::BASENAME_IDENTITY_METADATA).read)
-                    expected = Hash['layout_version' => Dataset::LAYOUT_VERSION, 'sha2' => dataset_digest,
-                                    'identity' => [Hash['sha2' => file_digest, 'size' => 10, 'path' => 'file']]]
+                    expected = Hash["layout_version" => Dataset::LAYOUT_VERSION, "sha2" => dataset_digest,
+                                    "identity" => [Hash["sha2" => file_digest, "size" => 10, "path" => "file"]]]
                     assert_equal expected, data
                 end
             end
@@ -183,7 +186,7 @@ module Syskit::Log
                         "sha2" => Digest::SHA2.hexdigest("")
                     }.merge(overrides)
 
-                    (dataset_path + Dataset::BASENAME_IDENTITY_METADATA).open('w') do |io|
+                    (dataset_path + Dataset::BASENAME_IDENTITY_METADATA).open("w") do |io|
                         io.write YAML.dump(
                             { "layout_version" => layout_version,
                               "identity" => [metadata] }
@@ -199,64 +202,64 @@ module Syskit::Log
                     end
                 end
                 it "sets the entry's path to the file's absolute path" do
-                    write_metadata({ 'path' => 'test' })
+                    write_metadata({ "path" => "test" })
                     entry = dataset.read_dataset_identity_from_metadata_file.first
-                    assert_equal (dataset_path + 'test'), entry.path
+                    assert_equal (dataset_path + "test"), entry.path
                 end
                 it "validates that the paths are within the dataset" do
-                    write_metadata({ 'path' => '../test' })
+                    write_metadata({ "path" => "../test" })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "sets the entry's size" do
-                    write_metadata({ 'size' => 20 })
+                    write_metadata({ "size" => 20 })
                     entry = dataset.read_dataset_identity_from_metadata_file.first
                     assert_equal 20, entry.size
                 end
                 it "sets the entry's size" do
-                    write_metadata({ 'sha2' => Digest::SHA2.hexdigest('test') })
+                    write_metadata({ "sha2" => Digest::SHA2.hexdigest("test") })
                     entry = dataset.read_dataset_identity_from_metadata_file.first
-                    assert_equal Digest::SHA2.hexdigest('test'), entry.sha2
+                    assert_equal Digest::SHA2.hexdigest("test"), entry.sha2
                 end
                 it "validates that the file's has an 'identity' field" do
-                    (dataset_path + Dataset::BASENAME_IDENTITY_METADATA).open('w') do |io|
-                        io.write YAML.dump(Hash['layout_version' => Dataset::LAYOUT_VERSION])
+                    (dataset_path + Dataset::BASENAME_IDENTITY_METADATA).open("w") do |io|
+                        io.write YAML.dump(Hash["layout_version" => Dataset::LAYOUT_VERSION])
                     end
                     e = assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
-                    assert_match /no 'identity' field/, e.message
+                    assert_match(/no 'identity' field/, e.message)
                 end
                 it "validates that the file's 'identity' field is an array" do
-                    (dataset_path + Dataset::BASENAME_IDENTITY_METADATA).open('w') do |io|
-                        io.write YAML.dump(Hash['layout_version' => Dataset::LAYOUT_VERSION, 'identity' => Hash.new])
+                    (dataset_path + Dataset::BASENAME_IDENTITY_METADATA).open("w") do |io|
+                        io.write YAML.dump(Hash["layout_version" => Dataset::LAYOUT_VERSION, "identity" => {}])
                     end
                     e = assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
-                    assert_match /the 'identity' field.*is not an array/, e.message
+                    assert_match(/the 'identity' field.*is not an array/, e.message)
                 end
                 it "validates that the 'path' field contains a string" do
-                    write_metadata({ 'path' => 10 })
+                    write_metadata({ "path" => 10 })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "validates that the 'size' field is an integer" do
-                    write_metadata({ 'size' => 'not_a_number' })
+                    write_metadata({ "size" => "not_a_number" })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "validates that the 'sha2' field contains a string" do
-                    write_metadata({ 'sha2' => 10 })
+                    write_metadata({ "sha2" => 10 })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "validates that the 'path' field contains a valid hash" do
-                    write_metadata({ 'sha2' => 'aerpojapoj' })
+                    write_metadata({ "sha2" => "aerpojapoj" })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
@@ -281,32 +284,33 @@ module Syskit::Log
                     entries = dataset.compute_dataset_identity_from_files
                     entries[0].size += 10
                     refute_equal dataset.compute_dataset_digest,
-                        dataset.compute_dataset_digest(entries)
+                                 dataset.compute_dataset_digest(entries)
                 end
                 it "changes if the sha2 of one of the files change" do
                     entries = dataset.compute_dataset_identity_from_files
-                    entries[0].sha2[10] = '0'
+                    entries[0].sha2[10] = "0"
                     refute_equal dataset.compute_dataset_digest,
-                        dataset.compute_dataset_digest(entries)
+                                 dataset.compute_dataset_digest(entries)
                 end
                 it "changes if a new entry is added" do
                     entries = dataset.compute_dataset_identity_from_files
                     entries << Dataset::IdentityEntry.new(
-                        root_path + 'new_file', 10, Digest::SHA2.hexdigest('test'))
+                        root_path + "new_file", 10, Digest::SHA2.hexdigest("test")
+                    )
                     refute_equal dataset.compute_dataset_digest,
-                        dataset.compute_dataset_digest(entries)
+                                 dataset.compute_dataset_digest(entries)
                 end
                 it "changes if an entry is removed" do
                     entries = dataset.compute_dataset_identity_from_files
                     entries.pop
                     refute_equal dataset.compute_dataset_digest,
-                        dataset.compute_dataset_digest(entries)
+                                 dataset.compute_dataset_digest(entries)
                 end
                 it "is not sensitive to the identity entries order" do
                     entries = dataset.compute_dataset_identity_from_files
                     entries = [entries[1], entries[0]]
                     assert_equal dataset.compute_dataset_digest,
-                        dataset.compute_dataset_digest(entries)
+                                 dataset.compute_dataset_digest(entries)
                 end
             end
             describe "weak_validate_identity_metadata" do
@@ -335,7 +339,7 @@ module Syskit::Log
                     end
                 end
                 it "raises if a file size mismatches" do
-                    dataset_pathname("roby-events.0.log").open('a') { |io| io.write('10') }
+                    dataset_pathname("roby-events.0.log").open("a") { |io| io.write("10") }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.weak_validate_identity_metadata
                     end
@@ -368,13 +372,13 @@ module Syskit::Log
                     end
                 end
                 it "raises if a file size mismatches" do
-                    dataset_pathname("roby-events.0.log").open('a') { |io| io.write('10') }
+                    dataset_pathname("roby-events.0.log").open("a") { |io| io.write("10") }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
                 end
                 it "raises if the contents of a file changed" do
-                    dataset_pathname("roby-events.0.log").open('a') { |io| io.seek(5); io.write('0') }
+                    dataset_pathname("roby-events.0.log").open("a") { |io| io.seek(5); io.write("0") }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
@@ -383,14 +387,14 @@ module Syskit::Log
 
             describe "#metadata_reset" do
                 before do
-                    (dataset_path + Dataset::BASENAME_METADATA).open('w') do |io|
-                        YAML.dump(Hash['test' => [10]], io)
+                    (dataset_path + Dataset::BASENAME_METADATA).open("w") do |io|
+                        YAML.dump(Hash["test" => [10]], io)
                     end
                 end
                 it "empties the metadata" do
                     dataset.metadata
                     dataset.metadata_reset
-                    assert_equal Hash.new, dataset.metadata
+                    assert_equal({}, dataset.metadata)
                 end
                 it "does not cause a read from disk if called first" do
                     flexmock(dataset).should_receive(:metadata_read_from_file).never
@@ -401,13 +405,13 @@ module Syskit::Log
 
             describe "#metadata" do
                 it "loads the data from file" do
-                    (dataset_path + Dataset::BASENAME_METADATA).open('w') do |io|
-                        YAML.dump(Hash['test' => [10]], io)
+                    (dataset_path + Dataset::BASENAME_METADATA).open("w") do |io|
+                        YAML.dump(Hash["test" => [10]], io)
                     end
-                    assert_equal Hash['test' => Set[10]], dataset.metadata
+                    assert_equal Hash["test" => Set[10]], dataset.metadata
                 end
                 it "sets the metadata to an empty hash if there is no file" do
-                    assert_equal Hash.new, dataset.metadata
+                    assert_equal({}, dataset.metadata)
                 end
                 it "loads the metadata only once" do
                     metadata_hash = dataset.metadata
@@ -418,65 +422,65 @@ module Syskit::Log
             describe "#metadata_set" do
                 it "creates a new key->values mapping" do
                     dataset.metadata_set("test", 10, 20)
-                    assert_equal Hash['test' => Set[10, 20]], dataset.metadata
+                    assert_equal Hash["test" => Set[10, 20]], dataset.metadata
                 end
                 it "resets existing values with the new ones" do
                     dataset.metadata_add("test", 10, 20)
                     dataset.metadata_set("test", 30, 40)
-                    assert_equal Hash['test' => Set[30, 40]], dataset.metadata
+                    assert_equal Hash["test" => Set[30, 40]], dataset.metadata
                 end
             end
 
             describe "#metadata_add" do
                 it "creates a new key->values mapping" do
                     dataset.metadata_add("test", 10, 20)
-                    assert_equal Hash['test' => Set[10, 20]], dataset.metadata
+                    assert_equal Hash["test" => Set[10, 20]], dataset.metadata
                 end
                 it "merges new values to existing ones" do
                     dataset.metadata_add("test", 10, 20)
                     dataset.metadata_add("test", 10, 30)
-                    assert_equal Hash['test' => Set[10, 20, 30]], dataset.metadata
+                    assert_equal Hash["test" => Set[10, 20, 30]], dataset.metadata
                 end
             end
 
             describe "#metadata_fetch" do
                 it "returns a single value" do
-                    dataset.metadata_add 'test', 10
-                    assert_equal 10, dataset.metadata_fetch('test')
+                    dataset.metadata_add "test", 10
+                    assert_equal 10, dataset.metadata_fetch("test")
                 end
                 it "raises ArgumentError if more than one default value is given" do
                     assert_raises(ArgumentError) do
-                        dataset.metadata_fetch('test', 10, 20)
+                        dataset.metadata_fetch("test", 10, 20)
                     end
                 end
                 it "raises NoValue if there are none" do
                     assert_raises(Dataset::NoValue) do
-                        dataset.metadata_fetch('test')
+                        dataset.metadata_fetch("test")
                     end
                 end
                 it "raises MultipleValues if there is more than one" do
-                    dataset.metadata_add 'test', 10, 20
+                    dataset.metadata_add "test", 10, 20
                     assert_raises(Dataset::MultipleValues) do
-                        dataset.metadata_fetch('test')
+                        dataset.metadata_fetch("test")
                     end
                 end
                 it "returns the default if there is no value for the key" do
-                    assert_equal 10, dataset.metadata_fetch('test', 10)
+                    assert_equal 10, dataset.metadata_fetch("test", 10)
                 end
             end
 
             describe "#metadata_fetch_all" do
                 it "returns all values for the key" do
-                    dataset.metadata_add 'test', 10, 20
-                    assert_equal Set[10, 20], dataset.metadata_fetch_all('test')
+                    dataset.metadata_add "test", 10, 20
+                    assert_equal Set[10, 20], dataset.metadata_fetch_all("test")
                 end
                 it "raises NoValue if there are none and no defaults are given" do
                     assert_raises(Dataset::NoValue) do
-                        dataset.metadata_fetch_all('test')
+                        dataset.metadata_fetch_all("test")
                     end
                 end
                 it "returns the default if there is no value for the key" do
-                    assert_equal Set[10, 20], dataset.metadata_fetch_all('test', 10, 20)
+                    assert_equal Set[10, 20], dataset.metadata_fetch_all("test", 10, 20)
                 end
             end
 
@@ -484,32 +488,32 @@ module Syskit::Log
                 it "writes an empty metadata hash if there is no metadata" do
                     dataset.metadata_write_to_file
                     assert_equal Hash[],
-                        YAML.load((dataset_path + Dataset::BASENAME_METADATA).read)
+                                 YAML.load((dataset_path + Dataset::BASENAME_METADATA).read)
                 end
                 it "writes the metadata to file" do
-                    dataset.metadata_add 'test', 10, 20
+                    dataset.metadata_add "test", 10, 20
                     dataset.metadata_write_to_file
-                    assert_equal Hash['test' => [10, 20]],
-                        YAML.load((dataset_path + Dataset::BASENAME_METADATA).read)
+                    assert_equal Hash["test" => [10, 20]],
+                                 YAML.load((dataset_path + Dataset::BASENAME_METADATA).read)
                 end
             end
 
             describe "#each_pocolog_path" do
                 it "enumerates the pocolog files in the dataset" do
                     paths = dataset.each_pocolog_path.to_a
-                    assert_equal [logfile_pathname('task0::port.0.log')], paths
+                    assert_equal [logfile_pathname("task0::port.0.log")], paths
                 end
             end
 
             describe "#each_pocolog_stream" do
                 it "expects the pocolog cache files in the dataset's cache directory" do
                     cache_path.mkpath
-                    open_logfile logfile_path('task0::port.0.log'), index_dir: (cache_path + "pocolog").to_s
-                    flexmock(Pocolog::Logfiles).new_instances.
-                        should_receive(:rebuild_and_load_index).
-                        never
+                    open_logfile logfile_path("task0::port.0.log"), index_dir: (cache_path + "pocolog").to_s
+                    flexmock(Pocolog::Logfiles).new_instances
+                                               .should_receive(:rebuild_and_load_index)
+                                               .never
                     streams = dataset.each_pocolog_stream.to_a
-                    assert_equal ['test'], streams.map(&:name)
+                    assert_equal ["test"], streams.map(&:name)
                 end
             end
 
@@ -518,35 +522,35 @@ module Syskit::Log
                 before do
                     @base_time = Time.at(342983, 3219)
                     registry = Typelib::Registry.new
-                    @double_t = registry.create_numeric '/double', 8, :float
-                    create_logfile 'task0::port.0.log' do
-                        create_logfile_stream 'test',
-                            metadata: Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'port']
+                    @double_t = registry.create_numeric "/double", 8, :float
+                    create_logfile "task0::port.0.log" do
+                        create_logfile_stream "test",
+                                              metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
                         write_logfile_sample base_time, base_time + 10, 1
                         write_logfile_sample base_time + 1, base_time + 20, 2
                     end
-                    create_logfile 'task0::other.0.log' do
-                        create_logfile_stream 'other_test',
-                            metadata: Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'other'],
-                            type: double_t
+                    create_logfile "task0::other.0.log" do
+                        create_logfile_stream "other_test",
+                                              metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "other"],
+                                              type: double_t
                         write_logfile_sample base_time + 100, base_time + 300, 3
                     end
                     cache_path.mkpath
-                    open_logfile logfile_path('task0::port.0.log'), index_dir: (cache_path + "pocolog").to_s
-                    open_logfile logfile_path('task0::other.0.log'), index_dir: (cache_path + "pocolog").to_s
+                    open_logfile logfile_path("task0::port.0.log"), index_dir: (cache_path + "pocolog").to_s
+                    open_logfile logfile_path("task0::other.0.log"), index_dir: (cache_path + "pocolog").to_s
                 end
 
                 it "loads stream information and returns LazyDataStream objects" do
                     streams = dataset.read_lazy_data_streams.sort_by(&:name).reverse
-                    assert_equal ['test', 'other_test'], streams.map(&:name)
+                    assert_equal %w[test other_test], streams.map(&:name)
                     assert_equal [int32_t, double_t], streams.map(&:type)
-                    assert_equal [Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'port'],
-                                  Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'other']],
-                        streams.map(&:metadata)
+                    assert_equal [Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"],
+                                  Hash["rock_task_name" => "task0", "rock_task_object_name" => "other"]],
+                                 streams.map(&:metadata)
                     assert_equal [[base_time, base_time + 1], [base_time + 100, base_time + 100]],
-                        streams.map(&:interval_rt)
+                                 streams.map(&:interval_rt)
                     assert_equal [[base_time + 10, base_time + 20], [base_time + 300, base_time + 300]],
-                        streams.map(&:interval_lg)
+                                 streams.map(&:interval_lg)
                     assert_equal [2, 1], streams.map(&:size)
                 end
 
@@ -557,15 +561,15 @@ module Syskit::Log
                         .should_receive(:rebuild_and_load_index).never
                     streams = lazy_streams.map(&:syskit_eager_load).sort_by(&:name)
                                           .reverse
-                    assert_equal ['test', 'other_test'], streams.map(&:name)
+                    assert_equal %w[test other_test], streams.map(&:name)
                     assert_equal [int32_t, double_t], streams.map(&:type)
-                    assert_equal [Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'port'],
-                                  Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'other']],
-                        streams.map(&:metadata)
+                    assert_equal [Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"],
+                                  Hash["rock_task_name" => "task0", "rock_task_object_name" => "other"]],
+                                 streams.map(&:metadata)
                     assert_equal [[base_time, base_time + 1], [base_time + 100, base_time + 100]],
-                        streams.map(&:interval_rt)
+                                 streams.map(&:interval_rt)
                     assert_equal [[base_time + 10, base_time + 20], [base_time + 300, base_time + 300]],
-                        streams.map(&:interval_lg)
+                                 streams.map(&:interval_lg)
                     assert_equal [2, 1], streams.map(&:size)
                 end
             end

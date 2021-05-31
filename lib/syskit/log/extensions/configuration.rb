@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Syskit::Log
     module Extensions
         # Extension of the Syskit configuration class to add APIs related to
@@ -13,4 +15,3 @@ module Syskit::Log
         end
     end
 end
-

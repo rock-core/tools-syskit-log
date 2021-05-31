@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'digest/sha2'
+require "digest/sha2"
 
 module Syskit::Log
     class Datastore
@@ -22,7 +22,7 @@ module Syskit::Log
                 attr_reader :path, :stream_info, :digest, :stream_block_pos,
                             :index_map, :last_data_block_time, :tell
 
-                WRITE_BLOCK_SIZE = 1024 ** 2
+                WRITE_BLOCK_SIZE = 1024**2
 
                 def initialize(path, wio, stream_info, digest, stream_block_pos)
                     @path = path
@@ -76,30 +76,39 @@ module Syskit::Log
                     wio.write string
                     digest.update string
                 end
+
                 def close
                     wio.close
                 end
+
                 def flush
                     wio.flush
                 end
+
                 def tell
                     wio.tell
                 end
+
                 def closed?
                     wio.closed?
                 end
+
                 def seek(pos)
                     wio.seek(pos)
                 end
+
                 def read(count)
                     wio.read(count)
                 end
+
                 def path
                     wio.path
                 end
+
                 def size
                     wio.size
                 end
+
                 def stat
                     wio.stat
                 end
@@ -137,7 +146,7 @@ module Syskit::Log
                     raw_stream_info = Pocolog::IndexBuilderStreamInfo.new(output.stream_block_pos, output.index_map)
                     stream_info = Pocolog.create_index_from_raw_info(block_stream, [raw_stream_info])
                     index_path = Pocolog::Logfiles.default_index_filename(output.path, index_dir: index_dir)
-                    File.open(index_path, 'w') do |io|
+                    File.open(index_path, "w") do |io|
                         Pocolog::Format::Current.write_index(io, block_stream.io, stream_info)
                     end
                 end
@@ -149,7 +158,6 @@ module Syskit::Log
                 else
                     out_files.each_value.map(&:path)
                 end
-
             ensure
                 out_files.each_value(&:close)
             end
@@ -195,7 +203,6 @@ module Syskit::Log
                         end
                     end
                 end
-
 
             # @api private
             #
@@ -404,7 +411,7 @@ module Syskit::Log
                 output.write raw_header[4..-1]
                 output.write raw_payload
                 out_files[out_file_path] = output
-            rescue Exception => e # rubocop:disable Lint/RescueException
+            rescue Exception # rubocop:disable Lint/RescueException
                 wio&.close
                 out_file_path&.unlink
                 raise

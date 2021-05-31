@@ -1,4 +1,6 @@
-require 'roby/interface'
+# frozen_string_literal: true
+
+require "roby/interface"
 
 module Syskit::Log
     # Definition of the syskit-specific interface commands
@@ -8,17 +10,15 @@ module Syskit::Log
         def initialize(app)
             super
             @replay_manager = app.plan.execution_engine.pocolog_replay_manager
-            Orocos.load_typekit 'base'
+            Orocos.load_typekit "base"
             @time_channel = Orocos::RubyTasks::TaskContext
         end
 
         def time
             replay_manager.time
         end
-        command :time, 'the current replay time', advanced: true
+        command :time, "the current replay time", advanced: true
     end
 end
 
-Roby::Interface::Interface.subcommand 'replay', Syskit::Log::ShellInterface, 'Commands specific to syskit-pocolog'
-
-
+Roby::Interface::Interface.subcommand "replay", Syskit::Log::ShellInterface, "Commands specific to syskit-pocolog"

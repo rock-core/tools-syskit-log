@@ -244,6 +244,7 @@ module Syskit
                             unless args.empty? && kw.empty?
                                 raise ArgumentError, "wrong number of arguments"
                             end
+
                             event(m[0..-7])
                         else
                             super

@@ -1,4 +1,6 @@
-require 'test_helper'
+# frozen_string_literal: true
+
+require "test_helper"
 
 module Syskit::Log
     describe Datastore do
@@ -6,7 +8,7 @@ module Syskit::Log
 
         before do
             @root_path = Pathname.new(Dir.mktmpdir)
-            @datastore_path = root_path + 'datastore'
+            @datastore_path = root_path + "datastore"
             datastore_path.mkpath
             @datastore = Datastore.new(datastore_path)
 
@@ -41,33 +43,33 @@ module Syskit::Log
         describe "#in_incoming" do
             it "creates an incoming directory in the datastore and yields it" do
                 datastore.in_incoming do |core_path, cache_path|
-                    assert_equal (datastore_path + 'incoming' + '0' + "core"), core_path
+                    assert_equal (datastore_path + "incoming" + "0" + "core"), core_path
                     assert core_path.directory?
-                    assert_equal (datastore_path + 'incoming' + '0' + "cache"), cache_path
+                    assert_equal (datastore_path + "incoming" + "0" + "cache"), cache_path
                     assert cache_path.directory?
                 end
             end
             it "handles having another process create a path concurrently" do
                 (datastore_path + "incoming").mkpath
                 called = false
-                flexmock(Pathname).new_instances.should_receive(:mkdir).
-                    and_return do
-                        if !called
-                            called = true
-                            raise Errno::EEXIST
-                        end
+                flexmock(Pathname).new_instances.should_receive(:mkdir)
+                                  .and_return do
+                    unless called
+                        called = true
+                        raise Errno::EEXIST
                     end
+                end
 
                 datastore.in_incoming do |core_path, cache_path|
-                    assert_equal (datastore_path + 'incoming' + '1' + "core"), core_path
-                    assert_equal (datastore_path + 'incoming' + '1' + "cache"), cache_path
+                    assert_equal (datastore_path + "incoming" + "1" + "core"), core_path
+                    assert_equal (datastore_path + "incoming" + "1" + "cache"), cache_path
                 end
             end
             it "ignores existing paths" do
                 (datastore_path + "incoming" + "0").mkpath
                 datastore.in_incoming do |core_path, cache_path|
-                    assert_equal (datastore_path + 'incoming' + '1' + "core"), core_path
-                    assert_equal (datastore_path + 'incoming' + '1' + "cache"), cache_path
+                    assert_equal (datastore_path + "incoming" + "1" + "core"), core_path
+                    assert_equal (datastore_path + "incoming" + "1" + "cache"), cache_path
                 end
             end
             it "deletes the created paths if they still exist at the end of the block" do
@@ -89,12 +91,12 @@ module Syskit::Log
         describe "#has?" do
             attr_reader :digest
             before do
-                @digest = Datastore::Dataset.string_digest('exists')
-                (datastore_path + 'core' + digest).mkpath
+                @digest = Datastore::Dataset.string_digest("exists")
+                (datastore_path + "core" + digest).mkpath
             end
 
             it "returns false if there is no folder with the dataset digest in the store" do
-                refute datastore.has?(Datastore::Dataset.string_digest('does_not_exist'))
+                refute datastore.has?(Datastore::Dataset.string_digest("does_not_exist"))
             end
             it "returns true if there is a folder with the dataset digest in the store" do
                 assert datastore.has?(digest)
@@ -104,7 +106,7 @@ module Syskit::Log
         describe "#delete" do
             attr_reader :digest, :dataset_path, :cache_path
             before do
-                @digest = Datastore::Dataset.string_digest('exists')
+                @digest = Datastore::Dataset.string_digest("exists")
                 @dataset_path = datastore.core_path_of(digest)
                 dataset_path.mkpath
                 @cache_path = datastore.cache_path_of(digest)
@@ -129,7 +131,7 @@ module Syskit::Log
         describe "#get" do
             attr_reader :digest, :dataset_path
             before do
-                @digest = Datastore::Dataset.string_digest('exists')
+                @digest = Datastore::Dataset.string_digest("exists")
                 @dataset_path = datastore.core_path_of(digest)
                 dataset_path.mkpath
                 dataset = Datastore::Dataset.new(dataset_path)
@@ -162,8 +164,8 @@ module Syskit::Log
                 create_dataset("a0fa") {}
             end
             it "returns a dataset whose digest starts with the given string" do
-                assert_equal datastore.core_path_of('a0ea'),
-                    datastore.find_dataset_from_short_digest("a0e").dataset_path
+                assert_equal datastore.core_path_of("a0ea"),
+                             datastore.find_dataset_from_short_digest("a0e").dataset_path
             end
             it "returns nil if nothing matches" do
                 assert_nil datastore.find_dataset_from_short_digest("b")

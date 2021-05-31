@@ -1,13 +1,15 @@
-require 'syskit/log/cli/datastore'
+# frozen_string_literal: true
+
+require "syskit/log/cli/datastore"
 
 class CLI < Thor
-    desc 'datastore', 'data management'
-    subcommand 'datastore', Syskit::Log::CLI::Datastore
+    desc "datastore", "data management"
+    subcommand "datastore", Syskit::Log::CLI::Datastore
 
-    desc 'ds', 'data management'
-    subcommand 'ds', Syskit::Log::CLI::Datastore
+    desc "ds", "data management"
+    subcommand "ds", Syskit::Log::CLI::Datastore
 end
 
 Roby.display_exception do
-    CLI.start(['datastore', *ARGV])
+    CLI.start(["datastore", *ARGV])
 end

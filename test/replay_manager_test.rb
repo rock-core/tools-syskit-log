@@ -1,32 +1,34 @@
-require 'test_helper'
+# frozen_string_literal: true
+
+require "test_helper"
 
 module Syskit::Log
     describe ReplayManager do
         attr_reader :subject, :streams, :port_stream, :task_m, :deployment_m
         before do
-            double_t = Roby.app.default_loader.registry.get '/double'
+            double_t = Roby.app.default_loader.registry.get "/double"
 
-            create_logfile 'test.0.log' do
+            create_logfile "test.0.log" do
                 create_logfile_stream(
-                    '/port0',
+                    "/port0",
                     type: double_t,
-                    metadata: { 'rock_task_name' => 'task',
-                                'rock_task_object_name' => 'out',
-                                'rock_stream_type' => 'port' }
+                    metadata: { "rock_task_name" => "task",
+                                "rock_task_object_name" => "out",
+                                "rock_stream_type" => "port" }
                 )
             end
             @streams = Streams.from_dir(logfile_pathname)
-                              .find_task_by_name('task')
-            @port_stream = streams.find_port_by_name('out')
+                              .find_task_by_name("task")
+            @port_stream = streams.find_port_by_name("out")
             @task_m = Syskit::TaskContext.new_submodel do
-                output_port 'out', double_t
+                output_port "out", double_t
             end
 
             plan = Roby::ExecutablePlan.new
             @subject = ReplayManager.new(plan.execution_engine)
 
             @deployment_m = Syskit::Log::Deployment
-                            .for_streams(streams, model: task_m, name: 'task')
+                            .for_streams(streams, model: task_m, name: "task")
         end
 
         describe "#register" do
@@ -47,7 +49,7 @@ module Syskit::Log
                 deployment_task = deployment_m.new
                 flexmock(subject.stream_aligner)
                     .should_receive(:add_streams)
-                    .with(streams.find_port_by_name('out'))
+                    .with(streams.find_port_by_name("out"))
                     .once
                 subject.register(deployment_task)
             end
@@ -68,10 +70,10 @@ module Syskit::Log
             it "removes the streams that are managed by the deployment task from the aligner" do
                 deployment_task = deployment_m.new
                 subject.register(deployment_task)
-                flexmock(subject.stream_aligner).
-                    should_receive(:remove_streams).
-                    with(streams.find_port_by_name('out')).
-                    once
+                flexmock(subject.stream_aligner)
+                    .should_receive(:remove_streams)
+                    .with(streams.find_port_by_name("out"))
+                    .once
                 subject.deregister(deployment_task)
             end
             it "does not deregister streams that are still in use by another deployment" do
@@ -80,9 +82,9 @@ module Syskit::Log
                 other_task = deployment_m.new
                 subject.register(other_task)
 
-                flexmock(subject.stream_aligner).
-                    should_receive(:remove_streams).
-                    with().once.pass_thru
+                flexmock(subject.stream_aligner)
+                    .should_receive(:remove_streams)
+                    .with().once.pass_thru
                 subject.deregister(other_task)
             end
             it "deregisters the deployment task from the targets for the stream" do
@@ -133,17 +135,17 @@ module Syskit::Log
             end
         end
 
-        describe '#process_in_realtime' do
+        describe "#process_in_realtime" do
             before do
-                double_t = Roby.app.default_loader.registry.get '/double'
+                double_t = Roby.app.default_loader.registry.get "/double"
 
-                create_logfile 'test.0.log' do
+                create_logfile "test.0.log" do
                     stream0 = create_logfile_stream(
-                        '/port0',
+                        "/port0",
                         type: double_t,
-                        metadata: { 'rock_task_name' => 'task',
-                                    'rock_task_object_name' => 'out',
-                                    'rock_stream_type' => 'port' }
+                        metadata: { "rock_task_name" => "task",
+                                    "rock_task_object_name" => "out",
+                                    "rock_stream_type" => "port" }
                     )
                     stream0.write Time.at(0), Time.at(0), 0
                     stream0.write Time.at(0), Time.at(1), 1
@@ -151,14 +153,14 @@ module Syskit::Log
                 end
 
                 streams = Streams.from_dir(logfile_pathname)
-                                 .find_task_by_name('task')
+                                 .find_task_by_name("task")
                 task_m = Syskit::TaskContext.new_submodel do
-                    output_port 'out', double_t
+                    output_port "out", double_t
                 end
 
                 deployment_m = Syskit::Log::Deployment
-                               .for_streams(streams, model: task_m, name: 'task')
-                deployment = deployment_m.new(process_name: 'test', on: 'pocolog')
+                               .for_streams(streams, model: task_m, name: "task")
+                deployment = deployment_m.new(process_name: "test", on: "pocolog")
                 plan.add_permanent_task(deployment)
                 expect_execution { deployment.start! }
                     .to { emit deployment.ready_event }
@@ -172,10 +174,10 @@ module Syskit::Log
                 subject.should_receive(:sleep)
                 realtime = subject.base_real_time
                 flexmock(Time).should_receive(:now).and_return { realtime }
-                subject.should_receive(:dispatch).once.with(0, Time.at(0)).
-                    and_return { realtime += 1 }
-                subject.should_receive(:dispatch).once.with(0, Time.at(1)).
-                    and_return { realtime += 1 }
+                subject.should_receive(:dispatch).once.with(0, Time.at(0))
+                       .and_return { realtime += 1 }
+                subject.should_receive(:dispatch).once.with(0, Time.at(1))
+                       .and_return { realtime += 1 }
                 subject.process_in_realtime(1, limit_real_time: realtime + 1.1)
             end
 
@@ -183,10 +185,10 @@ module Syskit::Log
                 subject.should_receive(:sleep)
                 realtime = subject.base_real_time
                 flexmock(Time).should_receive(:now).and_return { realtime }
-                subject.should_receive(:dispatch).once.with(0, Time.at(0)).
-                    and_return { realtime += 1 }
-                subject.should_receive(:dispatch).once.with(0, Time.at(1)).
-                    and_return { realtime += 1 }
+                subject.should_receive(:dispatch).once.with(0, Time.at(0))
+                       .and_return { realtime += 1 }
+                subject.should_receive(:dispatch).once.with(0, Time.at(1))
+                       .and_return { realtime += 1 }
                 subject.process_in_realtime(2, limit_real_time: realtime + 0.55)
             end
 
@@ -208,10 +210,10 @@ module Syskit::Log
                 realtime = subject.base_real_time
                 flexmock(Time).should_receive(:now).and_return { realtime }
                 subject.should_receive(:dispatch).with(0, Time.at(0)).globally.ordered
-                subject.should_receive(:sleep).explicitly.with(1).once.globally.ordered.
-                    and_return { realtime += 1 }
-                subject.should_receive(:dispatch).with(0, Time.at(1)).globally.ordered.
-                    and_return { realtime += 1 }
+                subject.should_receive(:sleep).explicitly.with(1).once.globally.ordered
+                       .and_return { realtime += 1 }
+                subject.should_receive(:dispatch).with(0, Time.at(1)).globally.ordered
+                       .and_return { realtime += 1 }
                 subject.process_in_realtime(1, limit_real_time: realtime + 1.1)
             end
 
@@ -219,8 +221,8 @@ module Syskit::Log
                 realtime = subject.base_real_time
                 flexmock(Time).should_receive(:now).and_return { realtime }
                 subject.should_receive(:dispatch)
-                subject.should_receive(:sleep).explicitly.with(0.5).once.globally.ordered.
-                    and_return { realtime += 0.5 }
+                subject.should_receive(:sleep).explicitly.with(0.5).once.globally.ordered
+                       .and_return { realtime += 0.5 }
                 subject.process_in_realtime(2, limit_real_time: realtime + 0.55)
             end
 
@@ -234,4 +236,3 @@ module Syskit::Log
         end
     end
 end
-

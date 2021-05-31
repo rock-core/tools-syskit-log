@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Namespace
     task_service "ParentTaskService"
     class ParentModel < Roby::Task

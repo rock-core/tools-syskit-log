@@ -92,13 +92,13 @@ module Syskit::Log
                     if ports.empty?
                         Syskit::Log.warn(
                             "no log stream available for #{p}, ignored "\
-                            'as allow_missing is true (there are no log '\
-                            'streams for the underlying task)'
+                            "as allow_missing is true (there are no log "\
+                            "streams for the underlying task)"
                         )
                     else
                         Syskit::Log.warn(
                             "no log stream available for #{p}, ignored "\
-                            'as allow_missing is true, known ports are: '\
+                            "as allow_missing is true, known ports are: "\
                             "#{ports.sort.join(', ')}"
                         )
                     end
@@ -117,10 +117,10 @@ module Syskit::Log
             # @raise MismatchingType if the port and stream have differing types
             def add_stream(
                 stream,
-                port = task_model.port_by_name(stream.metadata['rock_task_object_name'])
+                port = task_model.port_by_name(stream.metadata["rock_task_object_name"])
             )
                 if !port.output?
-                    raise ArgumentError, 'cannot map a log stream to an input port'
+                    raise ArgumentError, "cannot map a log stream to an input port"
                 elsif port.component_model != task_model
                     raise ArgumentError,
                           "#{self} deploys #{task_model} but the stream mapping "\

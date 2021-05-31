@@ -142,7 +142,6 @@ module Syskit
                     it "raises if trying to call a field method with arguments" do
                         assert_raises(ArgumentError) { @path_builder.field(1) }
                     end
-
                 end
 
                 describe "when on a container type" do

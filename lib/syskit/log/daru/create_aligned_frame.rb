@@ -4,7 +4,7 @@ module Syskit
     module Log
         module Daru
             def self.build_aligned_vectors(center_time, builders, joint_stream, size,
-                                           timeout: nil)
+                timeout: nil)
                 current_row = Array.new(builders.size)
                 initialized = false
 

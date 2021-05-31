@@ -1,4 +1,6 @@
-require 'test_helper'
+# frozen_string_literal: true
+
+require "test_helper"
 module Syskit::Log
     module Models
         describe ReplayTaskContext do
@@ -19,7 +21,7 @@ module Syskit::Log
                 end
                 it "sets the new model's name and registers it under OroGen::Pocolog" do
                     task_m = Syskit::TaskContext.new_submodel(
-                        orogen_model_name: 'project::Task'
+                        orogen_model_name: "project::Task"
                     )
                     replay_task_m = subject.model_for(task_m.orogen_model)
                     assert_same ::OroGen::Pocolog.project.Task, replay_task_m
@@ -33,7 +35,7 @@ module Syskit::Log
                 end
                 it "copies the data services from the plain task model" do
                     srv_m = Syskit::DataService.new_submodel
-                    task_m.provides srv_m, as: 'test'
+                    task_m.provides srv_m, as: "test"
                     replay_task_m = subject.model_for(task_m.orogen_model)
                     srv = replay_task_m.test_srv
                     refute_nil srv
@@ -42,18 +44,18 @@ module Syskit::Log
                 end
                 it "copies the dynamic data services from the plain task model" do
                     srv_m = Syskit::DataService.new_submodel do
-                        output_port 'out', '/double'
+                        output_port "out", "/double"
                     end
                     task_m = Syskit::TaskContext.new_submodel do
-                        dynamic_output_port /^out_\w+$/, '/double'
+                        dynamic_output_port(/^out_\w+$/, "/double")
                     end
-                    task_m.dynamic_service srv_m, as: 'test' do
-                        provides srv_m, as: name, 'out' => "out_#{name}"
+                    task_m.dynamic_service srv_m, as: "test" do
+                        provides srv_m, as: name, "out" => "out_#{name}"
                     end
 
                     replay_task_m = subject.model_for(task_m.orogen_model)
                     replay_task_m = replay_task_m.specialize
-                    replay_task_m.require_dynamic_service 'test', as: 'dyn'
+                    replay_task_m.require_dynamic_service "test", as: "dyn"
                     srv = replay_task_m.dyn_srv
                     assert_equal srv.out_port.to_component_port, replay_task_m.out_dyn_port
                 end
@@ -69,4 +71,3 @@ module Syskit::Log
         end
     end
 end
-

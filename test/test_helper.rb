@@ -1,10 +1,12 @@
-$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
-require 'syskit/test/self'
-require 'syskit/log'
-require 'pocolog'
-require 'pocolog/test_helpers'
-require 'minitest/autorun'
-require 'syskit/log/datastore/index_build'
+# frozen_string_literal: true
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "syskit/test/self"
+require "syskit/log"
+require "pocolog"
+require "pocolog/test_helpers"
+require "minitest/autorun"
+require "syskit/log/datastore/index_build"
 
 module Syskit::Log
     module Test
@@ -13,8 +15,8 @@ module Syskit::Log
         def setup
             @pocolog_log_level = Pocolog.logger.level
             Pocolog.logger.level = Logger::WARN
-            unless Roby.app.loaded_plugin?('syskit-log')
-                Roby.app.add_plugin('syskit-log', Syskit::Log::Plugin)
+            unless Roby.app.loaded_plugin?("syskit-log")
+                Roby.app.add_plugin("syskit-log", Syskit::Log::Plugin)
             end
 
             super
@@ -33,8 +35,8 @@ module Syskit::Log
             @datastore = Datastore.create(path)
         end
 
-        def create_dataset(digest, metadata: Hash.new)
-            if !@datastore
+        def create_dataset(digest, metadata: {})
+            unless @datastore
                 raise ArgumentError, "must call #create_datastore before #create_dataset"
             end
 
@@ -56,22 +58,6 @@ module Syskit::Log
                 dataset.metadata_write_to_file
                 Datastore.index_build(@datastore, dataset)
             end
-        end
-
-        # Create a stream in a normalized dataset
-        def create_normalized_stream(name, type: int32_t, metadata: Hash.new)
-            logfile_basename = name.gsub('/', ':').gsub(/^:/, '') + ".0.log"
-            logfile_path = Pathname.new(logfile_path(logfile_basename))
-            create_logfile logfile_basename do
-                stream = create_logfile_stream(name, type: type, metadata: metadata)
-                yield if block_given?
-                flush_logfile
-                registry_checksum = Streams.save_registry_in_normalized_dataset(logfile_path, stream)
-                Streams.update_normalized_metadata(logfile_pathname) do |metadata|
-                    metadata << Streams.create_metadata_entry(logfile_path, stream, registry_checksum)
-                end
-            end
-            return logfile_path
         end
 
         def roby_log_path(name)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # A single task model
 module Namespace
     class M < Roby::Task
@@ -19,8 +21,7 @@ Robot.controller do
     Roby.plan.add_permanent_task(task = Namespace::M.new)
     task.start!
 
-    task.stop_event.on do |ev|
+    task.stop_event.on do |_|
         Roby.app.quit
     end
 end
-

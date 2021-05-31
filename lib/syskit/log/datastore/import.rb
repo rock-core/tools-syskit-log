@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require 'syskit/log/datastore/normalize'
-require 'pocolog/cli/tty_reporter'
+require "syskit/log/datastore/normalize"
+require "pocolog/cli/tty_reporter"
 
 module Syskit::Log
     class Datastore
@@ -13,7 +13,7 @@ module Syskit::Log
         class Import
             class DatasetAlreadyExists < RuntimeError; end
 
-            BASENAME_IMPORT_TAG = '.syskit-pocolog-import'
+            BASENAME_IMPORT_TAG = ".syskit-pocolog-import"
 
             attr_reader :datastore
             def initialize(datastore)
@@ -35,7 +35,7 @@ module Syskit::Log
                 end
                 ignored.concat(roby_files.map { |p| p.sub(/-events.log$/, "-index.log") })
 
-                all_files = Pathname.enum_for(:glob, dir_path + '*').to_a
+                all_files = Pathname.enum_for(:glob, dir_path + "*").to_a
                 remaining = (all_files - pocolog_files -
                              text_files - roby_files - ignored)
                 [pocolog_files, text_files, roby_files, remaining]
@@ -242,7 +242,7 @@ module Syskit::Log
             def copy_text_files(output_dir, files)
                 return if files.empty?
 
-                out_text_dir = (output_dir + 'text')
+                out_text_dir = (output_dir + "text")
                 out_text_dir.mkpath
                 FileUtils.cp files, out_text_dir
             end
@@ -280,7 +280,7 @@ module Syskit::Log
             def copy_ignored_entries(output_dir, paths)
                 return if paths.empty?
 
-                out_ignored_dir = (output_dir + 'ignored')
+                out_ignored_dir = (output_dir + "ignored")
                 out_ignored_dir.mkpath
                 FileUtils.cp_r paths, out_ignored_dir
             end

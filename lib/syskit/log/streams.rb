@@ -73,7 +73,7 @@ module Syskit::Log
             ignored_streams = Hash.new { |h, k| h[k] = [] }
             empty_task_models = []
             each_stream do |s|
-                next unless (task_model_name = s.metadata['rock_task_model'])
+                next unless (task_model_name = s.metadata["rock_task_model"])
 
                 if task_model_name.empty?
                     empty_task_models << s
@@ -82,7 +82,7 @@ module Syskit::Log
 
                 task_m = Syskit::TaskContext.find_model_from_orogen_name(task_model_name)
                 if !task_m && load_models
-                    orogen_project_name, *_tail = task_model_name.split('::')
+                    orogen_project_name, *_tail = task_model_name.split("::")
                     begin
                         loader.project_model_from_name(orogen_project_name)
                     rescue OroGen::ProjectNotFound
@@ -97,7 +97,7 @@ module Syskit::Log
                 end
 
                 if task_m || !skip_tasks_without_models
-                    available_tasks[s.metadata['rock_task_name']] << s
+                    available_tasks[s.metadata["rock_task_name"]] << s
                 else
                     ignored_streams[task_model_name] << s
                 end
@@ -141,13 +141,13 @@ module Syskit::Log
             files_per_basename = Hash.new { |h, k| h[k] = [] }
             path.children.each do |file_or_dir|
                 next unless file_or_dir.file?
-                next unless file_or_dir.extname == '.log'
+                next unless file_or_dir.extname == ".log"
 
-                base_filename = file_or_dir.sub_ext('')
+                base_filename = file_or_dir.sub_ext("")
                 id = base_filename.extname[1..-1]
                 next if id !~ /^\d+$/
 
-                base_filename = base_filename.sub_ext('')
+                base_filename = base_filename.sub_ext("")
                 files_per_basename[base_filename.to_s][Integer(id)] = file_or_dir
             end
             files_per_basename.values.map(&:compact)
@@ -272,7 +272,7 @@ module Syskit::Log
         def respond_to_missing?(m, include_private = false)
             MetaRuby::DSLs.has_through_method_missing?(
                 self, m,
-                '_task' => 'find_task_by_name'
+                "_task" => "find_task_by_name"
             ) || super
         end
 
@@ -280,7 +280,7 @@ module Syskit::Log
         def method_missing(m, *args, &block)
             MetaRuby::DSLs.find_through_method_missing(
                 self, m, args,
-                '_task' => 'find_task_by_name'
+                "_task" => "find_task_by_name"
             ) || super
         end
 

@@ -17,14 +17,14 @@ module Syskit::Log
         #
         # @raise (see unique_metadata)
         def task_name
-            @task_name ||= unique_metadata('rock_task_name')
+            @task_name ||= unique_metadata("rock_task_name")
         end
 
         # Returns the orogen model name for all streams in self
         #
         # @raise (see unique_metadata)
         def orogen_model_name
-            @orogen_model_name ||= unique_metadata('rock_task_model')
+            @orogen_model_name ||= unique_metadata("rock_task_model")
         end
 
         # Returns the Syskit model for the orogen model name in
@@ -53,8 +53,8 @@ module Syskit::Log
             return enum_for(__method__) unless block_given?
 
             streams.each do |s|
-                if (s.metadata['rock_stream_type'] == 'port') &&
-                   (port_name = s.metadata['rock_task_object_name'])
+                if (s.metadata["rock_stream_type"] == "port") &&
+                   (port_name = s.metadata["rock_task_object_name"])
                     yield(port_name, s)
                 end
             end
@@ -68,8 +68,8 @@ module Syskit::Log
             return enum_for(__method__) unless block_given?
 
             streams.each do |s|
-                if (s.metadata['rock_stream_type'] == 'property') &&
-                   (port_name = s.metadata['rock_task_object_name'])
+                if (s.metadata["rock_stream_type"] == "property") &&
+                   (port_name = s.metadata["rock_task_object_name"])
                     yield(port_name, s)
                 end
             end
@@ -98,8 +98,8 @@ module Syskit::Log
         def respond_to_missing?(m, include_private = true)
             MetaRuby::DSLs.has_through_method_missing?(
                 self, m,
-                '_port' => 'find_port_by_name',
-                '_property' => 'find_property_by_name'
+                "_port" => "find_port_by_name",
+                "_property" => "find_property_by_name"
             ) || super
         end
 
@@ -108,8 +108,8 @@ module Syskit::Log
         def method_missing(m, *args)
             MetaRuby::DSLs.find_through_method_missing(
                 self, m, args,
-                '_port' => 'find_port_by_name',
-                '_property' => 'find_property_by_name'
+                "_port" => "find_port_by_name",
+                "_property" => "find_property_by_name"
             ) || super
         end
 
@@ -123,7 +123,7 @@ module Syskit::Log
         # @raise Ambiguous if some streams have different values for the
         #   metadata
         def unique_metadata(metadata_name)
-            raise Unknown, 'no streams' if streams.empty?
+            raise Unknown, "no streams" if streams.empty?
 
             model_name = nil
             streams.each do |s|
@@ -136,7 +136,7 @@ module Syskit::Log
                 model_name ||= name
                 if model_name != name
                     raise Ambiguous,
-                          'streams declare more than one value for '\
+                          "streams declare more than one value for "\
                           "#{metadata_name}: #{model_name} and #{name}"
                 end
             end
@@ -154,4 +154,3 @@ module Syskit::Log
         end
     end
 end
-

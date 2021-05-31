@@ -1,11 +1,13 @@
-require 'syskit'
+# frozen_string_literal: true
+
+require "syskit"
 
 module Syskit::Log
     module Plugin
         def self.setup(app)
             Pocolog.logger = Syskit::Log.logger
             manager = Orocos::RubyTasks::ProcessManager.new(app.default_loader)
-            Syskit.conf.register_process_server('pocolog', manager, app.log_dir)
+            Syskit.conf.register_process_server("pocolog", manager, app.log_dir)
         end
 
         # This hooks into the network generation to deploy all tasks using
@@ -21,4 +23,3 @@ module Syskit::Log
         end
     end
 end
-

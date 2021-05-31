@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # A single task model
 class M < Roby::Task
     terminates
@@ -10,7 +12,7 @@ end
 Robot.controller do
     Roby.plan.add_permanent_task(task = M.new)
     task.start!
-    task.stop_event.on do |ev|
+    task.stop_event.on do |_|
         Roby.app.quit
     end
 end
