@@ -173,13 +173,20 @@ module Syskit::Log
             end
 
             describe "#read_dataset_identity_from_metadata_file" do
-                def write_metadata(overrides = Hash.new, layout_version: Dataset::LAYOUT_VERSION)
-                    metadata = Hash[
-                        'path' => 'test',
-                         'size' => 10,
-                         'sha2' => Digest::SHA2.hexdigest('')].merge(overrides)
+                def write_metadata(
+                    overrides = {}, layout_version: Dataset::LAYOUT_VERSION
+                )
+                    metadata = {
+                        "path" => "test",
+                        "size" => 10,
+                        "sha2" => Digest::SHA2.hexdigest("")
+                    }.merge(overrides)
+
                     (dataset_path + Dataset::BASENAME_IDENTITY_METADATA).open('w') do |io|
-                        io.write YAML.dump(Hash['layout_version' => layout_version, 'identity' => [metadata]])
+                        io.write YAML.dump(
+                            { "layout_version" => layout_version,
+                              "identity" => [metadata] }
+                        )
                     end
                     metadata
                 end
@@ -191,23 +198,23 @@ module Syskit::Log
                     end
                 end
                 it "sets the entry's path to the file's absolute path" do
-                    write_metadata('path' => 'test')
+                    write_metadata({ 'path' => 'test' })
                     entry = dataset.read_dataset_identity_from_metadata_file.first
                     assert_equal (dataset_path + 'test'), entry.path
                 end
                 it "validates that the paths are within the dataset" do
-                    write_metadata('path' => '../test')
+                    write_metadata({ 'path' => '../test' })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "sets the entry's size" do
-                    write_metadata('size' => 20)
+                    write_metadata({ 'size' => 20 })
                     entry = dataset.read_dataset_identity_from_metadata_file.first
                     assert_equal 20, entry.size
                 end
                 it "sets the entry's size" do
-                    write_metadata('sha2' => Digest::SHA2.hexdigest('test'))
+                    write_metadata({ 'sha2' => Digest::SHA2.hexdigest('test') })
                     entry = dataset.read_dataset_identity_from_metadata_file.first
                     assert_equal Digest::SHA2.hexdigest('test'), entry.sha2
                 end
@@ -230,25 +237,25 @@ module Syskit::Log
                     assert_match /the 'identity' field.*is not an array/, e.message
                 end
                 it "validates that the 'path' field contains a string" do
-                    write_metadata('path' => 10)
+                    write_metadata({ 'path' => 10 })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "validates that the 'size' field is an integer" do
-                    write_metadata('size' => 'not_a_number')
+                    write_metadata({ 'size' => 'not_a_number' })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "validates that the 'sha2' field contains a string" do
-                    write_metadata('sha2' => 10)
+                    write_metadata({ 'sha2' => 10 })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
                 end
                 it "validates that the 'path' field contains a valid hash" do
-                    write_metadata('sha2' => 'aerpojapoj')
+                    write_metadata({ 'sha2' => 'aerpojapoj' })
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.read_dataset_identity_from_metadata_file
                     end
