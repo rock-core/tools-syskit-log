@@ -41,7 +41,7 @@ require "syskit/log/roby_sql_index/accessors"
 
 module Syskit
     module Log # rubocop:disable Style/Documentation
-        # Returns the paths of the log files in a given directory
+        # Returns the paths of the pocolog log files in a given directory
         #
         # The returned paths are sorted in 'pocolog' order, i.e. multi-IO files are
         # following each other in the order of their place in the overall IO

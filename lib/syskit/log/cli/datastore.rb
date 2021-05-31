@@ -153,19 +153,42 @@ module Syskit::Log
                     end
                 end
 
-                def import_dataset(path, reporter, datastore, metadata, merge: false)
+                # @api private
+                #
+                # Parse a metadata option such as --set some=value some-other=value
+                def parse_metadata_option(hash)
+                    hash.each_with_object({}) do |arg, metadata|
+                        key, value = arg.split('=')
+                        unless value
+                            raise ArgumentError,
+                                  "metadata setters need to be specified as "\
+                                  "key=value (got #{arg})"
+                        end
+                        (metadata[key] ||= Set.new) << value
+                    end
+                end
+
+                def import_dataset?(datastore, path, reporter:)
                     last_import_digest, last_import_time =
                         Syskit::Log::Datastore::Import.find_import_info(path)
-                    already_imported = last_import_digest &&
-                                       datastore.has?(last_import_digest)
-                    if already_imported && !options[:force]
-                        reporter.info(
-                            "#{path} already seem to have been imported as "\
-                            "#{last_import_digest} at #{last_import_time}. Give "\
-                            "--force to import again"
-                        )
-                        return
-                    end
+                    already_imported =
+                        last_import_digest && datastore.has?(last_import_digest)
+                    return true if !already_imported || options[:force]
+
+                    reporter.info(
+                        "#{path} already seem to have been imported as "\
+                        "#{last_import_digest} at #{last_import_time}. Give "\
+                        "--force to import again"
+                    )
+                    false
+                end
+
+                def dataset_duration(dataset)
+                    dataset.each_pocolog_stream.map(&:duration_lg).max || 0
+                end
+
+                def import_dataset(path, reporter, datastore, metadata, merge: false)
+                    return unless import_dataset?(datastore, path, reporter: reporter)
 
                     paths =
                         if merge
@@ -177,45 +200,40 @@ module Syskit::Log
                     datastore.in_incoming do |core_path, cache_path|
                         importer = Syskit::Log::Datastore::Import.new(datastore)
                         dataset = importer.normalize_dataset(
-                            paths, core_path, cache_path: cache_path,
-                                              reporter: reporter
+                            paths, core_path,
+                            cache_path: cache_path, reporter: reporter
                         )
                         metadata.each { |k, v| dataset.metadata_set(k, *v) }
                         dataset.metadata_write_to_file
-                        stream_duration = dataset.each_pocolog_stream
-                                                  .map(&:duration_lg)
-                                                  .max
-                        stream_duration ||= 0
-
-                        if already_imported
-                            # --force is implied as otherwise we would have
-                            # skipped earlier
+                        dataset_duration = dataset_duration(dataset)
+                        unless dataset_duration >= options[:min_duration]
                             reporter.info(
-                                "#{path} seem to have already been imported but --force "\
-                                "is given, overwriting"
+                                "#{path} lasts only %.1fs, ignored" % [dataset_duration]
                             )
-                            datastore.delete(last_import_digest)
+                            break
                         end
 
-                        if stream_duration >= options[:min_duration]
-                            begin
-                                final_core_dir = importer.move_dataset_to_store(
-                                    path, dataset,
-                                    force: options[:force], reporter: reporter
-                                )
-                                puts File.basename(final_core_dir)
-                            rescue Syskit::Log::Datastore::Import::DatasetAlreadyExists
-                                reporter.info(
-                                    "#{path} already seem to have been imported as "\
-                                    "#{dataset.compute_dataset_digest}. Give "\
-                                    "--force to import again"
-                                )
-                            end
-                        else
+                        begin
+                            importer.validate_dataset_import(
+                                dataset, force: options[:force], reporter: reporter
+                            )
+                        rescue Syskit::Log::Datastore::Import::DatasetAlreadyExists
                             reporter.info(
-                                "#{path} lasts only %.1fs, ignored" % [stream_duration]
+                                "#{path} already seem to have been imported as "\
+                                "#{dataset.compute_dataset_digest}. Give "\
+                                "--force to import again"
+                            )
+                            break
+                        end
+
+                        dataset = importer.move_dataset_to_store(dataset)
+                        t = Time.now
+                        paths.each do |p|
+                            Syskit::Log::Datastore::Import.save_import_info(
+                                p, dataset, time: t
                             )
                         end
+                        dataset
                     end
                 end
 
@@ -370,21 +388,14 @@ module Syskit::Log
                 datastore = create_store
 
                 metadata = {}
-                metadata['description'] = description if description
-                metadata['tags'] = options[:tags]
-                options[:metadata].each do |pair|
-                    k, v = pair.split('=')
-                    unless v
-                        raise ArgumentError,
-                              'expected key=value pair as argument to '\
-                              "--metadata but got '#{pair}'"
-                    end
-                    (metadata[k] ||= []) << v
-                end
+                metadata["description"] = description if description
+                metadata["tags"] = options[:tags]
+                metadata.merge!(parse_metadata_option(options[:metadata]))
 
                 paths.each do |p|
-                    import_dataset(p, reporter, datastore, metadata,
-                                   merge: options[:merge])
+                    dataset = import_dataset(p, reporter, datastore, metadata,
+                                             merge: options[:merge])
+                    puts dataset.digest if dataset
                 end
             end
 
@@ -483,15 +494,7 @@ module Syskit::Log
                     end
 
                 if options[:set]
-                    setters = Hash.new
-                    options[:set].map do |arg|
-                        key, value = arg.split('=')
-                        if !value
-                            raise ArgumentError, "metadata setters need to be specified as key=value (got #{arg})"
-                        end
-                        (setters[key] ||= Set.new) << value
-                    end
-
+                    setters = parse_metadata_option(options[:set])
                     datasets.each do |set|
                         setters.each do |k, v|
                             set.metadata_set(k, *v)

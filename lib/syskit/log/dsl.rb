@@ -215,10 +215,10 @@ module Syskit
             # @raise ArgumentError if the object cannot be interpreted as a timepoint
             # @see __try_resolve_timepoint
             def __resolve_timepoint(obj, interval_index)
-                if (result = __try_resolve_timepoint(obj))
-                    result
-                elsif (interval = __try_resolve_interval(obj))
+                if (interval = __try_resolve_interval(obj))
                     interval[interval_index]
+                elsif (result = __try_resolve_timepoint(obj))
+                    result
                 else
                     raise ArgumentError, "cannot resolve #{obj} as a timepoint"
                 end
@@ -351,6 +351,9 @@ module Syskit
             TIME_EPSILON = 1/1_000_000r
 
             # Convert fields of a data stream into a Daru frame
+            #
+            # @param [Array] streams an array if objects that can be converted to
+            #   samples using {#samples_of}
             def to_daru_frame(*streams, timeout: nil)
                 interval_start, interval_end = streams.map(&:interval_lg).transpose
                 interval_start = interval_start.min
@@ -368,7 +371,7 @@ module Syskit
 
                 if builders.size == 1
                     builders.first.to_daru_frame(
-                        @interval_zero_time, samples, timeout: timeout
+                        @interval_zero_time, samples.first, timeout: timeout
                     )
                 else
                     joint_stream = Pocolog::StreamAligner.new(false, *samples)

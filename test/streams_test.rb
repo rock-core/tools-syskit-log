@@ -64,8 +64,8 @@ module Syskit::Log
                     end
                     flexmock(Syskit::Log)
                         .should_receive(:warn)
-                        .with('removing empty metadata property "rock_task_model" '\
-                              'from /stream0')
+                        .with("removing empty metadata property 'rock_task_model' "\
+                              "from /stream0")
                         .once
                     stream = open_logfile_stream('test.0.log', '/stream0')
                     subject.add_stream(stream)
@@ -238,33 +238,60 @@ module Syskit::Log
                 flexmock(app).should_receive(:using_task_library).never
                 should_warn /ignored 2 streams.*project::Task.*\/test0, \/test1/
                 should_warn /ignored.*other_project::Task.*other_project/
-                assert_equal [], subject.each_task(load_models: false).to_a
+
+                tasks = subject.each_task(
+                    load_models: false, skip_tasks_without_models: true
+                ).to_a
+                assert_equal [], tasks
+            end
+
+            it "does enumerate tasks without models if "\
+               "skip_tasks_without_models is false" do
+                flexmock(app).should_receive(:using_task_library).never
+                tasks = subject.each_task(load_models: false,
+                                          skip_tasks_without_models: false)
+                assert_equal %w[task other_task], tasks.map(&:task_name)
+            end
+
+            it "does enumerate tasks without models if skip_tasks_without_models is "\
+               "false even if it tries and fails to load the model" do
+                tasks = subject.each_task(load_models: true,
+                                          skip_tasks_without_models: false)
+                assert_equal %w[task other_task], tasks.map(&:task_name)
             end
 
             it "attempts to load the model's project if load_models is true" do
-                loader = flexmock
-                loader.should_receive(:project_model_from_name).once.
-                    with('project').
-                    and_return { Syskit::TaskContext.new_submodel(orogen_model_name: 'project::Task') }
-                loader.should_receive(:project_model_from_name).once.
-                    with('other_project').
-                    pass_thru
+                loader = Roby.app.default_loader
+                project_m = OroGen::Spec::Project.new(loader)
+                project_m.name "project"
+                project_m.import_types_from "std"
+                project_m.task_context "Task"
+                loader.register_project_model(project_m)
+
                 should_warn /ignored 1 stream.*other_project::Task.*other_project/
-                assert_equal ['task'], subject.each_task(load_models: true, loader: loader).map(&:task_name)
+                tasks = subject.each_task(
+                    load_models: true, skip_tasks_without_models: true, loader: loader
+                )
+
+                assert_equal ["task"], tasks.map(&:task_name)
             end
 
             it "raises if the task project's cannot be found and raise_on_missing_task_models is true" do
                 loader = OroGen::Loaders::Aggregate.new
                 assert_raises(OroGen::ProjectNotFound) do
-                    subject.each_task(raise_on_missing_task_models: true, loader: loader).to_a
+                    subject.each_task(load_models: true, loader: loader,
+                                      raise_on_missing_task_models: true).to_a
                 end
             end
 
             it "raises if the task is not present in its project and raise_on_missing_task_models is true" do
                 loader = flexmock
+                project_m = OroGen::Spec::Project.new(loader)
                 loader.should_receive(:project_model_from_name)
+                      .and_return(project_m)
                 assert_raises(OroGen::NotFound) do
-                    subject.each_task(raise_on_missing_task_models: true, loader: loader).to_a
+                    subject.each_task(load_models: true, loader: loader,
+                                      raise_on_missing_task_models: true).to_a
                 end
             end
 

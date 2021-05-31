@@ -24,15 +24,18 @@ module Syskit::Log
                     FileUtils.touch(file0_1 = logfile_pathname('file0.1.log'))
                     FileUtils.touch(file0_0 = logfile_pathname('file0.0.log'))
                     FileUtils.touch(file1_0 = logfile_pathname('file1.0.log'))
-                    assert_equal [[file0_0, file0_1, file1_0], [], nil, []], import.prepare_import(logfile_pathname)
+                    assert_equal [[file0_0, file0_1, file1_0], [], [], []],
+                                 import.prepare_import(logfile_pathname)
                 end
                 it "lists the test files that should be copied" do
                     FileUtils.touch(path = logfile_pathname('file0.txt'))
-                    assert_equal [[], [path], nil, []], import.prepare_import(logfile_pathname)
+                    assert_equal [[], [path], [], []],
+                                 import.prepare_import(logfile_pathname)
                 end
                 it "lists the Roby log files that should be copied" do
                     FileUtils.touch(path = logfile_pathname('test-events.log'))
-                    assert_equal [[], [], path, []], import.prepare_import(logfile_pathname)
+                    assert_equal [[], [], [path], []],
+                                 import.prepare_import(logfile_pathname)
                 end
                 it "raises if more than one file looks like a roby log file" do
                     FileUtils.touch(logfile_pathname('test-events.log'))
@@ -45,20 +48,21 @@ module Syskit::Log
                 it "ignores pocolog's index files" do
                     FileUtils.touch(path = logfile_pathname('file0.1.log'))
                     FileUtils.touch(logfile_pathname('file0.1.idx'))
-                    assert_equal [[path], [], nil, []], import.prepare_import(logfile_pathname)
+                    assert_equal [[path], [], [], []],
+                                 import.prepare_import(logfile_pathname)
                 end
                 it "ignores Roby index files" do
                     FileUtils.touch(path = logfile_pathname('test-events.log'))
                     FileUtils.touch(logfile_pathname('test-index.log'))
-                    assert_equal [[], [], path, []], import.prepare_import(logfile_pathname)
+                    assert_equal [[], [], [path], []], import.prepare_import(logfile_pathname)
                 end
                 it "lists unrecognized files" do
                     FileUtils.touch(path = logfile_pathname('not_matching'))
-                    assert_equal [[], [], nil, [path]], import.prepare_import(logfile_pathname)
+                    assert_equal [[], [], [], [path]], import.prepare_import(logfile_pathname)
                 end
                 it "lists unrecognized directories" do
                     (path = logfile_pathname('not_matching')).mkpath
-                    assert_equal [[], [], nil, [path]], import.prepare_import(logfile_pathname)
+                    assert_equal [[], [], [], [path]], import.prepare_import(logfile_pathname)
                 end
             end
 
@@ -81,14 +85,14 @@ module Syskit::Log
 
                 it 'can import an empty folder' do
                     Dir.mktmpdir do |dir|
-                        import.import(Pathname.new(dir))
+                        import.import([Pathname.new(dir)])
                     end
                 end
 
                 it "moves the results under the dataset's ID" do
                     flexmock(Dataset).new_instances.should_receive(:compute_dataset_digest).
                         and_return('ABCDEF')
-                    import_dir = import.import(logfile_pathname)
+                    import_dir = import.import([logfile_pathname]).dataset_path
                     assert_equal(datastore_path + 'core' + 'ABCDEF', import_dir)
                 end
                 it 'raises if the target dataset ID already exists' do
@@ -96,7 +100,7 @@ module Syskit::Log
                         and_return('ABCDEF')
                     (datastore_path + 'core' + 'ABCDEF').mkpath
                     assert_raises(Import::DatasetAlreadyExists) do
-                        import.import(logfile_pathname)
+                        import.import([logfile_pathname])
                     end
                 end
                 it "replaces the current dataset by the new one if the ID already exists but 'force' is true" do
@@ -108,7 +112,7 @@ module Syskit::Log
                     FileUtils.touch (datastore_path + 'core' + digest + 'file')
                     out, = capture_io do
                         import.import(
-                            logfile_pathname, reporter: tty_reporter, force: true
+                            [logfile_pathname], reporter: tty_reporter, force: true
                         )
                     end
                     assert_match /Replacing existing dataset #{digest} with new one/, out
@@ -119,7 +123,7 @@ module Syskit::Log
                     # path that reports progress, but checks nothing except the lack
                     # of exceptions
                     capture_io do
-                        import.import(logfile_pathname)
+                        import.import([logfile_pathname])
                     end
                 end
                 it 'normalizes the pocolog logfiles' do
@@ -130,21 +134,21 @@ module Syskit::Log
                     flexmock(Syskit::Log::Datastore).should_receive(:normalize).
                         with([logfile_pathname('test.0.log')], expected_normalize_args).once.
                         pass_thru
-                    import_dir = import.import(logfile_pathname)
-                    assert (import_dir + 'pocolog' + 'task0::port.0.log').exist?
+                    dataset = import.import([logfile_pathname])
+                    assert (dataset.dataset_path + 'pocolog' + 'task0::port.0.log').exist?
                 end
                 it "copies the text files" do
-                    import_dir = import.import(logfile_pathname)
+                    import_dir = import.import([logfile_pathname]).dataset_path
                     assert logfile_pathname('test.txt').exist?
                     assert (import_dir + 'text' + 'test.txt').exist?
                 end
-                it "copies the roby log files into roby-events.log" do
-                    import_dir = import.import(logfile_pathname)
+                it "copies the roby log files into roby-events.N.log" do
+                    import_dir = import.import([logfile_pathname]).dataset_path
                     assert logfile_pathname('test-events.log').exist?
-                    assert (import_dir + 'roby-events.log').exist?
+                    assert (import_dir + 'roby-events.0.log').exist?
                 end
                 it "copies the unrecognized files" do
-                    import_dir = import.import(logfile_pathname)
+                    import_dir = import.import([logfile_pathname]).dataset_path
 
                     assert logfile_pathname('not_recognized_file').exist?
                     assert logfile_pathname('not_recognized_dir').exist?
@@ -159,20 +163,23 @@ module Syskit::Log
                     logfile_pathname("info.yml").open('w') do |io|
                         YAML.dump(roby_metadata, io)
                     end
-                    import_dir = import.import(logfile_pathname)
-                    assert_equal Hash['roby:app_name' => Set['test']], Dataset.new(import_dir).metadata
+                    dataset = import.import([logfile_pathname])
+                    assert_equal({ 'roby:app_name' => Set['test'] }, dataset.metadata)
+                    assert_equal({ 'roby:app_name' => Set['test'] },
+                                 Dataset.new(dataset.dataset_path).metadata)
                 end
                 it "ignores the Roby metadata if it cannot be loaded" do
                     logfile_pathname("info.yml").open('w') do |io|
                         io.write "%invalid_yaml"
                     end
 
-                    import_dir = nil
+                    imported = nil
                     _out, err = capture_io do
-                        import_dir = import.import(logfile_pathname)
+                        imported = import.import([logfile_pathname])
                     end
                     assert_match /failed to load Roby metadata/, err
-                    assert_equal Hash[], Dataset.new(import_dir).metadata
+                    assert_equal({}, imported.metadata)
+                    assert_equal({}, Dataset.new(imported.dataset_path).metadata)
                 end
             end
 
@@ -182,12 +189,14 @@ module Syskit::Log
                 end
 
                 it "returns the import information of an imported directory" do
-                    path = Timecop.freeze(base_time = Time.now) do
-                        import.import(logfile_pathname)
-                    end
-                    digest, time = Import.find_import_info(logfile_pathname)
-                    assert_equal digest, path.basename.to_s
-                    assert_equal base_time, time
+                    dataset = flexmock(dataset_path: logfile_pathname,
+                                       digest: "something")
+
+                    dir = Pathname(make_tmpdir)
+                    Import.save_import_info(dir, dataset, time: (t = Time.now))
+                    digest, time = Import.find_import_info(dir)
+                    assert_equal digest, dataset.digest
+                    assert_equal t, time
                 end
             end
         end

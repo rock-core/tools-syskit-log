@@ -255,10 +255,10 @@ module Syskit::Log
             def each_important_file
                 return enum_for(__method__) unless block_given?
 
-                Pathname.glob(dataset_path + 'pocolog' + '*.*.log') do |path|
+                Pathname.glob(dataset_path + "pocolog" + "*.*.log") do |path|
                     yield(path)
                 end
-                Pathname.glob(dataset_path + '*-events.log') do |path|
+                Pathname.glob(dataset_path + "roby-events.*.log") do |path|
                     yield(path)
                 end
             end

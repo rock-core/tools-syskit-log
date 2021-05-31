@@ -46,30 +46,41 @@ module Syskit::Log
             # @param [Pathname] dir_path the input directory
             # @return [Pathname] the directory of the imported dataset in the store
             def import(
-                in_path, in_dataset_paths,
-                force: false, reporter: Pocolog::CLI::NullReporter.new
+                in_dataset_paths, force: false, reporter: Pocolog::CLI::NullReporter.new
             )
                 datastore.in_incoming do |core_path, cache_path|
                     dataset = normalize_dataset(
                         in_dataset_paths, core_path,
                         cache_path: cache_path, reporter: reporter
                     )
-                    move_dataset_to_store(
-                        in_path, dataset, force: force, reporter: reporter
+                    validate_dataset_import(
+                        dataset, force: force, reporter: reporter
                     )
+                    move_dataset_to_store(dataset)
                 end
             end
 
             # Find if a directory has already been imported
             #
-            # @return [(String,Time),nil] if the directory has already been
-            #   imported, the time and digest of the import. Otherwise, returns nil
+            # @param [Pathname] path
+            # @return [(String,Time)] the digest and time of the last import
             def self.find_import_info(path)
                 info_path = (path + BASENAME_IMPORT_TAG)
                 return unless info_path.exist?
 
                 info = YAML.safe_load(info_path.read, [Time])
-                [info['sha2'], info['time']]
+                [info["digest"], info["time"]]
+            end
+
+            # Save import info, used by {.find_import_info}
+            #
+            # @param [Pathname] path
+            # @param [ImportInfo] info
+            def self.save_import_info(path, dataset, time: Time.now)
+                (path + BASENAME_IMPORT_TAG).open("w") do |io|
+                    h = { "digest" => dataset.digest, "time" => time }
+                    YAML.dump(h, io)
+                end
             end
 
             # Move the given dataset to the store
@@ -80,26 +91,11 @@ module Syskit::Log
             # @param [Boolean] force if force (the default), the method will fail if
             #   the dataset is already in the store. Otherwise, it will erase the
             #   existing dataset with the new one
-            # @return [Pathname] the path to the new dataset in the store
+            # @return [Dataset] the dataset at its final place
             # @raise DatasetAlreadyExists if a dataset already exists with the same
             #   ID than the new one and 'force' is false
-            def move_dataset_to_store(in_path, dataset,
-                                      force: false,
-                                      reporter: Pocolog::CLI::NullReporter.new)
-                dataset_digest = dataset.compute_dataset_digest
-
-                if datastore.has?(dataset_digest)
-                    if force
-                        datastore.delete(dataset_digest)
-                        reporter.warn "Replacing existing dataset #{dataset_digest} "\
-                                      'with new one'
-                    else
-                        raise DatasetAlreadyExists,
-                              "a dataset identical to #{dataset.dataset_path} already "\
-                              "exists in the store (computed digest is #{dataset_digest})"
-                    end
-                end
-
+            def move_dataset_to_store(dataset)
+                dataset_digest = dataset.digest
                 final_core_dir = datastore.core_path_of(dataset_digest)
                 FileUtils.mv dataset.dataset_path, final_core_dir
                 final_cache_dir = datastore.cache_path_of(dataset_digest)
@@ -107,11 +103,29 @@ module Syskit::Log
                     FileUtils.mv dataset.cache_path, final_cache_dir
                 end
 
-                (in_path + BASENAME_IMPORT_TAG).open('w') do |io|
-                    YAML.dump(Hash['sha2' => dataset_digest, 'time' => Time.now], io)
+                Dataset.new(final_core_dir,
+                            digest: dataset_digest,
+                            cache: final_cache_dir)
+            end
+
+            # @api private
+            #
+            # Verifies that the given data should be imported
+            def validate_dataset_import(
+                dataset, force: false, reporter: Pocolog::CLI::NullReporter.new
+            )
+                return unless datastore.has?(dataset.digest)
+
+                if force
+                    datastore.delete(dataset.digest)
+                    reporter.warn "Replacing existing dataset #{dataset.digest} "\
+                                  "with new one"
+                    return
                 end
 
-                final_core_dir
+                raise DatasetAlreadyExists,
+                      "a dataset identical to #{dataset.dataset_path} already "\
+                      "exists in the store (computed digest is #{dataset.digest})"
             end
 
             # Import Roby's info.yml information into the dataset metadata

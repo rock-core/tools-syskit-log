@@ -45,7 +45,7 @@ module Syskit::Log
                     flexmock(datastore_m::Import)
                         .new_instances.should_receive(:normalize_dataset)
                         .with(
-                            logfile_pathname, incoming_path + 'core',
+                            [logfile_pathname], incoming_path + 'core',
                             on do |h|
                                 h[:cache_path] == incoming_path + 'cache' &&
                                 h[:reporter].kind_of?(Pocolog::CLI::NullReporter)
@@ -59,13 +59,7 @@ module Syskit::Log
                     end
                     flexmock(datastore_m::Import)
                         .new_instances.should_receive(:move_dataset_to_store)
-                        .with(
-                            logfile_pathname, expected_dataset,
-                            on do |h|
-                                h[:force] == false &&
-                                h[:reporter].kind_of?(Pocolog::CLI::NullReporter)
-                            end
-                        )
+                        .with(expected_dataset)
                         .once.pass_thru
 
                     call_cli('import', '--min-duration=0',
@@ -106,7 +100,7 @@ module Syskit::Log
                         flexmock(datastore_m::Import)
                             .new_instances.should_receive(:normalize_dataset)
                             .with(
-                                logfile_pathname, incoming_path + 'core',
+                                [logfile_pathname], incoming_path + 'core',
                                 on do |h|
                                     h[:cache_path] == incoming_path + 'cache' &&
                                     h[:reporter].kind_of?(Pocolog::CLI::NullReporter)
@@ -120,14 +114,8 @@ module Syskit::Log
                         end
 
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store).
-                            with(
-                                logfile_pathname, expected_dataset,
-                                on do |h|
-                                    h[:force] == false &&
-                                    h[:reporter].kind_of?(Pocolog::CLI::NullReporter)
-                                end
-                            )
+                            .new_instances.should_receive(:move_dataset_to_store)
+                            .with(expected_dataset)
                             .once.pass_thru
 
                         call_cli('import', '--auto', '--min-duration=0',
@@ -146,10 +134,12 @@ module Syskit::Log
                         call_cli('import', '--auto', '--min-duration=0',
                                  '--store', datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
-                        flexmock(datastore_m::Import).new_instances.should_receive(:normalize_dataset).
-                            never
-                        flexmock(datastore_m::Import).new_instances.should_receive(:move_dataset_to_store).
-                            never
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:normalize_dataset)
+                            .never
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:move_dataset_to_store)
+                            .never
                         out, = capture_io do
                             call_cli('import', '--auto', '--min-duration=0',
                                      '--store', datastore_path.to_s,
@@ -168,17 +158,17 @@ module Syskit::Log
                         call_cli('import', '--auto', '--min-duration=0',
                                  '--store', datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
-                        flexmock(datastore_m::Import).new_instances.should_receive(:normalize_dataset).
-                            once.pass_thru
-                        flexmock(datastore_m::Import).new_instances.should_receive(:move_dataset_to_store).
-                            once.pass_thru
-                        out, = capture_io do
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:normalize_dataset)
+                            .once.pass_thru
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:move_dataset_to_store)
+                            . once.pass_thru
+                        capture_io do
                             call_cli('import', '--auto', '--min-duration=0', '--force',
                                      '--store', datastore_path.to_s,
                                      logfile_pathname.dirname.to_s, silent: false)
                         end
-                        assert_match /#{logfile_pathname} seem to have already been imported but --force is given, overwriting/,
-                            out
                     end
                     it "ignores datasets that do not seem to be already imported, but are" do
                         create_logfile('test.0.log') do
@@ -190,11 +180,14 @@ module Syskit::Log
                         call_cli('import', '--auto', '--min-duration=0',
                                  '--store', datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
-                        (logfile_pathname + datastore_m::Import::BASENAME_IMPORT_TAG).unlink
-                        flexmock(datastore_m::Import).new_instances.should_receive(:normalize_dataset).
-                            once.pass_thru
-                        flexmock(datastore_m::Import).new_instances.should_receive(:move_dataset_to_store).
-                            once.pass_thru
+                        (logfile_pathname + datastore_m::Import::BASENAME_IMPORT_TAG)
+                            .unlink
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:normalize_dataset)
+                            .once.pass_thru
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:move_dataset_to_store)
+                            .never
                         out, = capture_io do
                             call_cli('import', '--auto', '--min-duration=0',
                                      '--store', datastore_path.to_s,
@@ -217,10 +210,12 @@ module Syskit::Log
                         marker_path = datastore.core_path_of(digest) + "marker"
                         FileUtils.touch(marker_path)
                         (logfile_pathname + datastore_m::Import::BASENAME_IMPORT_TAG).unlink
-                        flexmock(datastore_m::Import).new_instances.should_receive(:normalize_dataset).
-                            once.pass_thru
-                        flexmock(datastore_m::Import).new_instances.should_receive(:move_dataset_to_store).
-                            once.pass_thru
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:normalize_dataset)
+                            .once.pass_thru
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:move_dataset_to_store)
+                            .once.pass_thru
                         out, = capture_io do
                             call_cli('import', '--auto', '--force', '--min-duration=0',
                                      '--store', datastore_path.to_s,
@@ -229,20 +224,23 @@ module Syskit::Log
                         assert_match /Replacing existing dataset #{digest} with new one/, out
                         refute marker_path.exist?
                     end
-                    it "ignores an empty dataset if --min-duration is non-zero" do
+                    it "ignores an empty dataset after normalization if --min-duration "\
+                       "is non-zero" do
                         create_logfile('test.0.log') {}
                         FileUtils.touch logfile_path('test-events.log')
-                        incoming_path = datastore_path + 'incoming' + '0'
-                        flexmock(datastore_m::Import).new_instances.should_receive(:normalize_dataset).
-                            once.pass_thru
-                        flexmock(datastore_m::Import).new_instances.should_receive(:move_dataset_to_store).
-                            never
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:normalize_dataset)
+                            .once.pass_thru
+                        flexmock(datastore_m::Import)
+                            .new_instances.should_receive(:move_dataset_to_store)
+                            .never
 
                         call_cli('import', '--auto', '--min-duration=1',
                                  '--store', datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
                     end
-                    it "ignores datasets whose logical duration is lower than --min-duration" do
+                    it "ignores datasets whose logical duration is "\
+                       "lower than --min-duration" do
                         create_logfile('test.0.log') do
                             create_logfile_stream(
                                 'test', metadata: { 'rock_task_name' => 'task',
@@ -252,7 +250,6 @@ module Syskit::Log
                             write_logfile_sample Time.now + 10, Time.now + 1, 20
                         end
                         FileUtils.touch logfile_path('test-events.log')
-                        incoming_path = datastore_path + 'incoming' + '0'
                         flexmock(datastore_m::Import)
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru

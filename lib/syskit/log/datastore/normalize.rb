@@ -62,7 +62,7 @@ module Syskit::Log
                 end
 
                 def add_data_block(rt_time, lg_time, raw_data, raw_payload)
-                    @index_map << @tell << lg_time
+                    @index_map << (@tell + @buffer.size) << lg_time
                     write raw_data[0, 2]
                     write ZERO_BYTE
                     write raw_data[4..-1]
@@ -111,23 +111,21 @@ module Syskit::Log
 
             def normalize(
                 paths,
-                output_path: paths.first.dirname + 'normalized',
+                output_path: paths.first.dirname + "normalized",
                 index_dir: output_path, reporter: Pocolog::CLI::NullReporter.new,
                 compute_sha256: false
             )
                 output_path.mkpath
                 paths.each do |logfile_path|
-                    e, out_io = normalize_logfile(logfile_path, output_path, reporter: reporter, compute_sha256: compute_sha256)
-                    if e
-                        warn "normalize: exception caught while processing #{logfile_path}, deleting #{out_io.size} output files: #{out_io.map(&:path).sort.join(", ")}"
-                        out_io.each do |output|
-                            out_files.delete(output.path)
-                            output.close
+                    e, out_io = normalize_logfile(
+                        logfile_path, output_path,
+                        reporter: reporter, compute_sha256: compute_sha256
+                    )
 
-                            Pathname.new(output.path).unlink
-                            index_path = Pathname.new(Pocolog::Logfiles.default_index_filename(output.path, index_dir: index_dir))
-                            index_path.unlink if index_path.exist?
-                        end
+                    if e
+                        normalize_cleanup_after_error(
+                            reporter, logfile_path, out_io, index_dir
+                        )
                         raise e
                     end
                 end
@@ -154,6 +152,26 @@ module Syskit::Log
 
             ensure
                 out_files.each_value(&:close)
+            end
+
+            def normalize_cleanup_after_error(reporter, logfile_path, out_io, index_dir)
+                reporter.warn(
+                    "normalize: exception caught while processing "\
+                    "#{logfile_path}, deleting #{out_io.size} output files: "\
+                    "#{out_io.map(&:path).sort.join(', ')}"
+                )
+                out_io.each do |output|
+                    out_files.delete(output.path)
+                    output.close
+
+                    Pathname.new(output.path).unlink
+                    index_path = Pathname.new(
+                        Pocolog::Logfiles.default_index_filename(
+                            output.path, index_dir: index_dir
+                        )
+                    )
+                    index_path.unlink if index_path.exist?
+                end
             end
 
             NormalizationState =

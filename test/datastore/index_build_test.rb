@@ -98,13 +98,13 @@ module Syskit::Log
                 include Roby::Test::DRobyLogHelpers
 
                 before do
-                    droby_create_event_log((dataset_path + 'roby-events.log').to_s) do
+                    droby_create_event_log((dataset_path + 'roby-events.0.log').to_s) do
                         droby_write_event :test, 10
                     end
                 end
 
                 it 'does nothing if there are no roby indexes' do
-                    (dataset_path + 'roby-events.log').unlink
+                    (dataset_path + 'roby-events.0.log').unlink
                     index_build.rebuild_roby_index
                 end
 
@@ -115,40 +115,42 @@ module Syskit::Log
                 it 'does nothing if a valid index file exists' do
                     cache_path.mkpath
                     Roby::DRoby::Logfile::Index.rebuild_file(
-                        dataset_path + 'roby-events.log',
-                        cache_path + 'roby-events.idx'
+                        dataset_path + 'roby-events.0.log',
+                        cache_path + 'roby-events.0.idx'
                     )
-                    flexmock(Roby::DRoby::Logfile::Index).should_receive(:rebuild).never
+                    flexmock(Roby::DRoby::Logfile::Index)
+                        .should_receive(:rebuild_file).never
                     index_build.rebuild_roby_index
                 end
                 it 'rebuilds if a valid index file exists but force is true' do
                     cache_path.mkpath
                     Roby::DRoby::Logfile::Index.rebuild_file(
-                        dataset_path + 'roby-events.log',
-                        cache_path + 'roby-events.idx'
+                        dataset_path + 'roby-events.0.log',
+                        cache_path + 'roby-events.0.idx'
                     )
                     flexmock(Roby::DRoby::Logfile::Index)
-                        .should_receive(:rebuild).once.pass_thru
+                        .should_receive(:rebuild_file).once.pass_thru
                     index_build.rebuild_roby_index(force: true)
                 end
                 it 'rebuilds if no index file exists' do
                     flexmock(Roby::DRoby::Logfile::Index)
-                        .should_receive(:rebuild)
+                        .should_receive(:rebuild_file)
                         .once.pass_thru
                     index_build.rebuild_roby_index
                     assert Roby::DRoby::Logfile::Index.valid_file?(
-                        dataset_path + 'roby-events.log',
-                        cache_path + 'roby-events.idx'
+                        dataset_path + 'roby-events.0.log',
+                        cache_path + 'roby-events.0.idx'
                     )
                 end
                 it 'skips the roby file if its format is not current' do
-                    (dataset_path + 'roby-events.log').open('w') do |io|
+                    (dataset_path + 'roby-events.0.log').open('w') do |io|
                         Roby::DRoby::Logfile.write_header(io, version: 0)
                     end
                     reporter = flexmock(Pocolog::CLI::NullReporter.new)
-                    reporter
-                        .should_receive(:warn).once
-                        .with(/roby-events.log is in an obsolete Roby log file format, skipping/)
+                    reporter.should_receive(:warn)
+                            .with("  roby-events.0.log is in an obsolete "\
+                                  "Roby log file format, skipping")
+                            .once
 
                     index_build.rebuild_roby_index(reporter: reporter)
                 end

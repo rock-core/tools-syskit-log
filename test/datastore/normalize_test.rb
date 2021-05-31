@@ -24,10 +24,16 @@ module Syskit::Log
                     logfile_pathname('normalized').mkdir
                     normalize.normalize([logfile_pathname('file0.0.log')])
                     normalized_dir = logfile_pathname('normalized')
-                    stream = open_logfile_stream (normalized_dir + "task0::port.0.log"), 'stream0'
-                    assert_equal [[base_time + 2, base_time + 20, 2]], stream.samples.to_a
-                    stream = open_logfile_stream (normalized_dir + "task1::port.0.log"), 'stream1'
-                    assert_equal [[base_time + 1, base_time + 10, 1]], stream.samples.to_a
+                    stream = open_logfile_stream(
+                        normalized_dir + "task0::port.0.log", "task0.port"
+                    )
+                    assert_equal [[base_time + 2, base_time + 20, 2]],
+                                 stream.samples.to_a
+                    stream = open_logfile_stream(
+                        normalized_dir + "task1::port.0.log", "task1.port"
+                    )
+                    assert_equal [[base_time + 1, base_time + 10, 1]],
+                                 stream.samples.to_a
                 end
                 it "generates valid index files for the normalized streams" do
                     logfile_pathname('normalized').mkdir
@@ -36,8 +42,8 @@ module Syskit::Log
                         should_receive(:rebuild_and_load_index).
                         never
                     normalized_dir = logfile_pathname('normalized')
-                    open_logfile_stream (normalized_dir + "task0::port.0.log"), 'stream0'
-                    open_logfile_stream (normalized_dir + "task1::port.0.log"), 'stream1'
+                    open_logfile_stream (normalized_dir + "task0::port.0.log"), 'task0.port'
+                    open_logfile_stream (normalized_dir + "task1::port.0.log"), 'task1.port'
                 end
                 it "allows to specify the cache directory" do
                     logfile_pathname('normalized').mkdir
@@ -47,8 +53,8 @@ module Syskit::Log
                         should_receive(:rebuild_and_load_index).
                         never
                     normalized_dir = logfile_pathname('normalized')
-                    open_logfile_stream (normalized_dir + "task0::port.0.log"), 'stream0', index_dir: index_dir
-                    open_logfile_stream (normalized_dir + "task1::port.0.log"), 'stream1', index_dir: index_dir
+                    open_logfile_stream (normalized_dir + "task0::port.0.log"), 'task0.port', index_dir: index_dir
+                    open_logfile_stream (normalized_dir + "task1::port.0.log"), 'task1.port', index_dir: index_dir
                 end
                 describe "digest generation" do
                     it "optionally computes the sha256 digest of the generated file, without the prologue" do
@@ -66,8 +72,8 @@ module Syskit::Log
                             should_receive(:rebuild_and_load_index).
                             never
                         normalized_dir = logfile_pathname('normalized')
-                        open_logfile_stream (normalized_dir + "task0::port.0.log"), 'stream0'
-                        open_logfile_stream (normalized_dir + "task1::port.0.log"), 'stream1'
+                        open_logfile_stream (normalized_dir + "task0::port.0.log"), 'task0.port'
+                        open_logfile_stream (normalized_dir + "task1::port.0.log"), 'task1.port'
                     end
                 end
                 it "detects followup streams" do
@@ -77,7 +83,7 @@ module Syskit::Log
                     end
                     normalize.normalize([logfile_pathname('file0.0.log'), logfile_pathname('file0.1.log')])
                     normalized_dir = logfile_pathname('normalized')
-                    stream = open_logfile_stream (normalized_dir + "task0::port.0.log"), 'stream0'
+                    stream = open_logfile_stream (normalized_dir + "task0::port.0.log"), 'task0.port'
                     assert_equal [[base_time + 2, base_time + 20, 2],
                                   [base_time + 3, base_time + 30, 3]], stream.samples.to_a
                 end

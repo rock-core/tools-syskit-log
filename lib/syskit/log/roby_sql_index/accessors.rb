@@ -125,8 +125,8 @@ module Syskit
 
                         event_name = m_to_s[0..-7]
                         unless @index.event_with_name?(event_name)
-                            raise NoMethodError.new(m),
-                                  "no events named #{event_name} have been emitted"
+                            msg = "no events named #{event_name} have been emitted"
+                            raise NoMethodError.new(msg, m)
                         end
 
                         has_events =
@@ -135,9 +135,9 @@ module Syskit
                                   .exist?
 
                         unless has_events
-                            raise NoMethodError.new("", m),
-                                  "there are emitted events named #{event_name}, but "\
+                            msg = "there are emitted events named #{event_name}, but "\
                                   "not for a task of model #{@name}"
+                            raise NoMethodError.new(msg, m)
                         end
 
                         EventModel.new(@index, event_name, self)
@@ -293,6 +293,10 @@ module Syskit
 
                     def ==(other)
                         other.kind_of?(Event) && other.id == id
+                    end
+
+                    def full_name
+                        "#{task.model.name}.#{name}"
                     end
 
                     def initialize(index, id, time, name, task, model) # rubocop:disable Metrics/ParameterLists

@@ -77,7 +77,7 @@ module Syskit::Log
             def rebuild_roby_index(force: false, reporter: Pocolog::CLI::NullReporter.new)
                 dataset.cache_path.mkpath
                 event_logs = Syskit::Log.logfiles_in_dir(dataset.dataset_path)
-                event_logs.each do |roby_log_path|
+                event_logs = event_logs.find_all do |roby_log_path|
                     rebuild_roby_own_index(
                         roby_log_path, force: force, reporter: reporter
                     )
@@ -89,10 +89,14 @@ module Syskit::Log
             # @api private
             #
             # Rebuild Roby's own index file
+            #
+            # @return [Boolean] true if the log file is valid and has a valid index,
+            #   false otherwise (e.g. if the log file format is too old)
             def rebuild_roby_own_index(
                 roby_log_path, force: false, reporter: Pocolog::CLI::NullReporter.new
             )
-                roby_index_path = dataset.cache_path + roby_log_path.sub_ext(".idx")
+                roby_index_path =
+                    dataset.cache_path + roby_log_path.basename.sub_ext(".idx")
                 needs_rebuild =
                     force ||
                     !Roby::DRoby::Logfile::Index.valid_file?(
@@ -100,7 +104,7 @@ module Syskit::Log
                     )
                 unless needs_rebuild
                     reporter.log "  up-to-date: #{roby_log_path.basename}"
-                    return
+                    return true
                 end
 
                 reporter.log "  rebuilding: #{roby_log_path.basename}"
@@ -108,9 +112,11 @@ module Syskit::Log
                     Roby::DRoby::Logfile::Index.rebuild_file(
                         roby_log_path, roby_index_path
                     )
+                    true
                 rescue Roby::DRoby::Logfile::InvalidFormatVersion
                     reporter.warn "  #{roby_log_path.basename} is in an obsolete Roby "\
                                   "log file format, skipping"
+                    false
                 end
             end
 

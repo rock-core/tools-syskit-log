@@ -27,7 +27,7 @@ module Syskit::Log
                         metadata: Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'port']
                 end
                 FileUtils.touch dataset_pathname('text', 'test.txt')
-                dataset_pathname('roby-events.log').open('w') { |io| io.write "ROBY" }
+                dataset_pathname('roby-events.0.log').open('w') { |io| io.write "ROBY" }
                 FileUtils.touch dataset_pathname('ignored', 'not_recognized_file')
                 dataset_pathname('ignored', 'not_recognized_dir').mkpath
                 FileUtils.touch dataset_pathname('ignored', 'not_recognized_dir', 'test')
@@ -58,8 +58,9 @@ module Syskit::Log
                 it "lists the full paths to the pocolog and roby files" do
                     files = dataset.each_important_file.to_set
                     expected = [
-                        dataset_pathname('roby-events.log'),
-                        dataset_pathname('pocolog', 'task0::port.0.log')].to_set
+                        dataset_pathname('roby-events.0.log'),
+                        dataset_pathname('pocolog', 'task0::port.0.log')
+                    ].to_set
                     assert_equal expected, files
                 end
             end
@@ -116,7 +117,7 @@ module Syskit::Log
 
             describe "#compute_dataset_identity_from_files" do
                 it "returns a list of entries with full path, size and sha256 digest" do
-                    roby_path = dataset_pathname('roby-events.log')
+                    roby_path = dataset_pathname('roby-events.0.log')
                     roby_digest = Digest::SHA256.hexdigest(roby_path.read)
                     pocolog_path = dataset_pathname('pocolog', 'task0::port.0.log')
                     pocolog_digest = Digest::SHA256.hexdigest(
@@ -316,19 +317,25 @@ module Syskit::Log
                     dataset.weak_validate_identity_metadata
                 end
                 it "raises if a file is missing on disk" do
-                    dataset_pathname("roby-events.log").unlink
+                    dataset_pathname("roby-events.0.log").unlink
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.weak_validate_identity_metadata
                     end
                 end
-                it "raises if a new important file is added on disk" do
-                    FileUtils.touch dataset_pathname("test-events.log")
+                it "raises if a new pocolog log file is added on disk" do
+                    FileUtils.touch dataset_pathname("pocolog", "some::Task.0.log")
+                    assert_raises(Dataset::InvalidIdentityMetadata) do
+                        dataset.weak_validate_identity_metadata
+                    end
+                end
+                it "raises if a new Roby log file is added on disk" do
+                    FileUtils.touch dataset_pathname("roby-events.1.log")
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.weak_validate_identity_metadata
                     end
                 end
                 it "raises if a file size mismatches" do
-                    dataset_pathname("roby-events.log").open('a') { |io| io.write('10') }
+                    dataset_pathname("roby-events.0.log").open('a') { |io| io.write('10') }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.weak_validate_identity_metadata
                     end
@@ -343,25 +350,31 @@ module Syskit::Log
                     dataset.validate_identity_metadata
                 end
                 it "raises if a file is missing on disk" do
-                    dataset_pathname("roby-events.log").unlink
+                    dataset_pathname("roby-events.0.log").unlink
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
                 end
-                it "raises if a new important file is added on disk" do
-                    FileUtils.touch dataset_pathname("test-events.log")
+                it "raises if a new pocolog log file is added on disk" do
+                    FileUtils.touch dataset_pathname("pocolog", "some::Task.0.log")
+                    assert_raises(Dataset::InvalidIdentityMetadata) do
+                        dataset.validate_identity_metadata
+                    end
+                end
+                it "raises if a new Roby log file is added on disk" do
+                    FileUtils.touch dataset_pathname("roby-events.1.log")
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
                 end
                 it "raises if a file size mismatches" do
-                    dataset_pathname("roby-events.log").open('a') { |io| io.write('10') }
+                    dataset_pathname("roby-events.0.log").open('a') { |io| io.write('10') }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
                 end
                 it "raises if the contents of a file changed" do
-                    dataset_pathname("roby-events.log").open('a') { |io| io.seek(5); io.write('0') }
+                    dataset_pathname("roby-events.0.log").open('a') { |io| io.seek(5); io.write('0') }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
@@ -524,7 +537,7 @@ module Syskit::Log
                 end
 
                 it "loads stream information and returns LazyDataStream objects" do
-                    streams = dataset.read_lazy_data_streams
+                    streams = dataset.read_lazy_data_streams.sort_by(&:name).reverse
                     assert_equal ['test', 'other_test'], streams.map(&:name)
                     assert_equal [int32_t, double_t], streams.map(&:type)
                     assert_equal [Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'port'],
@@ -539,9 +552,11 @@ module Syskit::Log
 
                 it "sets up the lazy data stream to load the actual stream properly" do
                     lazy_streams = dataset.read_lazy_data_streams
-                    flexmock(Pocolog::Logfiles).new_instances.
-                        should_receive(:rebuild_and_load_index).never
-                    streams = lazy_streams.map(&:syskit_eager_load)
+                    flexmock(Pocolog::Logfiles)
+                        .new_instances
+                        .should_receive(:rebuild_and_load_index).never
+                    streams = lazy_streams.map(&:syskit_eager_load).sort_by(&:name)
+                                          .reverse
                     assert_equal ['test', 'other_test'], streams.map(&:name)
                     assert_equal [int32_t, double_t], streams.map(&:type)
                     assert_equal [Hash['rock_task_name' => 'task0', 'rock_task_object_name' => 'port'],

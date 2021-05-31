@@ -91,10 +91,13 @@ module Syskit::Log
                     task_m = Syskit::TaskContext
                              .find_model_from_orogen_name(task_model_name)
                 end
+
+                if !task_m && raise_on_missing_task_models
+                    raise OroGen::NotFound, "cannot find #{task_model_name}"
+                end
+
                 if task_m || !skip_tasks_without_models
                     available_tasks[s.metadata['rock_task_name']] << s
-                elsif raise_on_missing_task_models
-                    raise OroGen::NotFound, "cannot find #{task_model_name}"
                 else
                     ignored_streams[task_model_name] << s
                 end
@@ -213,7 +216,7 @@ module Syskit::Log
                 metadata.delete("rock_task_model")
             end
 
-            if model.start_with?("OroGen.")
+            if model&.start_with?("OroGen.")
                 normalized_model = model[7..-1].gsub(".", "::")
 
                 Syskit::Log.warn(
