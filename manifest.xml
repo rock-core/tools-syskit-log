@@ -9,6 +9,7 @@
     <depend package="ruby-sqlite3" />
     <depend_optional package="data_processing/daru" />
     <depend_optional package="gui/vega-rb" />
+    <depend_optional package="data_processing/rb-gsl" />
 
     <test_depend package="minitest" />
     <test_depend package="flexmock" />
