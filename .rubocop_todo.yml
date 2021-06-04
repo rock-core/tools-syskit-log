@@ -155,52 +155,6 @@ Security/YAMLLoad:
   Exclude:
     - 'test/datastore/dataset_test.rb'
 
-# Offense count: 39
-# Cop supports --auto-correct.
-# Configuration parameters: AutoCorrect, EnforcedStyle.
-# SupportedStyles: nested, compact
-Style/ClassAndModuleChildren:
-  Exclude:
-    - 'lib/syskit/log/cli/datastore.rb'
-    - 'lib/syskit/log/cli/replay.rb'
-    - 'lib/syskit/log/data_replay_task.rb'
-    - 'lib/syskit/log/datastore.rb'
-    - 'lib/syskit/log/datastore/dataset.rb'
-    - 'lib/syskit/log/datastore/import.rb'
-    - 'lib/syskit/log/datastore/index_build.rb'
-    - 'lib/syskit/log/datastore/normalize.rb'
-    - 'lib/syskit/log/deployment.rb'
-    - 'lib/syskit/log/exceptions.rb'
-    - 'lib/syskit/log/extensions.rb'
-    - 'lib/syskit/log/extensions/configuration.rb'
-    - 'lib/syskit/log/extensions/deployment_group.rb'
-    - 'lib/syskit/log/extensions/execution_engine.rb'
-    - 'lib/syskit/log/extensions/instance_requirements.rb'
-    - 'lib/syskit/log/lazy_data_stream.rb'
-    - 'lib/syskit/log/models/deployment.rb'
-    - 'lib/syskit/log/plugin.rb'
-    - 'lib/syskit/log/replay_manager.rb'
-    - 'lib/syskit/log/rock_stream_matcher.rb'
-    - 'lib/syskit/log/shell_interface.rb'
-    - 'lib/syskit/log/streams.rb'
-    - 'lib/syskit/log/task_streams.rb'
-    - 'test/cli/datastore_test.rb'
-    - 'test/datastore/dataset_test.rb'
-    - 'test/datastore/import_test.rb'
-    - 'test/datastore/index_build_test.rb'
-    - 'test/datastore/normalize_test.rb'
-    - 'test/datastore_test.rb'
-    - 'test/deployment_group_test.rb'
-    - 'test/deployment_test.rb'
-    - 'test/models/deployment_test.rb'
-    - 'test/models/replay_task_context_test.rb'
-    - 'test/replay_manager_test.rb'
-    - 'test/rock_stream_matcher_test.rb'
-    - 'test/shell_interface_test.rb'
-    - 'test/streams_test.rb'
-    - 'test/task_streams_test.rb'
-    - 'test/test_helper.rb'
-
 # Offense count: 1
 # Cop supports --auto-correct.
 Style/ColonMethodCall:
