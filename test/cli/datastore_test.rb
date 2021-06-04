@@ -710,6 +710,14 @@ a0fa <no description>
                                  ds.metadata_fetch("timestamp")
                 end
 
+                it "re-creates the cache if it is missing" do
+                    d = "8bed98f3ce3ff08487675280844b51d9e3c564313bb8ded1854c7a70255da5a8"
+                    refute @datastore.cache_path_of(d).exist?
+
+                    run_repair d
+                    assert @datastore.cache_path_of(d).exist?
+                end
+
                 def run_repair(digest)
                     call_cli("repair", "--store", @store_path, digest)
                 end
