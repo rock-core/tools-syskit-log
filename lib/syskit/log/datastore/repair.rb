@@ -34,28 +34,6 @@ module Syskit::Log
                 nil
             end
 
-            # Calculate the timestamp and save it in the dataset
-            class ComputeTimestamp
-                def self.detect(_datastore, dataset)
-                    new(dataset) unless dataset.metadata["timestamp"]
-                end
-
-                def initialize(dataset)
-                    @dataset = dataset
-                end
-
-                def to_s
-                    "#{@dataset.digest}: save the timestamp metadata #{@dataset.timestamp}"
-                end
-
-                def apply
-                    # This computes & saves the timestamp in the metadata
-                    @dataset.timestamp
-                    @dataset.metadata_write_to_file
-                    @dataset
-                end
-            end
-
             # Migration of roby-events.log to roby-events.0.log
             class MigrateRobyLogName
                 def self.detect(datastore, dataset)
@@ -137,9 +115,10 @@ module Syskit::Log
             end
 
             OPERATIONS = [
-                ComputeTimestamp,
                 MigrateRobyLogName,
-                AddRobyLogsToIdentity
+                AddRobyLogsToIdentity,
+                # Must be after everything that repairs the identity
+                ComputeTimestamp
             ].freeze
         end
     end
