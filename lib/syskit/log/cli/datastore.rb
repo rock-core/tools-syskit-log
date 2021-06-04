@@ -462,6 +462,7 @@ module Syskit::Log
             def list(*query)
                 store = open_store
                 datasets = resolve_datasets(store, *query)
+                datasets = datasets.sort_by(&:timestamp)
 
                 pastel = create_pastel
                 datasets.each do |dataset|

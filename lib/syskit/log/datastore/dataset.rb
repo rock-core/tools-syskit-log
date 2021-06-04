@@ -64,6 +64,37 @@ module Syskit::Log
                 @lazy_data_streams = nil
             end
 
+            def timestamp
+                begin
+                    tv_sec = metadata_fetch("timestamp")
+                rescue NoValue
+                    tv_sec = compute_timestamp
+                    metadata_set "timestamp", tv_sec
+                end
+
+                Time.at(tv_sec)
+            end
+
+            # @api private
+            #
+            # Compute a timestamp representative of this dataset
+            def compute_timestamp
+                roby_time = metadata_fetch "roby:time"
+                year = roby_time[0, 4]
+                month = roby_time[4, 2]
+                day = roby_time[6, 2]
+                hh = roby_time[9, 2]
+                mm = roby_time[11, 2]
+                Time.utc(*[year, month, day, hh, mm].map { |v| Integer(v) }).tv_sec
+            rescue NoValue
+                pocolog_timestamp =
+                    each_pocolog_lazy_stream
+                    .map { |stream| stream.interval_lg[0] }
+                    .compact.min
+
+                pocolog_timestamp&.tv_sec || 0
+            end
+
             # Whether there is a dataset at this path
             def self.dataset?(path)
                 (path + BASENAME_IDENTITY_METADATA).exist?
@@ -405,6 +436,11 @@ module Syskit::Log
             # Reset all metadata associated with this dataset
             def metadata_reset
                 @metadata = {}
+            end
+
+            # Delete a metadata entry
+            def metadata_delete(key)
+                metadata.delete(key)
             end
 
             # Resets a metadata value

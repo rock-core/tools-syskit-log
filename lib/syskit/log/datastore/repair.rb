@@ -52,6 +52,7 @@ module Syskit::Log
                     # This computes & saves the timestamp in the metadata
                     @dataset.timestamp
                     @dataset.metadata_write_to_file
+                    @dataset
                 end
             end
 
@@ -116,12 +117,11 @@ module Syskit::Log
                 end
 
                 def to_s
-                    missing_paths =
-                        self.class.roby_log_paths(@dataset).map(&:to_s).join("\n  ")
+                    missing_paths = self.class.roby_log_paths(@dataset)
 
                     "#{@dataset.digest}: add #{missing_paths.size} missing roby "\
                     "event logs to the dataset identity, changing the digest\n"\
-                    "  #{missing_paths}"
+                    "  #{missing_paths.map(&:to_s).join("\n  ")}"
                 end
 
                 def apply

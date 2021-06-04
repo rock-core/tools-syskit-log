@@ -394,6 +394,7 @@ a0ea first
   array_test:
   - a
   - b
+  timestamp: 34200
                     EOF
                     @show_a0fa = <<-EOF
 a0fa <no description>
@@ -401,6 +402,7 @@ a0fa <no description>
   array_test:
   - c
   - d
+  timestamp: 0
                     EOF
                 end
 
@@ -415,21 +417,21 @@ a0fa <no description>
                     out, _err = capture_io do
                         call_cli("list", "--store", datastore_path.to_s, silent: false)
                     end
-                    assert_equal [show_a0ea, show_a0fa].join, out
+                    assert_equal [show_a0fa, show_a0ea].join, out
                 end
                 it "lists only the short digests if --digest is given" do
                     out, _err = capture_io do
                         call_cli("list", "--store", datastore_path.to_s,
                                  "--digest", silent: false)
                     end
-                    assert_equal "a0ea\na0fa\n", out
+                    assert_equal "a0fa\na0ea\n", out
                 end
                 it "lists only the short digests if --digest --long-digests are given" do
                     out, _err = capture_io do
                         call_cli("list", "--store", datastore_path.to_s,
                                  "--digest", "--long-digests", silent: false)
                     end
-                    assert_equal "a0ea\na0fa\n", out
+                    assert_equal "a0fa\na0ea\n", out
                 end
                 it "accepts a digest prefix as argument" do
                     out, _err = capture_io do
@@ -450,7 +452,7 @@ a0fa <no description>
                         call_cli("list", "--store", datastore_path.to_s,
                                  "array_test~[ac]", silent: false)
                     end
-                    assert_equal [show_a0ea, show_a0fa].join, out
+                    assert_equal [show_a0fa, show_a0ea].join, out
                 end
 
                 describe "--pocolog" do
@@ -663,15 +665,49 @@ a0fa <no description>
                                 .join("..", "datastore", "fixtures", "repair")
                     @store_path = @root_path + "store"
                     FileUtils.cp_r fixture_store_path, @store_path
+
+                    @datastore = datastore_m.new(@store_path)
                 end
 
                 it "repairs the old roby-events.log name" do
-                    run_repair "dfbaf485f019ade11bfc9c11aeed90e"\
-                               "2510c9994cbe6dade52b031679aafd624"
-                    datastore_m.new(@store_path)
-                               .get("049d95329290cfa6aebe917ae003"\
-                                    "7fa8fd619f3dacce083e94b7b3e5002bb2f2")
-                               .validate_identity_metadata
+                    o = "dfbaf485f019ade11bfc9c11aeed90e2510c9994cbe6dade52b031679aafd624"
+                    n = "049d95329290cfa6aebe917ae0037fa8fd619f3dacce083e94b7b3e5002bb2f2"
+                    run_repair o
+                    @datastore.get(n).validate_identity_metadata
+                end
+
+                it "adds roby-events.?.log files to the identity when they are missing" do
+                    o = "ad86e1e4fef4ef75cb502a3839e61c4e2284c31a9260ba4e7bf0beb4467be419"
+                    n = "2428534953b1f78249e136164c54f76298e45b03a96350851b0830359f84efb4"
+                    run_repair o
+                    @datastore.get(n).validate_identity_metadata
+                end
+
+                it "creates a timestamp metadata entry based on the roby time" do
+                    d = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    ds = @datastore.get(d)
+                    ds.metadata_set "roby:time", "20201103-2343"
+                    ds.metadata_delete "timestamp"
+                    ds.metadata_write_to_file
+
+                    run_repair d
+                    ds = @datastore.get(d)
+                    assert_equal Time.utc(2020, 11, 3, 23, 43).tv_sec,
+                                 ds.metadata_fetch("timestamp")
+                end
+
+                it "creates a timestamp metadata entry based on the pocolog time "\
+                   "if there is no roby time" do
+                    d = "8bed98f3ce3ff08487675280844b51d9e3c564313bb8ded1854c7a70255da5a8"
+                    ds = @datastore.get(d)
+                    ds.metadata_delete "roby:time"
+                    ds.metadata_delete "timestamp"
+                    ds.metadata_write_to_file
+
+                    run_repair d
+                    ds = @datastore.get(d)
+                    assert_equal 1621889928,
+                                 ds.metadata_fetch("timestamp")
                 end
 
                 def run_repair(digest)
