@@ -284,6 +284,8 @@ module Syskit::Log
                     if (digest = implicit.first)
                         Syskit::Log::Datastore::Dataset
                             .validate_encoded_short_digest(digest)
+                        return [store.get(digest, **get_arguments)] if matchers.empty?
+
                         matchers["digest"] = /^#{digest}/
                     end
 
