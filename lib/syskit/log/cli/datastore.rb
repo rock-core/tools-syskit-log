@@ -289,7 +289,7 @@ module Syskit::Log
                         matchers["digest"] = /^#{digest}/
                     end
 
-                    matches = store.each_dataset(**get_arguments).find_all do |dataset|
+                    store.each_dataset(**get_arguments).find_all do |dataset|
                         all_metadata = { "digest" => [dataset.digest] }
                                        .merge(dataset.metadata)
                         all_metadata.any? do |key, values|
@@ -298,7 +298,6 @@ module Syskit::Log
                             end
                         end
                     end
-                    matches.sort_by(&:timestamp)
                 end
 
                 KNOWN_STREAM_IMPLICIT_MATCHERS =
@@ -327,7 +326,7 @@ module Syskit::Log
 
                     datasets.flat_map do |ds|
                         matches = ds.streams.find_all_streams(matcher)
-                        matches.sort_by { |s| s.interval_lg[0] || 0 }
+                        matches.sort_by { |s| [s.interval_lg[0] || 0, s.name] }
                     end
                 end
             end
@@ -427,7 +426,7 @@ module Syskit::Log
                           type: :boolean, default: false
             def path(*query)
                 store = open_store
-                datasets = resolve_datasets(store, *query)
+                datasets = resolve_datasets(store, *query).sort_by(&:timestamp)
                 datasets.each do |dataset|
                     digest =
                         if options[:long_digests]
@@ -465,7 +464,7 @@ module Syskit::Log
                                 aliases: "a", type: :boolean, default: false
             def list(*query)
                 store = open_store
-                datasets = resolve_datasets(store, *query)
+                datasets = resolve_datasets(store, *query).sort_by(&:timestamp)
 
                 pastel = create_pastel
                 datasets.each do |dataset|
@@ -521,7 +520,7 @@ module Syskit::Log
                         set.metadata_write_to_file
                     end
                 elsif options[:get].empty?
-                    datasets.each do |set|
+                    datasets.sort_by(&:timestamp).each do |set|
                         metadata = set.metadata.map { |k, v| [k, v.to_a.sort.join(",")] }
                                       .sort_by(&:first)
                                       .map { |k, v| "#{k}=#{v}" }
@@ -529,7 +528,7 @@ module Syskit::Log
                         puts "#{digest_to_s[set]} #{metadata}"
                     end
                 else
-                    datasets.each do |set|
+                    datasets.sort_by(&:timestamp).each do |set|
                         metadata = options[:get].map do |k, _|
                             [k, set.metadata_fetch_all(k, "<unset>")]
                         end
@@ -574,7 +573,7 @@ module Syskit::Log
             def find_streams(*query)
                 store = open_store
                 datasets = resolve_datasets(store, *options[:ds_filter])
-                streams = resolve_streams(datasets, *query)
+                streams = resolve_streams(datasets.sort_by(&:timestamp), *query)
 
                 if streams.empty?
                     puts "no streams match the query"
