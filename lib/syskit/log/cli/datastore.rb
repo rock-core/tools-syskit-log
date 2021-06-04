@@ -289,7 +289,7 @@ module Syskit::Log
                         matchers["digest"] = /^#{digest}/
                     end
 
-                    store.each_dataset(**get_arguments).find_all do |dataset|
+                    matches = store.each_dataset(**get_arguments).find_all do |dataset|
                         all_metadata = { "digest" => [dataset.digest] }
                                        .merge(dataset.metadata)
                         all_metadata.any? do |key, values|
@@ -298,6 +298,7 @@ module Syskit::Log
                             end
                         end
                     end
+                    matches.sort_by(&:timestamp)
                 end
 
                 KNOWN_STREAM_IMPLICIT_MATCHERS =
@@ -325,7 +326,8 @@ module Syskit::Log
                     end
 
                     datasets.flat_map do |ds|
-                        ds.streams.find_all_streams(matcher)
+                        matches = ds.streams.find_all_streams(matcher)
+                        matches.sort_by { |s| s.interval_lg[0] || 0 }
                     end
                 end
             end
@@ -464,7 +466,6 @@ module Syskit::Log
             def list(*query)
                 store = open_store
                 datasets = resolve_datasets(store, *query)
-                datasets = datasets.sort_by(&:timestamp)
 
                 pastel = create_pastel
                 datasets.each do |dataset|
