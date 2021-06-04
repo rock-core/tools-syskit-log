@@ -12,6 +12,11 @@ module Syskit::Log
                 move_logfile_path((root_path + "logs" + "test").to_s)
                 @datastore_path = root_path + "datastore"
                 @datastore = datastore_m.create(datastore_path)
+
+                # We test the output of the CLI, which is timezone
+                # dependent
+                @tz = ENV["TZ"]
+                ENV["TZ"] = "America/Sao_Paulo"
             end
 
             def datastore_m
@@ -19,6 +24,7 @@ module Syskit::Log
             end
 
             after do
+                ENV["TZ"] = @tz
                 root_path.rmtree
             end
 
