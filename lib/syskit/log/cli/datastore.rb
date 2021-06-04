@@ -273,11 +273,12 @@ module Syskit::Log
                 #
                 # @param [Datastore] store the datastore whose datasets are being
                 #   resolved
-                # @param query (see #parse_query)
+                # @param (see #parse_query)
+                # @param (see Datastore#get)
                 #
                 # @return [[Datastore]] matching datastores
-                def resolve_datasets(store, *query)
-                    return store.each_dataset if query.empty?
+                def resolve_datasets(store, *query, **get_arguments)
+                    return store.each_dataset(**get_arguments) if query.empty?
 
                     implicit, matchers = parse_query(*query)
                     if (digest = implicit.first)
@@ -286,7 +287,7 @@ module Syskit::Log
                         matchers["digest"] = /^#{digest}/
                     end
 
-                    store.each_dataset.find_all do |dataset|
+                    store.each_dataset(**get_arguments).find_all do |dataset|
                         all_metadata = { "digest" => [dataset.digest] }
                                        .merge(dataset.metadata)
                         all_metadata.any? do |key, values|
@@ -432,6 +433,18 @@ module Syskit::Log
                         end
 
                     puts "#{digest} #{dataset.dataset_path}"
+                end
+            end
+
+            desc "repair [QUERY]", "verify and repair the given datasets"
+            option "dry_run", type: :boolean, default: false
+            def repair(*query)
+                store = open_store
+
+                require "syskit/log/datastore/repair"
+                resolve_datasets(store, *query, validate: false).each do |ds|
+                    Syskit::Log::Datastore::Repair
+                        .repair_dataset(store, ds, dry_run: options[:dry_run])
                 end
             end
 

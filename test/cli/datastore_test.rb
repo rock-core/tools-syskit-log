@@ -655,6 +655,29 @@ a0fa <no description>
                     EXPECTED
                 end
             end
+
+            describe "#repair" do
+                before do
+                    fixture_store_path =
+                        Pathname.new(__dir__)
+                                .join("..", "datastore", "fixtures", "repair")
+                    @store_path = @root_path + "store"
+                    FileUtils.cp_r fixture_store_path, @store_path
+                end
+
+                it "repairs the old roby-events.log name" do
+                    run_repair "dfbaf485f019ade11bfc9c11aeed90e"\
+                               "2510c9994cbe6dade52b031679aafd624"
+                    datastore_m.new(@store_path)
+                               .get("049d95329290cfa6aebe917ae003"\
+                                    "7fa8fd619f3dacce083e94b7b3e5002bb2f2")
+                               .validate_identity_metadata
+                end
+
+                def run_repair(digest)
+                    call_cli("repair", "--store", @store_path, digest)
+                end
+            end
         end
     end
 end

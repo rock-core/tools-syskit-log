@@ -111,18 +111,28 @@ module Syskit::Log
             #
             # The result is suitable to call e.g. {#write_identifying_metadata}
             #
-            # @return [Hash<Pathname,(String,Integer)>]
+            # @return [Array<IdentityEntry>]
             def compute_dataset_identity_from_files
                 each_important_file.map do |path|
-                    sha2 = path.open do |io|
-                        # Pocolog files do not hash their prologue
-                        if path.dirname.basename.to_s == "pocolog"
-                            io.seek(Pocolog::Format::Current::PROLOGUE_SIZE)
-                        end
-                        compute_file_sha2(io)
-                    end
-                    IdentityEntry.new(path, path.size, sha2)
+                    compute_file_identity(path)
                 end
+            end
+
+            # @api private
+            #
+            # Compute the identity of a single file
+            #
+            # @param [Pathname] path
+            # @return [IdentityEntry]
+            def compute_file_identity(path)
+                sha2 = path.open do |io|
+                    # Pocolog files do not hash their prologue
+                    if path.dirname.basename.to_s == "pocolog"
+                        io.seek(Pocolog::Format::Current::PROLOGUE_SIZE)
+                    end
+                    compute_file_sha2(io)
+                end
+                IdentityEntry.new(path, path.size, sha2)
             end
 
             def self.validate_encoded_short_digest(digest)
@@ -161,14 +171,20 @@ module Syskit::Log
                 sha2
             end
 
+            # Return the path to the file containing identity metadata
+            def identity_metadata_path
+                dataset_path + BASENAME_IDENTITY_METADATA
+            end
+
             # Load the dataset identity information from the metadata file
             #
             # It does sanity checks on the loaded data, but does not compare it
             # against the actual data on disk
             #
             # @return [Hash<Pathname,(String,Integer)>]
-            def read_dataset_identity_from_metadata_file
-                metadata_path = (dataset_path + BASENAME_IDENTITY_METADATA)
+            def read_dataset_identity_from_metadata_file(
+                metadata_path = identity_metadata_path
+            )
                 identity_metadata = (YAML.safe_load(metadata_path.read) || {})
                 if identity_metadata["layout_version"] != LAYOUT_VERSION
                     raise InvalidLayoutVersion,
@@ -258,6 +274,7 @@ module Syskit::Log
                 Pathname.glob(dataset_path + "pocolog" + "*.*.log") do |path|
                     yield(path)
                 end
+
                 Pathname.glob(dataset_path + "roby-events.*.log") do |path|
                     yield(path)
                 end
@@ -311,9 +328,17 @@ module Syskit::Log
 
                 dataset_identity.each do |entry|
                     unless (actual_size = important_files.delete(entry.path))
-                        raise InvalidIdentityMetadata,
-                              "file #{entry.path} is listed in the identity metadata, "\
-                              "but is not present on disk"
+                        if entry.path.exist?
+                            raise InvalidIdentityMetadata,
+                                  "file #{entry.path} is listed in the identity "\
+                                  "metadata, but is not part of the important files. "\
+                                  "Try `syskit ds repair`"
+                        else
+                            raise InvalidIdentityMetadata,
+                                  "file #{entry.path} is listed in the identity "\
+                                  "metadata, but is not present on disk. Try "\
+                                  "`syskit ds repair`"
+                        end
                     end
 
                     if actual_size != entry.size

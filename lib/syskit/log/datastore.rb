@@ -51,14 +51,17 @@ module Syskit::Log
         class AmbiguousShortDigest < ArgumentError; end
 
         # Finds the dataset that matches the given shortened digest
-        def find_dataset_from_short_digest(digest)
+        #
+        # @param (see #get)
+        def find_dataset_from_short_digest(digest, **get_arguments)
             datasets = each_dataset_digest.find_all do |on_disk_digest|
                 on_disk_digest.start_with?(digest)
             end
             if datasets.size > 1
-                raise AmbiguousShortDigest, "#{digest} is ambiguous, it matches #{datasets.join(", ")}"
+                raise AmbiguousShortDigest,
+                      "#{digest} is ambiguous, it matches #{datasets.join(", ")}"
             elsif !datasets.empty?
-                get(datasets.first)
+                get(datasets.first, **get_arguments)
             end
         end
 
@@ -92,11 +95,13 @@ module Syskit::Log
         end
 
         # Enumerate the store's datasets
-        def each_dataset
-            return enum_for(__method__) unless block_given?
+        #
+        # @param (see #get)
+        def each_dataset(**get_arguments)
+            return enum_for(__method__, **get_arguments) unless block_given?
 
             each_dataset_digest do |digest|
-                yield(get(digest))
+                yield(get(digest, **get_arguments))
             end
         end
 
@@ -134,8 +139,8 @@ module Syskit::Log
         end
 
         # Enumerate the datasets matching this query
-        def find_all(metadata)
-            each_dataset.find_all do |ds|
+        def find_all(metadata, **get_arguments)
+            each_dataset(**get_arguments).find_all do |ds|
                 metadata.all? do |key, values|
                     values = Array(values).to_set
                     (values - (ds.metadata[key] || Set.new)).empty?
@@ -144,23 +149,45 @@ module Syskit::Log
         end
 
         # Get an existing dataset
-        def get(digest)
+        #
+        # @param [Symbol] validate validate the dataset information. If :weak
+        #   (the default), it performs fast but limited checks. Set to :full
+        #   for more extensive checks, and false to disable the checks altogether
+        # @param [Boolean] preload_metadata load the metadata information
+        # @return [Dataset]
+        def get(digest, validate: :weak, preload_metadata: true)
             unless has?(digest)
-                # Try to see if digest is a short digest
-                if (dataset = find_dataset_from_short_digest(digest))
-                    return dataset
-                end
-
-                raise ArgumentError,
-                      "no dataset with digest #{digest} exist"
+                # Allow the user to give us a short digest here as well
+                return from_short_digest(
+                    digest, validate: validate, preload_metadata: preload_metadata
+                )
             end
 
             dataset = Dataset.new(
                 core_path_of(digest),
                 digest: digest, cache: cache_path_of(digest)
             )
-            dataset.weak_validate_identity_metadata
-            dataset.metadata
+            if validate == :weak
+                dataset.weak_validate_identity_metadata
+            elsif validate == :full
+                dataset.validate_identity_metadata
+            elsif validate
+                raise ArgumentError, "expected 'validate' to be either :weak or :full"
+            end
+            dataset.metadata if preload_metadata
+            dataset
+        end
+
+        # Resolve a dataset from a shortenest digest
+        #
+        # @param [String] digest
+        # @param (see #get)
+        # @return (see #get)
+        def from_short_digest(digest, **get_arguments)
+            unless (dataset = find_dataset_from_short_digest(digest, **get_arguments))
+                raise ArgumentError, "no dataset with digest #{digest} exist"
+            end
+
             dataset
         end
 
@@ -198,6 +225,28 @@ module Syskit::Log
                     import_dir.rmtree
                 end
             end
+        end
+
+        # Yield to an operation that updates a dataset digest, and repair the
+        # store afterwards
+        def updating_digest(dataset)
+            old_digest = dataset.digest
+            old_identity_metadata_path = dataset.identity_metadata_path
+
+            yield
+
+            identity = dataset.read_dataset_identity_from_metadata_file(
+                old_identity_metadata_path
+            )
+            new_digest = dataset.compute_dataset_digest(identity)
+
+            FileUtils.mv core_path_of(old_digest), core_path_of(new_digest)
+            if cache_path_of(old_digest).exist?
+                FileUtils.mv cache_path_of(old_digest), cache_path_of(new_digest)
+            end
+
+            puts "dataset identity changed to #{new_digest}"
+            get(new_digest, validate: false, preload_metadata: false)
         end
     end
 end
