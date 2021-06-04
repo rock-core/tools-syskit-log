@@ -338,6 +338,7 @@ module Syskit::Log
                     @a0ea_dataset = create_dataset(
                         "a0ea", metadata: {
                             "description" => "first",
+                            "timestamp" => 0,
                             "test" => %w[2], "common" => %w[tag],
                             "array_test" => %w[a b]
                         }
@@ -345,6 +346,7 @@ module Syskit::Log
                     @a0fa_dataset = create_dataset(
                         "a0fa", metadata: {
                             "test" => %w[1], "common" => %w[tbg],
+                            "timestamp" => 1,
                             "array_test" => %w[c d]
                         }
                     ) {}
@@ -497,11 +499,28 @@ a0fa <no description>
 
             describe "#metadata" do
                 before do
+                    base_time = Time.at(12345)
                     create_dataset "a0ea", metadata: Hash["test" => ["a"]] do
-                        create_logfile("test.0.log") {}
+                        create_logfile("test.0.log") do
+                            create_logfile_stream "test", metadata: {
+                                "rock_stream_type" => "port",
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port0",
+                                "rock_task_model" => "test::Task"
+                            }
+                            write_logfile_sample base_time, base_time, 0
+                        end
                     end
                     create_dataset "a0fa", metadata: Hash["test" => ["b"]] do
-                        create_logfile("test.0.log") {}
+                        create_logfile("test.0.log") do
+                            create_logfile_stream "test", metadata: {
+                                "rock_stream_type" => "port",
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port0",
+                                "rock_task_model" => "test::Task"
+                            }
+                            write_logfile_sample base_time + 1, base_time + 1, 0
+                        end
                     end
                 end
 
@@ -546,7 +565,7 @@ a0fa <no description>
                         out, _err = capture_io do
                             call_cli("metadata", "--store", datastore_path.to_s, "--get", silent: false)
                         end
-                        assert_equal "a0ea test=a,b\na0fa test=b\n", out
+                        assert_equal "a0ea test=a,b timestamp=12345\na0fa test=b timestamp=12346\n", out
                     end
                     it "displays the short digest by default" do
                         flexmock(Syskit::Log::Datastore).new_instances.should_receive(:short_digest)
@@ -554,14 +573,14 @@ a0fa <no description>
                         out, _err = capture_io do
                             call_cli("metadata", "--store", datastore_path.to_s, "--get", silent: false)
                         end
-                        assert_equal "a0e test=a\na0f test=b\n", out
+                        assert_equal "a0e test=a timestamp=12345\na0f test=b timestamp=12346\n", out
                     end
                     it "displays the long digest if --long-digest is given" do
                         flexmock(datastore).should_receive(:short_digest).never
                         out, _err = capture_io do
                             call_cli("metadata", "--store", datastore_path.to_s, "--get", "--long-digest", silent: false)
                         end
-                        assert_equal "a0ea test=a\na0fa test=b\n", out
+                        assert_equal "a0ea test=a timestamp=12345\na0fa test=b timestamp=12346\n", out
                     end
                     it "lists the requested metadata of the matching datasets" do
                         call_cli("metadata", "--store", datastore_path.to_s, "a0ea", "--set", "test=a,b", "debug=true", silent: false)
@@ -623,8 +642,8 @@ a0fa <no description>
                                  "object_name=port0", silent: false)
                     end
                     assert_equal <<~EXPECTED.chomp, out.split("\n").map(&:strip).join("\n")
-                        test: 2 samples from 1970-01-01 06:30:00.000234 -0300 to 1970-01-01 06:30:10.000234 -0300 [   0:00:10.000000]
                         test: empty
+                        test: 2 samples from 1970-01-01 06:30:00.000234 -0300 to 1970-01-01 06:30:10.000234 -0300 [   0:00:10.000000]
                     EXPECTED
                 end
 
@@ -634,8 +653,8 @@ a0fa <no description>
                                  "ports", silent: false)
                     end
                     assert_equal <<~EXPECTED.chomp, out.split("\n").map(&:strip).join("\n")
-                        test: 2 samples from 1970-01-01 06:30:00.000234 -0300 to 1970-01-01 06:30:10.000234 -0300 [   0:00:10.000000]
                         test: empty
+                        test: 2 samples from 1970-01-01 06:30:00.000234 -0300 to 1970-01-01 06:30:10.000234 -0300 [   0:00:10.000000]
                     EXPECTED
                 end
 
@@ -645,8 +664,8 @@ a0fa <no description>
                                  "properties", silent: false)
                     end
                     assert_equal <<~EXPECTED.chomp, out.split("\n").map(&:strip).join("\n")
-                        test_property: 2 samples from 1970-01-01 06:30:01.000234 -0300 to 1970-01-01 06:30:09.000234 -0300 [   0:00:08.000000]
                         test_property: empty
+                        test_property: 2 samples from 1970-01-01 06:30:01.000234 -0300 to 1970-01-01 06:30:09.000234 -0300 [   0:00:08.000000]
                     EXPECTED
                 end
 
@@ -656,10 +675,10 @@ a0fa <no description>
                                  "object_name~^p", silent: false)
                     end
                     assert_equal <<~EXPECTED.chomp, out.split("\n").map(&:strip).join("\n")
-                        test:          2 samples from 1970-01-01 06:30:00.000234 -0300 to 1970-01-01 06:30:10.000234 -0300 [   0:00:10.000000]
-                        test_property: 2 samples from 1970-01-01 06:30:01.000234 -0300 to 1970-01-01 06:30:09.000234 -0300 [   0:00:08.000000]
                         test:          empty
                         test_property: empty
+                        test:          2 samples from 1970-01-01 06:30:00.000234 -0300 to 1970-01-01 06:30:10.000234 -0300 [   0:00:10.000000]
+                        test_property: 2 samples from 1970-01-01 06:30:01.000234 -0300 to 1970-01-01 06:30:09.000234 -0300 [   0:00:08.000000]
                     EXPECTED
                 end
             end
