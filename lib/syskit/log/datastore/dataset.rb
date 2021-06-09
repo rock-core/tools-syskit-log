@@ -85,7 +85,7 @@ module Syskit::Log
                 day = roby_time[6, 2]
                 hh = roby_time[9, 2]
                 mm = roby_time[11, 2]
-                Time.utc(*[year, month, day, hh, mm].map { |v| Integer(v) }).tv_sec
+                Time.utc(*[year, month, day, hh, mm].map { |v| Integer(v, 10) }).tv_sec
             rescue NoValue
                 pocolog_timestamp =
                     each_pocolog_lazy_stream

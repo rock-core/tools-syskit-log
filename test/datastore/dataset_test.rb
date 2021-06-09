@@ -582,6 +582,13 @@ module Syskit::Log
                                  ds.compute_timestamp
                 end
 
+                it "handles leading zeroes in some of the fields" do
+                    ds = Dataset.new(@dataset_path)
+                    ds.metadata_set "roby:time", "20210704-0105"
+                    assert_equal Time.utc(2021, 7, 4, 1, 5).tv_sec,
+                                 ds.compute_timestamp
+                end
+
                 it "uses the smallest roby:time if there is more than one" do
                     ds = Dataset.new(@dataset_path)
                     ds.metadata_set(
