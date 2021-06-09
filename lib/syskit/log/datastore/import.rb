@@ -193,6 +193,7 @@ module Syskit::Log
                     end
                 end
 
+                dataset.timestamp # computes the timestamp
                 dataset.metadata_write_to_file
                 dataset
             end
