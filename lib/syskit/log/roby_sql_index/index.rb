@@ -50,11 +50,7 @@ module Syskit
 
                 # Add information from a raw Roby log
                 def add_roby_log(path, reporter: Pocolog::CLI::NullReporter.new)
-                    require "roby/droby/logfile/reader"
-                    require "roby/droby/plan_rebuilder"
-
-                    @registered_models = {}
-                    @registered_tasks = {}
+                    start_roby_log_import
 
                     size = path.stat.size
                     reporter.reset_progressbar("#{path.basename} [:bar]", total: size)
@@ -63,18 +59,30 @@ module Syskit
                     rebuilder = Roby::DRoby::PlanRebuilder.new
 
                     while (data = stream.load_one_cycle)
-                        data.each_slice(4) do |m, sec, usec, args|
-                            rebuilder.process_one_event(m, sec, usec, args)
-                        end
-
-                        @emitted_events.transaction do
-                            add_log_emitted_events(rebuilder.plan.emitted_events)
-                        end
-                        rebuilder&.clear_integrated
+                        add_one_cycle(rebuilder, data)
                         reporter.current = stream.tell
                     end
                 ensure
                     stream&.close
+                end
+
+                def start_roby_log_import
+                    require "roby/droby/logfile/reader"
+                    require "roby/droby/plan_rebuilder"
+
+                    @registered_models = {}
+                    @registered_tasks = {}
+                end
+
+                def add_one_cycle(rebuilder, data)
+                    data.each_slice(4) do |m, sec, usec, args|
+                        rebuilder.process_one_event(m, sec, usec, args)
+                    end
+
+                    @emitted_events.transaction do
+                        add_log_emitted_events(rebuilder.plan.emitted_events)
+                    end
+                    rebuilder.clear_integrated
                 end
 
                 # @api private

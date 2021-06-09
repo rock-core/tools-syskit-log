@@ -202,6 +202,8 @@ module Syskit::Log
                     log_path = imported.dataset_path + "roby-events.0.log"
                     assert_equal mtime, log_path.stat.mtime
                     index_path = imported.cache_path + "roby-events.0.idx"
+
+                    assert (imported.cache_path + "roby.sql").exist?
                     assert (imported.cache_path + "roby-events.0.idx").exist?
 
                     index = Roby::DRoby::Logfile::Index.read(index_path)
@@ -224,6 +226,7 @@ module Syskit::Log
                     assert_equal mtime, log_path.stat.mtime
                     index_path = imported.cache_path + "roby-events.0.idx"
 
+                    assert (imported.cache_path + "roby.sql").exist?
                     assert (imported.cache_path + "roby-events.0.idx").exist?
 
                     index = Roby::DRoby::Logfile::Index.read(index_path)

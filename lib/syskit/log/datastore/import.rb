@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-require "syskit/log/datastore/normalize"
 require "pocolog/cli/tty_reporter"
+require "roby/droby/plan_rebuilder"
+require "syskit/log/datastore/normalize"
 
 module Syskit::Log
     class Datastore
@@ -172,9 +173,11 @@ module Syskit::Log
                 )
 
                 reporter.info "Copying the Roby event logs"
+                roby_sql_index = RobySQLIndex::Index.create(cache_path + "roby.sql")
                 roby_event_logs.each do |roby_event_log|
                     copy_roby_event_log(
                         output_dir_path, roby_event_log,
+                        roby_sql_index,
                         cache_path: cache_path,
                         reporter: reporter
                     )
@@ -260,20 +263,27 @@ module Syskit::Log
             #
             # @param [Pathname] output_dir the target directory
             # @param [Array<Pathname>] paths the input roby log files
+            # @param [Log::RobySQLIndex::Index] roby_sql_index the database in
+            #   which essential Roby information is stored
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest
             def copy_roby_event_log(
-                output_dir, event_log_path,
+                output_dir, event_log_path, roby_sql_index,
                 cache_path: output_dir,
                 reporter: CLI::NullReporter.new
             )
-                in_reader, out_io, index_io, digest, mtime = prepare_roby_event_log_copy(
-                    output_dir, event_log_path, cache_path
+                in_reader, out_io, index_io, digest, mtime =
+                    prepare_roby_event_log_copy(output_dir, event_log_path, cache_path)
+                reporter.reset_progressbar(
+                    "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
                 )
 
+                rebuilder = Roby::DRoby::PlanRebuilder.new
+                roby_sql_index.start_roby_log_import
                 until in_reader.eof?
                     begin
                         pos = in_reader.tell
+                        reporter.current = pos
                         chunk = in_reader.read_one_chunk
                         cycle = in_reader.decode_one_chunk(chunk)
 
@@ -281,6 +291,7 @@ module Syskit::Log
                         digest.update(chunk)
 
                         Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
+                        roby_sql_index.add_one_cycle(rebuilder, cycle)
                     rescue Roby::DRoby::Logfile::TruncatedFileError => e
                         reporter.warn e.message
                         reporter.warn "truncating Roby log file"
