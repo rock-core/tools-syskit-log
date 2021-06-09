@@ -71,7 +71,7 @@ module Syskit::Log
                         puts "#{pastel.bold(format % [b])} #{a}"
                     end
                     metadata = dataset.metadata
-                    metadata.each do |k, v|
+                    metadata.each.sort_by(&:first).each do |k, v|
                         next if k == "description"
 
                         if v.size == 1
@@ -241,10 +241,63 @@ module Syskit::Log
 
                 def show_dataset_roby(pastel, store, dataset); end
 
+                # Parse a timestamp given as a string
+                def parse_timestamp(time)
+                    return Integer(time, 10) if time =~ /^\d+$/
+
+                    Time.parse(time).tv_sec
+                end
+
+                TIMESTAMP_APPROX_PATTERNS = [
+                    /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/,
+                    /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/,
+                    /^(\d{4})-(\d{2})-(\d{2}) (\d{2})/,
+                    /^(\d{4})-(\d{2})-(\d{2})/,
+                    /^(\d{4})-(\d{2})/,
+                    /^(\d{4})/
+                ].freeze
+
+                TIMESTAMP_APPROX_SCALES = [
+                    nil, # never used
+                    365 * 24 * 3600,
+                    :month, # whole month, more complicated
+                    24 * 3600,
+                    3600,
+                    60,
+                    1
+                ].freeze
+
+                # Convert a string representing an approximate timestamp into a range
+                def parse_approximate_timestamp(time)
+                    match = TIMESTAMP_APPROX_PATTERNS
+                            .lazy.map { |r| r.match(time) }.find { |v| v }
+                    unless match
+                        raise ArgumentError, "invalid approximate timestamp #{time}"
+                    end
+
+                    unless match.post_match.empty?
+                        # Assume the remaining is a timezone
+                        tz = match.post_match.strip
+                    end
+
+                    elements = 6.times.map { |i| Integer(match[i + 1]) if match[i + 1] }
+                    base = Time.new(*elements, tz).tv_sec
+                    scale, = TIMESTAMP_APPROX_SCALES
+                             .each_with_index.find { |_, i| !match[i + 1] }
+
+                    if scale == :month
+                        # A whole month ... more complicated
+                        last_day = Date.new(elements[0], elements[1], -1).day
+                        scale = last_day * 24 * 3600
+                    end
+
+                    (base..(base + scale - 1))
+                end
+
                 # @api private
                 #
                 # Parse a query
-
+                #
                 # @param [String] query query statements of the form VALUE,
                 #   KEY=VALUE and KEY~VALUE. The `=` sign matches exactly, while
                 #   `~` matches through a regular expression. Entries with no
@@ -258,10 +311,20 @@ module Syskit::Log
                     explicit = query.each_with_object({}) do |kv, matchers|
                         if kv =~ /=/
                             k, v = kv.split("=")
-                            matchers[k] = v
+                            matchers[k] =
+                                if k == "timestamp"
+                                    parse_timestamp(v)
+                                else
+                                    v
+                                end
                         elsif kv =~ /~/
                             k, v = kv.split("~")
-                            matchers[k] = /#{v}/
+                            matchers[k] =
+                                if k == "timestamp"
+                                    parse_approximate_timestamp(v)
+                                else
+                                    /#{v}/
+                                end
                         else # assume this is a digest
                             implicit << kv
                         end
@@ -289,7 +352,10 @@ module Syskit::Log
                         matchers["digest"] = /^#{digest}/
                     end
 
+                    need_timestamp = matchers.key?("timestamp")
+
                     store.each_dataset(**get_arguments).find_all do |dataset|
+                        dataset.timestamp if need_timestamp
                         all_metadata = { "digest" => [dataset.digest] }
                                        .merge(dataset.metadata)
                         all_metadata.any? do |key, values|
@@ -475,7 +541,8 @@ module Syskit::Log
                             puts store.short_digest(dataset)
                         end
                     else
-                        show_dataset(pastel, store, dataset, long_digest: options[:long_digests])
+                        show_dataset(pastel, store, dataset,
+                                     long_digest: options[:long_digests])
                         if options[:all] || options[:roby]
                             show_dataset_roby(pastel, store, dataset)
                         end
