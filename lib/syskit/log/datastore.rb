@@ -245,7 +245,7 @@ module Syskit::Log
                 FileUtils.mv cache_path_of(old_digest), cache_path_of(new_digest)
             end
 
-            puts "dataset identity changed to #{new_digest}"
+            puts "#{old_digest}: dataset identity changed to #{new_digest}"
             get(new_digest, validate: false, preload_metadata: false)
         end
     end
