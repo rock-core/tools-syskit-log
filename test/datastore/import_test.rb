@@ -167,8 +167,10 @@ module Syskit::Log
                         YAML.dump(roby_metadata, io)
                     end
                     dataset = import.import([logfile_pathname])
-                    assert_equal({ "roby:app_name" => Set["test"] }, dataset.metadata)
-                    assert_equal({ "roby:app_name" => Set["test"] },
+                    assert_equal({ "roby:app_name" => Set["test"],
+                                   "timestamp" => Set[0] }, dataset.metadata)
+                    assert_equal({ "roby:app_name" => Set["test"],
+                                   "timestamp" => Set[0] },
                                  Dataset.new(dataset.dataset_path).metadata)
                 end
                 it "ignores the Roby metadata if it cannot be loaded" do
@@ -181,8 +183,8 @@ module Syskit::Log
                         imported = import.import([logfile_pathname])
                     end
                     assert_match(/failed to load Roby metadata/, err)
-                    assert_equal({}, imported.metadata)
-                    assert_equal({}, Dataset.new(imported.dataset_path).metadata)
+                    assert_equal({ "timestamp" => Set[0] }, imported.metadata)
+                    assert_equal({ "timestamp" => Set[0] }, Dataset.new(imported.dataset_path).metadata)
                 end
             end
 
