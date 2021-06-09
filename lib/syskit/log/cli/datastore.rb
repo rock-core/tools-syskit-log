@@ -460,6 +460,11 @@ module Syskit::Log
                 reporter = create_reporter
                 datastore = create_store
 
+                if paths.empty?
+                    puts "Nothing to import"
+                    return
+                end
+
                 metadata = {}
                 metadata["description"] = description if description
                 metadata["tags"] = options[:tags]
