@@ -14,7 +14,8 @@ require "pocolog/cli/tty_reporter"
 
 module Syskit::Log
     module CLI
-        class Datastore < Thor
+        # CLI entrypoint for `syskit ds` (a.k.a. syskit datastore)
+        class Datastore < Thor # rubocop:disable Metrics/ClassLength
             namespace "datastore"
 
             class_option :silent, type: :boolean, default: false
@@ -512,8 +513,17 @@ module Syskit::Log
 
                 require "syskit/log/datastore/repair"
                 resolve_datasets(store, *query, validate: false).each do |ds|
-                    Syskit::Log::Datastore::Repair
-                        .repair_dataset(store, ds, dry_run: options[:dry_run])
+                    old_digest = ds.digest
+                    new_ds = Syskit::Log::Datastore::Repair
+                             .repair_dataset(store, ds, dry_run: options[:dry_run])
+
+                    if new_ds.digest != old_digest
+                        store.write_redirect(
+                            old_digest,
+                            to: new_ds.digest,
+                            doc: "created by 'syskit ds repair'"
+                        )
+                    end
                 end
             end
 

@@ -163,6 +163,8 @@ module Syskit::Log
                 )
             end
 
+            digest = resolve_redirect(digest)
+
             dataset = Dataset.new(
                 core_path_of(digest),
                 digest: digest, cache: cache_path_of(digest)
@@ -176,6 +178,30 @@ module Syskit::Log
             end
             dataset.metadata if preload_metadata
             dataset
+        end
+
+        # @api private
+        #
+        # Resolve possible redirects from "old" digests to the new ones
+        #
+        # @param [String] digest the digest of the dataset we want resolved
+        # @return [String] either a new digest if the original one was a redirect,
+        #   or the 'digest' argument if it is a full dataset
+        def resolve_redirect(digest)
+            core_path = core_path_of(digest)
+            return digest unless core_path.file?
+
+            resolve_redirect(YAML.safe_load(core_path.read)["to"])
+        end
+
+        # @api private
+        #
+        # Write a redirect file from a valid digest string to another
+        def write_redirect(redirected_digest, to:, **metadata)
+            metadata = metadata.merge(to: to).transform_keys(&:to_s)
+            core_path_of(redirected_digest).open("w") do |io|
+                YAML.dump(metadata, io)
+            end
         end
 
         # Resolve a dataset from a shortenest digest
@@ -239,6 +265,8 @@ module Syskit::Log
                 old_identity_metadata_path
             )
             new_digest = dataset.compute_dataset_digest(identity)
+
+            return dataset if old_digest == new_digest
 
             FileUtils.mv core_path_of(old_digest), core_path_of(new_digest)
             if cache_path_of(old_digest).exist?
