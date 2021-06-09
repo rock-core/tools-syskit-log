@@ -468,7 +468,10 @@ module Syskit::Log
                 paths.each do |p|
                     dataset = import_dataset(p, reporter, datastore, metadata,
                                              merge: options[:merge])
-                    puts dataset.digest if dataset
+                    if dataset
+                        Syskit::Log::Datastore::Import.save_import_info(p, dataset)
+                        puts dataset.digest
+                    end
                 end
             end
 
