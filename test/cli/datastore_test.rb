@@ -739,6 +739,7 @@ a0fa <no description>
                     n = "049d95329290cfa6aebe917ae0037fa8fd619f3dacce083e94b7b3e5002bb2f2"
                     run_repair o
                     @datastore.get(n).validate_identity_metadata
+                    assert_equal n, @datastore.get(o).digest
                 end
 
                 it "adds roby-events.?.log files to the identity when they are missing" do
@@ -746,6 +747,7 @@ a0fa <no description>
                     n = "2428534953b1f78249e136164c54f76298e45b03a96350851b0830359f84efb4"
                     run_repair o
                     @datastore.get(n).validate_identity_metadata
+                    assert_equal n, @datastore.get(o).digest
                 end
 
                 it "creates a timestamp metadata entry based on the roby time" do

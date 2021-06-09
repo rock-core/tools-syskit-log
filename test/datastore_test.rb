@@ -156,6 +156,15 @@ module Syskit::Log
                 assert_kind_of Datastore::Dataset, dataset
                 assert_equal dataset_path, dataset.dataset_path
             end
+
+            it "handles redirections" do
+                root_digest = Datastore::Dataset.string_digest("root")
+                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                datastore.write_redirect(root_digest, to: intermediate_digest)
+                datastore.write_redirect(intermediate_digest, to: @digest)
+
+                assert_equal @digest, datastore.get(root_digest).digest
+            end
         end
 
         describe "#find_dataset_from_short_digest" do

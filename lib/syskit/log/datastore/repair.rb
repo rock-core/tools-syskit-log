@@ -15,9 +15,10 @@ module Syskit::Log
                     else
                         ops.each { |op| puts op }
                     end
+                    dataset
                 else
                     loop do
-                        return unless (op = find_repair_op(datastore, dataset))
+                        return dataset unless (op = find_repair_op(datastore, dataset))
 
                         puts op
                         (dataset = op.apply(reporter)) unless dry_run
