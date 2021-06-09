@@ -373,22 +373,27 @@ module Syskit::Log
             end
 
             describe "#list" do
-                attr_reader :show_a0ea, :show_a0fa, :base_time
+                attr_reader :show_a0ea, :show_a0fa, :a0ea_time, :a0fa_time
                 before do
-                    @base_time = Time.at(34200, 234)
-                    create_dataset "a0ea", metadata: Hash["description" => "first", "test" => ["2"], "array_test" => %w[a b]] do
+                    @a0ea_time = Time.parse("2018-05-23 15:32 UTC")
+                    # NOTE: do NOT add timestamp to metadata in a0ea. This tests
+                    # that we do automatically compute the timestamp if needed by
+                    # the query
+                    create_dataset "a0ea", metadata: { "description" => "first", "test" => ["2"], "array_test" => %w[a b] } do
                         create_logfile("test.0.log") do
                             create_logfile_stream "test", metadata: Hash["rock_stream_type" => "port", "rock_task_name" => "task0", "rock_task_object_name" => "port0", "rock_task_model" => "test::Task"]
-                            write_logfile_sample base_time, base_time, 0
-                            write_logfile_sample base_time + 1, base_time + 10, 1
+                            write_logfile_sample a0ea_time, a0ea_time, 0
+                            write_logfile_sample a0ea_time + 1, a0ea_time + 10, 1
                         end
                         create_logfile("test_property.0.log") do
                             create_logfile_stream "test_property", metadata: Hash["rock_stream_type" => "property", "rock_task_name" => "task0", "rock_task_object_name" => "property0", "rock_task_model" => "test::Task"]
-                            write_logfile_sample base_time, base_time + 1, 2
-                            write_logfile_sample base_time + 1, base_time + 9, 3
+                            write_logfile_sample a0ea_time, a0ea_time + 1, 2
+                            write_logfile_sample a0ea_time + 1, a0ea_time + 9, 3
                         end
                     end
-                    create_dataset "a0fa", metadata: Hash["test" => ["1"], "array_test" => %w[c d]] do
+
+                    @a0fa_time = Time.parse("2018-05-21 15:32 UTC")
+                    create_dataset "a0fa", metadata: { "timestamp" => a0fa_time.tv_sec, "test" => ["1"], "array_test" => %w[c d] } do
                         create_logfile("test.0.log") do
                             create_logfile_stream "test", metadata: Hash["rock_stream_type" => "port", "rock_task_name" => "task0", "rock_task_object_name" => "port0", "rock_task_model" => "test::Task"]
                         end
@@ -398,19 +403,19 @@ module Syskit::Log
                     end
                     @show_a0ea = <<-EOF
 a0ea first
-  test: 2
   array_test:
   - a
   - b
-  timestamp: 34200
+  test: 2
+  timestamp: #{@a0ea_time.tv_sec}
                     EOF
                     @show_a0fa = <<-EOF
 a0fa <no description>
-  test: 1
   array_test:
   - c
   - d
-  timestamp: 0
+  test: 1
+  timestamp: #{@a0fa_time.tv_sec}
                     EOF
                 end
 
@@ -462,6 +467,41 @@ a0fa <no description>
                     end
                     assert_equal [show_a0fa, show_a0ea].join, out
                 end
+                it "handles an exact timestamp in direct form" do
+                    puts a0ea_time.tv_sec
+                    out, _err = capture_io do
+                        call_cli("list", "--store", datastore_path.to_s,
+                                 "timestamp=#{a0ea_time.tv_sec}", silent: false)
+                    end
+                    assert_equal show_a0ea, out
+                end
+                it "handles an exact timestamp in string form" do
+                    out, _err = capture_io do
+                        call_cli("list", "--store", datastore_path.to_s,
+                                 "timestamp=#{a0ea_time}", silent: false)
+                    end
+                    assert_equal show_a0ea, out
+                end
+                # NOTE: the complete test for approximate timestamps parsing are
+                # the tests for #parse_timestamp_approximate. This is more of an
+                # integration test
+                it "handles an approximate timestamp representing a single day" do
+                    out, _err = capture_io do
+                        call_cli("list", "--store", datastore_path.to_s,
+                                 "timestamp~2018-05-23 +00:00", silent: false)
+                    end
+                    assert_equal show_a0ea, out
+                end
+                # NOTE: the complete test for approximate timestamps parsing are
+                # the tests for #parse_timestamp_approximate. This is more of an
+                # integration test
+                it "handles an approximate timestamp representing a whole month" do
+                    out, _err = capture_io do
+                        call_cli("list", "--store", datastore_path.to_s,
+                                 "timestamp~2018-05 +00:00", silent: false)
+                    end
+                    assert_equal [show_a0fa, show_a0ea].join, out
+                end
 
                 describe "--pocolog" do
                     it "shows the pocolog stream information" do
@@ -473,9 +513,9 @@ a0fa <no description>
   1 oroGen tasks in 2 streams
     task0[test::Task]: 1 ports and 1 properties
     Ports:
-      port0:     2 samples from 1970-01-01 06:30:00.000234 -0300 to 1970-01-01 06:30:10.000234 -0300 [   0:00:10.000000]
+      port0:     2 samples from 2018-05-23 12:32:00.000000 -0300 to 2018-05-23 12:32:10.000000 -0300 [   0:00:10.000000]
     Properties:
-      property0: 2 samples from 1970-01-01 06:30:01.000234 -0300 to 1970-01-01 06:30:09.000234 -0300 [   0:00:08.000000]
+      property0: 2 samples from 2018-05-23 12:32:01.000000 -0300 to 2018-05-23 12:32:09.000000 -0300 [   0:00:08.000000]
                         EOF
                         assert_equal (show_a0ea + pocolog_info), out
                     end
@@ -745,6 +785,112 @@ a0fa <no description>
 
                 def run_repair(digest)
                     call_cli("repair", "--store", @store_path, digest)
+                end
+            end
+
+            describe "#parse_timestamp" do
+                before do
+                    @ds = Datastore.new
+                end
+
+                it "returns a plain integer as-is" do
+                    assert_equal 23428904829, @ds.parse_timestamp("23428904829")
+                end
+
+                it "parses a string and returns its seconds representation since epoch" do
+                    time_s = "2021-02-15 15:32:06 -03:00"
+                    time = Time.parse(time_s)
+                    assert_equal time.tv_sec, @ds.parse_timestamp(time_s)
+                end
+            end
+
+            describe "#parse_approximate_timestamp" do
+                before do
+                    @ds = Datastore.new
+                end
+
+                it "handles a full date and time in local time" do
+                    time_s = "2021-02-15 15:32:06"
+                    time = Time.parse("#{time_s} -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..time.tv_sec),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a full date and time with timezone" do
+                    time_s = "2021-02-15 15:32:06 -01:00"
+                    time = Time.parse(time_s)
+                    assert_equal (time.tv_sec..time.tv_sec),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a minute range in local time" do
+                    time_s = "2021-02-15 15:32"
+                    time = Time.parse("#{time_s}:00 -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..time.tv_sec + 59),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a minute range with timezone" do
+                    time_s = "2021-02-15 15:32 -01:00"
+                    time = Time.parse("2021-02-15 15:32:00 -01:00")
+                    assert_equal (time.tv_sec..time.tv_sec + 59),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles an hour range in local time" do
+                    time_s = "2021-02-15 15"
+                    time = Time.parse("#{time_s}:00:00 -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..time.tv_sec + 3599),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a hour range with timezone" do
+                    time_s = "2021-02-15 15 -01:00"
+                    time = Time.parse("2021-02-15 15:00:00 -01:00")
+                    assert_equal (time.tv_sec..time.tv_sec + 3599),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a day range in local time" do
+                    time_s = "2021-02-15"
+                    time = Time.parse("#{time_s} 00:00:00 -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..(time.tv_sec + 24 * 3600 - 1)),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a day range with timezone" do
+                    time_s = "2021-02-15 -01:00"
+                    time = Time.parse("2021-02-15 00:00:00 -01:00")
+                    assert_equal (time.tv_sec..(time.tv_sec + 24 * 3600 - 1)),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a month range in local time" do
+                    time_s = "2021-02"
+                    time = Time.parse("#{time_s}-01 00:00:00 -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..(time.tv_sec + 28 * (24 * 3600) - 1)),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a month range with timezone" do
+                    time_s = "2021-02 -01:00"
+                    time = Time.parse("2021-02-01 00:00:00 -01:00")
+                    assert_equal (time.tv_sec..(time.tv_sec + 28 * (24 * 3600) - 1)),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a year range in local time" do
+                    time_s = "2021"
+                    time = Time.parse("#{time_s}-01-01 00:00:00 -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..(time.tv_sec + 365 * (24 * 3600) - 1)),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                it "handles a month range with timezone" do
+                    time_s = "2021 -01:00"
+                    time = Time.parse("2021-01-01 00:00:00 -01:00")
+                    assert_equal (time.tv_sec..(time.tv_sec + 365 * (24 * 3600) - 1)),
+                                 @ds.parse_approximate_timestamp(time_s)
                 end
             end
         end
