@@ -88,10 +88,19 @@ module Syskit::Log
 
             core_path = (datastore_path + "core")
             core_path.each_entry do |dataset_path|
-                if Dataset.dataset?(core_path + dataset_path)
+                full_path = core_path + dataset_path
+                if Dataset.dataset?(full_path) || self.class.redirect?(full_path)
                     yield(dataset_path.to_s)
                 end
             end
+        end
+
+        # Test whether the file at the given path is a redirect file
+        def self.redirect?(path)
+            return unless path.file?
+
+            YAML.safe_load(path.read).key?("to")
+        rescue Psych::SyntaxError # rubocop:disable Lint/SuppressedException
         end
 
         # Enumerate the store's datasets

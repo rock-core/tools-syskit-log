@@ -165,6 +165,28 @@ module Syskit::Log
 
                 assert_equal @digest, datastore.get(root_digest).digest
             end
+
+            it "lists redirections in the dataset digests" do
+                root_digest = Datastore::Dataset.string_digest("root")
+                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                datastore.write_redirect(root_digest, to: intermediate_digest)
+                datastore.write_redirect(intermediate_digest, to: @digest)
+
+                expected = Set[root_digest, intermediate_digest, @digest]
+                assert_equal expected, datastore.each_dataset_digest.to_set
+            end
+
+            it "resolves a partial digest that is a redirection" do
+                root_digest = Datastore::Dataset.string_digest("root")
+                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                datastore.write_redirect(root_digest, to: intermediate_digest)
+                datastore.write_redirect(intermediate_digest, to: @digest)
+
+                assert_equal(
+                    @digest,
+                    datastore.find_dataset_from_short_digest(root_digest[0, 5]).digest
+                )
+            end
         end
 
         describe "#find_dataset_from_short_digest" do
