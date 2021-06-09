@@ -64,7 +64,7 @@ module Syskit::Log
                 end
 
                 def to_s
-                    "rename roby-events.log to roby-events.0.log, "\
+                    "#{@dataset.digest}: rename roby-events.log to roby-events.0.log, "\
                     "changing the dataset identity"
                 end
 
