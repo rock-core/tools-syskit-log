@@ -79,7 +79,7 @@ module Syskit::Log
             #
             # Compute a timestamp representative of this dataset
             def compute_timestamp
-                roby_time = metadata_fetch "roby:time"
+                roby_time = metadata_fetch_all("roby:time").min
                 year = roby_time[0, 4]
                 month = roby_time[4, 2]
                 day = roby_time[6, 2]

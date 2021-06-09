@@ -573,6 +573,28 @@ module Syskit::Log
                     assert_equal [2, 1], streams.map(&:size)
                 end
             end
+
+            describe "#compute_timestamp" do
+                it "uses the roby time when available" do
+                    ds = Dataset.new(@dataset_path)
+                    ds.metadata_set "roby:time", "20211214-1115"
+                    assert_equal Time.utc(2021, 12, 14, 11, 15).tv_sec,
+                                 ds.compute_timestamp
+                end
+
+                it "uses the smallest roby:time if there is more than one" do
+                    ds = Dataset.new(@dataset_path)
+                    ds.metadata_set(
+                        "roby:time",
+                        "20210704-1205",
+                        "20210705-1215",
+                        "20210704-0105",
+                        "20210704-0115"
+                    )
+                    assert_equal Time.utc(2021, 7, 4, 1, 5).tv_sec,
+                                 ds.compute_timestamp
+                end
+            end
         end
     end
 end
