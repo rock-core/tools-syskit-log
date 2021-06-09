@@ -63,6 +63,14 @@ module Syskit::Log
         def roby_log_path(name)
             Pathname(__dir__) + "roby-logs" + "#{name}-events.log"
         end
+
+        def create_roby_logfile(name)
+            path = Pathname(logfile_path(name))
+            path.open "w" do |io|
+                Roby::DRoby::Logfile.write_header(io)
+            end
+            path
+        end
     end
 end
 Minitest::Test.include Syskit::Log::Test

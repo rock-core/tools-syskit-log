@@ -33,7 +33,7 @@ module Syskit::Log
                 ignored = pocolog_files.map do |p|
                     Pathname.new(Pocolog::Logfiles.default_index_filename(p.to_s))
                 end
-                ignored.concat(roby_files.map { |p| p.sub(/-events.log$/, "-index.log") })
+                ignored.concat(roby_files.map { |p| p.sub_ext(".idx") })
 
                 all_files = Pathname.enum_for(:glob, dir_path + "*").to_a
                 remaining = (all_files - pocolog_files -
@@ -173,7 +173,11 @@ module Syskit::Log
 
                 reporter.info "Copying the Roby event logs"
                 roby_event_logs.each do |roby_event_log|
-                    copy_roby_event_log(output_dir_path, roby_event_log)
+                    copy_roby_event_log(
+                        output_dir_path, roby_event_log,
+                        cache_path: cache_path,
+                        reporter: reporter
+                    )
                 end
 
                 reporter.info "Copying #{text_files.size} text files"
@@ -258,14 +262,67 @@ module Syskit::Log
             # @param [Array<Pathname>] paths the input roby log files
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest
-            def copy_roby_event_log(output_dir, event_log)
-                i = 0
-                i += 1 while (target_file = output_dir + "roby-events.#{i}.log").file?
+            def copy_roby_event_log(
+                output_dir, event_log_path,
+                cache_path: output_dir,
+                reporter: CLI::NullReporter.new
+            )
+                in_reader, out_io, index_io, digest, mtime = prepare_roby_event_log_copy(
+                    output_dir, event_log_path, cache_path
+                )
 
-                FileUtils.cp event_log, target_file
+                until in_reader.eof?
+                    begin
+                        pos = in_reader.tell
+                        chunk = in_reader.read_one_chunk
+                        cycle = in_reader.decode_one_chunk(chunk)
+
+                        Roby::DRoby::Logfile.write_entry(out_io, chunk)
+                        digest.update(chunk)
+
+                        Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
+                    rescue Roby::DRoby::Logfile::TruncatedFileError => e
+                        reporter.warn e.message
+                        reporter.warn "truncating Roby log file"
+                        index_io.rewind
+                        Roby::DRoby::Logfile::Index.write_header(index_io, pos, mtime)
+                        break
+                    end
+                end
+
+                out_io.close
+                in_reader.close
+                index_io.close
+                FileUtils.touch out_io.path.to_s, mtime: mtime
+
+                Hash[out_io.path => digest]
+            end
+
+            def prepare_roby_event_log_copy(output_dir, event_log_path, cache_path)
+                i = 0
+                i += 1 while (target_path = output_dir + "roby-events.#{i}.log").file?
+
                 digest = Digest::SHA256.new
-                digest.update(event_log.read)
-                Hash[target_file => digest]
+
+                in_stat = event_log_path.stat
+                in_io = event_log_path.open
+                reader = Roby::DRoby::Logfile::Reader.new(in_io)
+
+                end_of_header = in_io.tell
+                in_io.rewind
+                prologue = in_io.read(end_of_header)
+                in_io.seek(end_of_header)
+
+                out_io = target_path.open("w")
+                out_io.write(prologue)
+                digest.update(prologue)
+
+                index_io = (cache_path + target_path.basename.sub_ext(".idx")).open("w")
+                Roby::DRoby::Logfile::Index.write_header(
+                    index_io, in_stat.size, in_stat.mtime
+                )
+
+                [reader, out_io, index_io, digest, in_stat.mtime]
             end
 
             # @api private

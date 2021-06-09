@@ -101,7 +101,7 @@ module Syskit::Log
                     end
                     it "auto-imports any directory that looks like a raw dataset" do
                         create_logfile("test.0.log") {}
-                        FileUtils.touch logfile_path("test-events.log")
+                        create_roby_logfile("test-events.log")
                         incoming_path = datastore_path + "incoming" + "0"
                         flexmock(datastore_m::Import)
                             .new_instances.should_receive(:normalize_dataset)
@@ -136,7 +136,7 @@ module Syskit::Log
                             write_logfile_sample Time.now, Time.now, 10
                             write_logfile_sample Time.now + 10, Time.now + 1, 20
                         end
-                        FileUtils.touch logfile_path("test-events.log")
+                        create_roby_logfile("test-events.log")
                         call_cli("import", "--auto", "--min-duration=0",
                                  "--store", datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
@@ -160,7 +160,7 @@ module Syskit::Log
                             write_logfile_sample Time.now, Time.now, 10
                             write_logfile_sample Time.now + 10, Time.now + 1, 20
                         end
-                        FileUtils.touch logfile_path("test-events.log")
+                        create_roby_logfile("test-events.log")
                         call_cli("import", "--auto", "--min-duration=0",
                                  "--store", datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
@@ -182,7 +182,7 @@ module Syskit::Log
                             write_logfile_sample Time.now, Time.now, 10
                             write_logfile_sample Time.now + 10, Time.now + 1, 20
                         end
-                        FileUtils.touch logfile_path("test-events.log")
+                        create_roby_logfile("test-events.log")
                         call_cli("import", "--auto", "--min-duration=0",
                                  "--store", datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
@@ -208,7 +208,7 @@ module Syskit::Log
                             write_logfile_sample Time.now, Time.now, 10
                             write_logfile_sample Time.now + 10, Time.now + 1, 20
                         end
-                        FileUtils.touch logfile_path("test-events.log")
+                        create_roby_logfile("test-events.log")
                         call_cli("import", "--auto", "--min-duration=0",
                                  "--store", datastore_path.to_s,
                                  logfile_pathname.dirname.to_s, silent: true)
@@ -233,7 +233,7 @@ module Syskit::Log
                     it "ignores an empty dataset after normalization if --min-duration "\
                        "is non-zero" do
                         create_logfile("test.0.log") {}
-                        FileUtils.touch logfile_path("test-events.log")
+                        create_roby_logfile("test-events.log")
                         flexmock(datastore_m::Import)
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
@@ -255,7 +255,7 @@ module Syskit::Log
                             write_logfile_sample Time.now, Time.now, 10
                             write_logfile_sample Time.now + 10, Time.now + 1, 20
                         end
-                        FileUtils.touch logfile_path("test-events.log")
+                        create_roby_logfile("test-events.log")
                         flexmock(datastore_m::Import)
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru

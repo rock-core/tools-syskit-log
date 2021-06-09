@@ -35,13 +35,13 @@ module Syskit::Log
                                  import.prepare_import(logfile_pathname)
                 end
                 it "lists the Roby log files that should be copied" do
-                    FileUtils.touch(path = logfile_pathname("test-events.log"))
+                    path = create_roby_logfile("test-events.log")
                     assert_equal [[], [], [path], []],
                                  import.prepare_import(logfile_pathname)
                 end
                 it "raises if more than one file looks like a roby log file" do
-                    FileUtils.touch(logfile_pathname("test-events.log"))
-                    FileUtils.touch(logfile_pathname("test2-events.log"))
+                    create_roby_logfile("test-events.log")
+                    create_roby_logfile("test2-events.log")
                     e = assert_raises(ArgumentError) do
                         import.prepare_import(logfile_pathname)
                     end
@@ -54,9 +54,10 @@ module Syskit::Log
                                  import.prepare_import(logfile_pathname)
                 end
                 it "ignores Roby index files" do
-                    FileUtils.touch(path = logfile_pathname("test-events.log"))
-                    FileUtils.touch(logfile_pathname("test-index.log"))
-                    assert_equal [[], [], [path], []], import.prepare_import(logfile_pathname)
+                    path = create_roby_logfile("test2-events.log")
+                    FileUtils.touch path.sub_ext(".idx")
+                    assert_equal [[], [], [path], []],
+                                 import.prepare_import(logfile_pathname)
                 end
                 it "lists unrecognized files" do
                     FileUtils.touch(path = logfile_pathname("not_matching"))
@@ -74,8 +75,8 @@ module Syskit::Log
                         create_logfile_stream "test",
                                               metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
                     end
+                    create_roby_logfile("test-events.log")
                     FileUtils.touch logfile_pathname("test.txt")
-                    FileUtils.touch logfile_pathname("test-events.log")
                     FileUtils.touch logfile_pathname("not_recognized_file")
                     logfile_pathname("not_recognized_dir").mkpath
                     FileUtils.touch logfile_pathname("not_recognized_dir", "test")
@@ -185,6 +186,48 @@ module Syskit::Log
                     assert_match(/failed to load Roby metadata/, err)
                     assert_equal({ "timestamp" => Set[0] }, imported.metadata)
                     assert_equal({ "timestamp" => Set[0] }, Dataset.new(imported.dataset_path).metadata)
+                end
+                it "rebuilds a valid Roby index" do
+                    FileUtils.cp roby_log_path("model_registration"),
+                                 logfile_pathname + "test-events.log"
+
+                    mtime = Time.now - 10
+                    FileUtils.touch logfile_pathname + "test-events.log",
+                                    mtime: mtime
+                    imported = nil
+                    capture_io do
+                        imported = import.import([logfile_pathname])
+                    end
+
+                    log_path = imported.dataset_path + "roby-events.0.log"
+                    assert_equal mtime, log_path.stat.mtime
+                    index_path = imported.cache_path + "roby-events.0.idx"
+                    assert (imported.cache_path + "roby-events.0.idx").exist?
+
+                    index = Roby::DRoby::Logfile::Index.read(index_path)
+                    assert index.valid_for?(log_path)
+                end
+                it "handles truncated Roby logs" do
+                    in_log_path = logfile_pathname + "test-events.log"
+                    FileUtils.cp roby_log_path("model_registration"), in_log_path
+                    File.truncate(in_log_path, in_log_path.stat.size - 1)
+
+                    mtime = Time.now - 10
+                    FileUtils.touch logfile_pathname + "test-events.log",
+                                    mtime: mtime
+                    imported = nil
+                    capture_io do
+                        imported = import.import([logfile_pathname])
+                    end
+
+                    log_path = imported.dataset_path + "roby-events.0.log"
+                    assert_equal mtime, log_path.stat.mtime
+                    index_path = imported.cache_path + "roby-events.0.idx"
+
+                    assert (imported.cache_path + "roby-events.0.idx").exist?
+
+                    index = Roby::DRoby::Logfile::Index.read(index_path)
+                    assert index.valid_for?(log_path)
                 end
             end
 
