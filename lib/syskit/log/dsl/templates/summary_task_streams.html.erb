@@ -11,9 +11,11 @@
 </tr>
 </thead>
 
-<% task_streams.each_port_stream do |_, port| %>
+<% task_name = "#{task_streams.task_name}_task" %>
+
+<% task_streams.each_port_stream do |port_name, port| %>
 <tr>
-    <td><%= port.name %></td>
+    <td><%= "#{task_name}.#{port_name}_port" %></td>
     <td><%= port.type.name %></td>
     <td><%= port.size %></td>
     <td><%= port.interval_lg.first %></td>
