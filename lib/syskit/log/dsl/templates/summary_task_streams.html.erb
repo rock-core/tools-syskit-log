@@ -25,5 +25,25 @@
 </table>
 
 <h3>Properties:</h3>
-<% task_streams.each_property_stream do |_, port| %>
+
+<table>
+<thead>
+<tr>
+    <td>Name</td>
+    <td>Type</td>
+    <td>Size</td>
+    <td>From</td>
+    <td>To</td>
+</tr>
+</thead>
+
+<% task_streams.each_property_stream do |property_name, property| %>
+<tr>
+    <td><%= "#{task_name}.properties.#{property_name}" %></td>
+    <td><%= property.type.name %></td>
+    <td><%= property.size %></td>
+    <td><%= property.interval_lg.first %></td>
+    <td><%= property.interval_lg.last %></td>
+</tr>
 <% end %>
+</table>
