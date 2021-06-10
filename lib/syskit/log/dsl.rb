@@ -631,7 +631,7 @@ module Syskit
                     end
 
                 Vega.lite
-                    .mark(mark)
+                    .mark(type: mark)
                     .encoding(
                         x: { field: x, type: "quantitative", scale: { zero: false } },
                         y: { field: y, type: "quantitative", scale: { zero: false } },
