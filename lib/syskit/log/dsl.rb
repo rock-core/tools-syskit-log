@@ -5,6 +5,7 @@
 require "syskit/log"
 require "syskit/log/daru"
 require "syskit/log/datastore"
+require "syskit/log/dsl/maps"
 require "syskit/log/dsl/summary"
 
 module Syskit
@@ -635,6 +636,37 @@ module Syskit
                     .encoding(
                         x: { field: x, type: "quantitative", scale: { zero: false } },
                         y: { field: y, type: "quantitative", scale: { zero: false } },
+                        **order
+                    )
+            end
+
+            # Create a reusable view to plot geo data using Vega lite
+            #
+            # It creates a latitude/longitude plot, with an optional ordering
+            # field (time).  All given coordinates (latitude/longitude/time) are
+            # assumed to be quantitative
+            #
+            # The returned value is a Vega spec object, which can be further tuned
+            #
+            # @example plot a trajectory
+            #   Vega.lite.layer([vega_simple_view(lat: "lat", lon: "lon")])
+            #
+            # @see daru_to_vega vega_simple_plot
+            def vega_geo_view(lat:, lon:, time: nil, mark: "line")
+                order =
+                    if time
+                        { order: { field: time, type: "quantitative" } }
+                    else
+                        {}
+                    end
+
+                Vega.lite
+                    .mark(type: mark)
+                    .encoding(
+                        latitude: { field: lat, type: "quantitative",
+                                    scale: { zero: false } },
+                        longitude: { field: lon, type: "quantitative",
+                                     scale: { zero: false } },
                         **order
                     )
             end

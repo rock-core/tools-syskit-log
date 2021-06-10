@@ -10,6 +10,7 @@
     <depend_optional package="data_processing/daru" />
     <depend_optional package="gui/vega-rb" />
     <depend_optional package="data_processing/rb-gsl" />
+    <depend_optional package="geoutm" />
 
     <test_depend package="minitest" />
     <test_depend package="flexmock" />

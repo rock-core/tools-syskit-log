@@ -1,0 +1,61 @@
+{
+  "params": [
+    {"name": "tx", "expr": "width/2"},
+    {"name": "ty", "expr": "height/2"},
+    {"name": "zoom_precise", "value": <%= zoom %>},
+    {"name": "longitude", "value": <%= -longitude_deg %>},
+    {"name": "latitude", "value": <%= latitude_deg %>},
+    {"name": "baseTileSize", "value": 256},
+    {"name": "tileUrl", "value": "https://a.tile.openstreetmap.org/"},
+    {"name": "zoom", "expr": "ceil(zoom_precise)"},
+    {"name": "tilesCount", "expr": "pow(2,zoom)"},
+    {"name": "tileSize", "expr": "baseTileSize*pow(2,zoom_precise-zoom)"},
+    {"name": "maxTiles", "expr": "ceil(max(height,width)/tileSize +1)"},
+    {"name": "basePoint", "expr": "invert('projection',[0,0])"},
+    {"name": "dii", "expr": "((basePoint[0]+180)/360*tilesCount)"},
+    {"name": "di", "expr": "floor(dii)"},
+    {"name": "dx", "expr": "round((floor(dii)-dii)*tileSize)"},
+    {
+      "name": "djj",
+      "expr": "((1-log(tan(basePoint[1]*PI/180) + 1/cos(basePoint[1]*PI/180))/PI)/2 *tilesCount)"
+    },
+    {"name": "dj", "expr": "floor(djj)"},
+    {"name": "dy", "expr": "round((floor(djj)-djj)*tileSize)"},
+    {"name": "scale", "expr": "baseTileSize * pow(2,zoom_precise) / (2 * PI)"}
+  ],
+  "layer": [
+    {
+      "data": {
+        "name": "tile_list",
+        "sequence": {"start": 0, "stop": {"signal": "maxTiles"}, "as": "a"}
+      },
+      "transform": [
+        {"calculate": "sequence(0,maxTiles)", "as": "b"},
+        {"flatten": ["b"]},
+        {
+          "calculate": "tileUrl+zoom+'/'+(datum.a+di+tilesCount)%tilesCount+'/'+((datum.b+dj))+'.png'",
+          "as": "url"
+        },
+        {"calculate": "(datum.a * tileSize + dx)+(tileSize/2)", "as": "x"},
+        {"calculate": "(datum.b * tileSize + dy)+(tileSize/2)", "as": "y"}
+      ],
+      "mark": {
+        "type": "image",
+        "width": {"signal": "tileSize"},
+        "height": {"signal": "tileSize"}
+      },
+      "encoding": {
+        "x": {"field": "x", "type": "quantitative", "scale": null},
+        "y": {"field": "y", "type": "quantitative", "scale": null},
+        "url": {"field": "url", "type": "nominal"}
+      }
+    }
+  ],
+  "projection": {
+    "type": "mercator",
+    "scale": {"signal": "scale"},
+    "rotate": [{"signal": "longitude"}, 0, 0],
+    "center": [0, {"signal": "latitude"}],
+    "translate": [{"signal": "tx"}, {"signal": "ty"}]
+  }
+}
