@@ -622,7 +622,7 @@ module Syskit
             #   Vega.lite.data(data).repeat(%w[speed power]).spec(line)
             #
             # @see daru_to_vega vega_simple_plot
-            def vega_simple_view(x:, y:, time: nil, mark: "line", color: { datum: y })
+            def vega_simple_view(x:, y:, time: nil, mark: "line")
                 order =
                     if time
                         { order: { field: time, type: "quantitative" } }
@@ -635,8 +635,7 @@ module Syskit
                     .encoding(
                         x: { field: x, type: "quantitative", scale: { zero: false } },
                         y: { field: y, type: "quantitative", scale: { zero: false } },
-                        **order,
-                        color: color
+                        **order
                     )
             end
 
@@ -657,11 +656,11 @@ module Syskit
             #   Vega.lite.data(data).repeat(%w[speed power]).spec(line)
             #
             # @see daru_to_vega vega_simple_plot
-            def vega_simple_plot(data, x:, y:, time: nil, mark: "line", color: nil) # rubocop:disable Metrics/ParameterLists
+            def vega_simple_plot(data, x:, y:, time: nil, mark: "line")
                 data = daru_to_vega(data) unless data.respond_to?(:to_hash)
                 spec = vega_simple_view(
                     x: x, y: { repeat: "layer" },
-                    time: time, mark: mark, color: color
+                    time: time, mark: mark
                 )
                 Vega.lite
                     .data(data)
