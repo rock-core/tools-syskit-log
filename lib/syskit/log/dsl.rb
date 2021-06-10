@@ -101,10 +101,11 @@ module Syskit
             # shown if the set of candidates has exactly one element
             def __dataset_user_select(candidates)
                 this = self
-                candidates = candidates.each_with_object({}) do |dataset, h|
-                    format = this.__dataset_format(dataset)
-                    h[format] = dataset
-                end
+                candidates =
+                    candidates.sort_by(&:timestamp).each_with_object({}) do |dataset, h|
+                        format = this.__dataset_format(dataset)
+                        h[format] = dataset
+                    end
 
                 result = IRuby.form do
                     radio(:selected_dataset, *candidates.keys)
