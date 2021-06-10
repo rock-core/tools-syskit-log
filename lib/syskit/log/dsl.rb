@@ -639,6 +639,13 @@ module Syskit
                     )
             end
 
+            # @api private
+            #
+            # Checks whether a given object looks like Vega data
+            def vega_data?(data)
+                data.respond_to?(:to_ary) && data[0].respond_to?(:to_hash)
+            end
+
             # Do a layered plot of multiple parameters
             #
             # It creates a x/y plot, with an optional ordering field (time).
@@ -657,7 +664,7 @@ module Syskit
             #
             # @see daru_to_vega vega_simple_plot
             def vega_simple_plot(data, x:, y:, time: nil, mark: "line")
-                data = daru_to_vega(data) unless data.respond_to?(:to_hash)
+                data = daru_to_vega(data) unless vega_data?(data)
                 spec = vega_simple_view(
                     x: x, y: { repeat: "layer" },
                     time: time, mark: mark
