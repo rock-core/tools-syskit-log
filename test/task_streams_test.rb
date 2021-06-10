@@ -83,18 +83,18 @@ module Syskit::Log
                 end
             end
 
-            describe "access through #method_missing" do
+            describe "access through properties" do
                 it "returns a single match if there is one" do
-                    assert_equal "/property0", subject.object0_property.name
+                    assert_equal "/property0", subject.properties.object0.name
                 end
                 it "raises Ambiguous for multiple matches" do
                     assert_raises(Ambiguous) do
-                        subject.object1_property
+                        subject.properties.object1
                     end
                 end
                 it "raises NoMethodError if there are no matches" do
                     assert_raises(NoMethodError) do
-                        subject.does_not_exist_property
+                        subject.properties.does_not_exist
                     end
                 end
             end

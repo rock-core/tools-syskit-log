@@ -95,11 +95,36 @@ module Syskit::Log
             objects.first
         end
 
+        # Property accessor object, mimicking the 'properties' accessor on Syskit tasks
+        class Properties < BasicObject
+            def initialize(task_streams)
+                @task_streams = task_streams
+            end
+
+            def respond_to_missing?(name, _include_private = true)
+                @task_streams.find_property_by_name(name.to_s)
+            end
+
+            def method_missing(name, *args)
+                if (property = @task_streams.find_property_by_name(name.to_s))
+                    return property if args.empty?
+
+                    raise ArgumentError,
+                          "wrong number of arguments (given #{args.size}, expected 0)"
+                end
+
+                super
+            end
+        end
+
+        def properties
+            Properties.new(self)
+        end
+
         def respond_to_missing?(m, include_private = true)
             MetaRuby::DSLs.has_through_method_missing?(
                 self, m,
-                "_port" => "find_port_by_name",
-                "_property" => "find_property_by_name"
+                "_port" => "find_port_by_name"
             ) || super
         end
 
@@ -108,8 +133,7 @@ module Syskit::Log
         def method_missing(m, *args)
             MetaRuby::DSLs.find_through_method_missing(
                 self, m, args,
-                "_port" => "find_port_by_name",
-                "_property" => "find_property_by_name"
+                "_port" => "find_port_by_name"
             ) || super
         end
 
