@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# frozen_string_literalr: true
-
 require "syskit/log"
 require "syskit/log/daru"
 require "syskit/log/datastore"
