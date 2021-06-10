@@ -128,7 +128,7 @@ module Syskit
                 metadata = dataset.metadata.map do |k, v|
                     next if k == "description"
 
-                    "#{k}: #{v.to_a.sort.join(', ')}"
+                    "#{k}: #{v.to_a.compact.sort.join(', ')}"
                 end.compact.join("; ")
 
                 "#{description} - #{metadata}"
