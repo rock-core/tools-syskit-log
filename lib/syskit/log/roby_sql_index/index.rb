@@ -34,6 +34,10 @@ module Syskit
                     @metadata = rom.relations[:metadata]
                 end
 
+                def close
+                    @rom.disconnect
+                end
+
                 # Access to models stored in the index
                 #
                 # @return [Models]

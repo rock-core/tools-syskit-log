@@ -176,10 +176,22 @@ module Syskit::Log
                 roby_sql_index = RobySQLIndex::Index.create(cache_path + "roby.sql")
                 roby_event_logs.each do |roby_event_log|
                     copy_roby_event_log(
-                        output_dir_path, roby_event_log,
-                        roby_sql_index,
-                        cache_path: cache_path,
-                        reporter: reporter
+                        output_dir_path, roby_event_log, roby_sql_index,
+                        cache_path: cache_path, reporter: reporter
+                    )
+                rescue RuntimeError => e
+                    reporter.error "Failed to create index from Roby log file"
+                    reporter.error "The log file will still be part of the dataset. "\
+                                    "You may attempt to re-create the cached version "\
+                                    "later once what is likely to be a bug is fixed"
+                    e.full_message.split("\n").each do |line|
+                        reporter.error line
+                    end
+                    roby_sql_index.close
+                    FileUtils.rm_f cache_path + "roby.sql"
+
+                    copy_roby_event_log_no_index(
+                        output_dir_path, roby_event_log, reporter: reporter
                     )
                 end
 
@@ -269,11 +281,13 @@ module Syskit::Log
             #   pathname to the file's SHA256 digest
             def copy_roby_event_log(
                 output_dir, event_log_path, roby_sql_index,
-                cache_path: output_dir,
-                reporter: CLI::NullReporter.new
+                cache_path: output_dir, reporter: CLI::NullReporter.new
             )
-                in_reader, out_io, index_io, digest, mtime =
-                    prepare_roby_event_log_copy(output_dir, event_log_path, cache_path)
+                in_reader, out_path, out_io, digest, in_stat =
+                    prepare_roby_event_log_copy(output_dir, event_log_path)
+                index_path, index_io = create_roby_event_log_index(
+                    out_path, event_log_path, cache_path
+                )
                 reporter.reset_progressbar(
                     "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
                 )
@@ -282,35 +296,107 @@ module Syskit::Log
                 metadata_update =
                     roby_sql_index.start_roby_log_import(File.basename(out_io.path))
                 until in_reader.eof?
+                    valid = copy_roby_event_log_one_cycle(
+                        in_reader, out_io, index_io,
+                        rebuilder, roby_sql_index, in_stat,
+                        metadata_update, digest, reporter
+                    )
+                    break unless valid
+                end
+
+                out_io.close
+                FileUtils.touch out_path.to_s, mtime: in_stat.mtime
+                Hash[out_path => digest]
+            rescue StandardError
+                out_path&.unlink
+                index_path&.unlink
+                raise
+            ensure
+                in_reader&.close
+                index_io&.close
+                out_io.close if out_io && !out_io.closed?
+            end
+
+            # @api private
+            #
+            # Read, decode and copy one cycle worth of Roby log data
+            def copy_roby_event_log_one_cycle( # rubocop:disable Metrics/ParameterLists
+                in_reader, out_io, index_io,
+                rebuilder, roby_sql_index, in_stat,
+                metadata_update, digest, reporter
+            )
+                pos = in_reader.tell
+                reporter.current = pos
+                chunk = in_reader.read_one_chunk
+                cycle = in_reader.decode_one_chunk(chunk)
+
+                Roby::DRoby::Logfile.write_entry(out_io, chunk)
+                digest.update(chunk)
+
+                Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
+                roby_sql_index.add_one_cycle(metadata_update, rebuilder, cycle)
+                true
+            rescue Roby::DRoby::Logfile::TruncatedFileError => e
+                reporter.warn e.message
+                reporter.warn "truncating Roby log file"
+                index_io.rewind
+                Roby::DRoby::Logfile::Index.write_header(
+                    index_io, pos, in_stat.mtime
+                )
+                false
+            end
+
+            # @api private
+            #
+            # Copy the Roby logs into the target directory, but do not attempt
+            # to decode it and create an index. This is used as fallback if
+            # index creation fails.
+            #
+            # It computes the log file's SHA256 digests
+            #
+            # @param [Pathname] output_dir the target directory
+            # @param [Array<Pathname>] paths the input roby log files
+            # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
+            #   pathname to the file's SHA256 digest
+            def copy_roby_event_log_no_index(
+                output_dir, event_log_path,
+                reporter: CLI::NullReporter.new
+            )
+                in_reader, out_path, out_io, digest, in_stat =
+                    prepare_roby_event_log_copy(output_dir, event_log_path)
+                reporter.reset_progressbar(
+                    "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
+                )
+
+                until in_reader.eof?
                     begin
                         pos = in_reader.tell
                         reporter.current = pos
                         chunk = in_reader.read_one_chunk
-                        cycle = in_reader.decode_one_chunk(chunk)
 
                         Roby::DRoby::Logfile.write_entry(out_io, chunk)
                         digest.update(chunk)
-
-                        Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
-                        roby_sql_index.add_one_cycle(metadata_update, rebuilder, cycle)
                     rescue Roby::DRoby::Logfile::TruncatedFileError => e
                         reporter.warn e.message
                         reporter.warn "truncating Roby log file"
-                        index_io.rewind
-                        Roby::DRoby::Logfile::Index.write_header(index_io, pos, mtime)
                         break
                     end
                 end
 
                 out_io.close
+                FileUtils.touch out_path.to_s, mtime: in_stat.mtime
+                Hash[out_path => digest]
+            ensure
                 in_reader.close
-                index_io.close
-                FileUtils.touch out_io.path.to_s, mtime: mtime
-
-                Hash[out_io.path => digest]
+                out_io.close unless out_io.closed?
             end
 
-            def prepare_roby_event_log_copy(output_dir, event_log_path, cache_path)
+            # @api private
+            #
+            # Initialize the IOs and objects needed for a roby event log copy
+            #
+            # Helper to both {#copy_roby_event_log} and {#copy_roby_event_log_no_index}
+            def prepare_roby_event_log_copy(output_dir, event_log_path)
                 i = 0
                 i += 1 while (target_path = output_dir + "roby-events.#{i}.log").file?
 
@@ -329,12 +415,19 @@ module Syskit::Log
                 out_io.write(prologue)
                 digest.update(prologue)
 
-                index_io = (cache_path + target_path.basename.sub_ext(".idx")).open("w")
+                [reader, target_path, out_io, digest, in_stat]
+            end
+
+            # @api private
+            #
+            # Create the index file to be filled by {#copy_roby_event_log}
+            def create_roby_event_log_index(out_path, in_stat, cache_path)
+                index_path = cache_path + out_path.basename.sub_ext(".idx")
+                index_io = index_path.open("w")
                 Roby::DRoby::Logfile::Index.write_header(
                     index_io, in_stat.size, in_stat.mtime
                 )
-
-                [reader, out_io, index_io, digest, in_stat.mtime]
+                [index_path, index_io]
             end
 
             # @api private

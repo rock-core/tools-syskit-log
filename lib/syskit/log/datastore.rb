@@ -106,6 +106,7 @@ module Syskit::Log
         # Enumerate the store's datasets
         #
         # @param (see #get)
+        # @yieldparam [Dataset] dataset
         def each_dataset(**get_arguments)
             return enum_for(__method__, **get_arguments) unless block_given?
 
@@ -148,6 +149,8 @@ module Syskit::Log
         end
 
         # Enumerate the datasets matching this query
+        #
+        # @return [Array<Dataset>]
         def find_all(metadata, **get_arguments)
             each_dataset(**get_arguments).find_all do |ds|
                 metadata.all? do |key, values|
