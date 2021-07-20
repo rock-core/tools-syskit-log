@@ -346,6 +346,64 @@ module Syskit
                 end
             end
 
+            describe "daru_to_vega" do
+                before do
+                    @context = make_context
+                end
+
+                it "converts a daru frame into vega's representation" do
+                    frame = ::Daru::DataFrame.new(
+                        a: [1, 2, 3],
+                        b: [4, 5, 6]
+                    )
+                    expected = [
+                        { a: 1, b: 4 },
+                        { a: 2, b: 5 },
+                        { a: 3, b: 6 }
+                    ]
+                    assert_equal expected, @context.daru_to_vega(frame)
+                end
+
+                it "converts NaNs into nils" do
+                    frame = ::Daru::DataFrame.new(
+                        a: [1.0, Float::NAN, 3.0],
+                        b: [4.0, 5.0, Float::NAN]
+                    )
+                    expected = [
+                        { a: 1.0, b: 4.0 },
+                        { a: nil, b: 5.0 },
+                        { a: 3.0, b: nil }
+                    ]
+                    assert_equal expected, @context.daru_to_vega(frame)
+                end
+
+                it "deals with nils in the columns" do
+                    frame = ::Daru::DataFrame.new(
+                        a: [1.0, Float::NAN, nil],
+                        b: [4.0, 5.0, Float::NAN]
+                    )
+                    expected = [
+                        { a: 1.0, b: 4.0 },
+                        { a: nil, b: 5.0 },
+                        { a: nil, b: nil }
+                    ]
+                    assert_equal expected, @context.daru_to_vega(frame)
+                end
+
+                it "detects floating-point columns even if they start with nil" do
+                    frame = ::Daru::DataFrame.new(
+                        a: [nil, Float::NAN, 3.0],
+                        b: [nil, 5.0, Float::NAN]
+                    )
+                    expected = [
+                        { a: nil, b: nil },
+                        { a: nil, b: 5.0 },
+                        { a: 3.0, b: nil }
+                    ]
+                    assert_equal expected, @context.daru_to_vega(frame)
+                end
+            end
+
             def make_context
                 context = Object.new
                 context.extend DSL

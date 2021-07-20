@@ -597,7 +597,7 @@ module Syskit
 
                 data.each do |h|
                     float_keys.each do |k|
-                        h[k] = nil if h[k].nan?
+                        h[k] = nil if h[k]&.nan?
                     end
                 end
             end
