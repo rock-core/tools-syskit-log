@@ -367,16 +367,46 @@ module Syskit
             #
             # @param [Array] streams an array if objects that can be converted to
             #   samples using {#samples_of}
-            def to_daru_frame(*streams, timeout: nil)
+            # @param [Boolean] accurate prefer accuracy over speed (see below)
+            # @param [Float,nil] timeout how long, since the last received sample
+            #   from a stream, the method will start introducing NAs to replace
+            #   the stream's values (NA is either NAN for float values, or nil)
+            # @yield a {FrameBuilder} object used to describe the frame to be built
+            #
+            # This method uses the first given stream as a "master" stream, and
+            # attempts to load the value of the remaining columns at the same
+            # real time than the value from the master stream.
+            #
+            # How the method deals with resampling (when {#interval_sample_every} has
+            # been called) depends on the `accurate` parameter. When `false`,
+            # the streams are first re-sampled and then aligned. When doing coarse
+            # sampling, this can introduce significant misalignments. When true,
+            # the method resamples only the first stream, and then aligns the
+            # other full non-resampled streams. accurante: false is significantly
+            # faster for very dense streams (w.r.t. the sampling period)
+            def to_daru_frame(*streams, accurate: false, timeout: nil)
+                return ::Daru::DataFrame.new if streams.empty?
+
                 interval_start, interval_end = streams.map(&:interval_lg).transpose
                 interval_start = interval_start.min
                 interval_end = interval_end.max
                 interval_start = [interval_start, @interval[0]].max if @interval[0]
                 interval_end = [interval_end, @interval[1]].min if @interval[1]
 
-                samples = streams.map do |s|
-                    samples_of(s, from: interval_start, to: interval_end)
+                if accurate
+                    first_samples =
+                        samples_of(streams[0], from: interval_start, to: interval_end)
+
+                    samples = [first_samples] + streams[1..-1].map do |s|
+                        samples_of(s, from: interval_start, to: interval_end,
+                                      every_samples: nil, every_seconds: nil)
+                    end
+                else
+                    samples = streams.map do |s|
+                        samples_of(s, from: interval_start, to: interval_end)
+                    end
                 end
+
                 builders = streams.map { |s| Daru::FrameBuilder.new(s.type) }
                 yield(*builders)
 
@@ -398,17 +428,21 @@ module Syskit
             # Restricts a data stream to the current interval and sample selection
             #
             # @see interval_select interval_shift_start interval_shift_end
-            def samples_of(stream, from: @interval[0], to: @interval[1])
+            def samples_of(
+                stream, from: @interval[0], to: @interval[1],
+                every_samples: @interval_sample_by_sample,
+                every_seconds: @interval_sample_by_time
+            )
                 stream = stream.syskit_eager_load if stream.syskit_eager_load
                 stream = stream.from_logical_time(from) if from
                 stream = stream.to_logical_time(to + TIME_EPSILON) if to
 
-                if @interval_sample_by_sample
-                    stream = stream.resample_by_index(@interval_sample_by_sample)
+                if every_samples
+                    stream = stream.resample_by_index(every_samples)
                 end
 
-                if @interval_sample_by_time
-                    stream = stream.resample_by_time(@interval_sample_by_time)
+                if every_seconds
+                    stream = stream.resample_by_time(every_seconds)
                 end
                 stream
             end
