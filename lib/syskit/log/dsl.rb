@@ -190,6 +190,11 @@ module Syskit
                 interval_grow(grow)
             end
 
+            # Select the whole dataset as the interval
+            def interval_select_whole(reset_zero: true)
+                interval_select(*@dataset.interval_lg, reset_zero: reset_zero)
+            end
+
             # @api private
             #
             # Try to resolve the given object as a time
@@ -281,6 +286,12 @@ module Syskit
 
                 @interval_sample_by_sample = samples
                 @interval_sample_by_time = seconds
+            end
+
+            # Reset sampling intervals
+            def interval_sample_everything
+                @interval_sample_by_sample = nil
+                @interval_sample_by_time = nil
             end
 
             # Reset the interval to the last interval selected by
