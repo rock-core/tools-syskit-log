@@ -83,6 +83,15 @@ module Syskit
                         assert_equal %w[start failed stop],
                                      @task_model.each_event.map(&:name)
                     end
+
+                    it "can be built by ID directly from the index" do
+                        assert_equal @task_model, @index.task_model_by_id(@task_model.id)
+                    end
+
+                    it "raises if the model ID does not exist" do
+                        e = assert_raises(ArgumentError) { @index.task_model_by_id(-1) }
+                        assert_equal "no task model with ID -1", e.message
+                    end
                 end
 
                 describe "an event model" do
@@ -134,6 +143,17 @@ module Syskit
                         ev = emissions.first
                         assert_equal "start", ev.name
                         assert_equal @task, ev.task
+                    end
+
+                    it "can be built by ID directly from the index" do
+                        task = @index.task_by_id(@task.id)
+                        assert_equal @task, task
+                        assert_equal @root.Namespace.M, task.model
+                    end
+
+                    it "raises if the ID does not exist" do
+                        e = assert_raises(ArgumentError) { @index.task_by_id(-1) }
+                        assert_equal "no task with ID -1", e.message
                     end
                 end
 

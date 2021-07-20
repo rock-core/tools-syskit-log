@@ -245,6 +245,23 @@ module Syskit
                     @tasks.where(model: model)
                 end
 
+                # Task model accessor from its ID
+                def task_model_by_id(model_id)
+                    name = @models.where(id: model_id).pluck(:name).first
+                    raise ArgumentError, "no task model with ID #{model_id}" unless name
+
+                    Accessors::TaskModel.new(self, name, model_id)
+                end
+
+                # Task accessor from its ID
+                def task_by_id(id)
+                    model_id = @tasks.where(id: id).pluck(:model_id).first
+                    raise ArgumentError, "no task with ID #{id}" unless model_id
+
+                    model = task_model_by_id(model_id)
+                    Accessors::Task.new(self, id, model)
+                end
+
                 # Returns the full name of an event
                 def event_full_name(event)
                     model_id = @tasks.by_pk(event.task_id).pluck(:id)
