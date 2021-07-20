@@ -64,6 +64,14 @@ module Syskit
                         assert_equal Time.parse("2020-09-21 15:16:57.363323 -0300"),
                                      metadata.time_end
                     end
+
+                    it "returns global start/stop time" do
+                        @index.add_roby_log(roby_log_path("model_registration"))
+                        assert_equal Time.parse("2020-09-21 15:16:55.148644 -0300"),
+                                     @index.time_start
+                        assert_equal Time.parse("2020-09-21 15:54:24.774132 -0300"),
+                                     @index.time_end
+                    end
                 end
             end
         end

@@ -206,6 +206,11 @@ module Syskit
                 # that is not registered in the index
                 class NoSuchLogfile < RuntimeError; end
 
+                # Enumerate information about each log added to this index
+                def each_log_metadata(&block)
+                    @metadata.each(&block)
+                end
+
                 # Return the metadata information for a log file from its basename
                 #
                 # @param [String] name
@@ -215,6 +220,14 @@ module Syskit
                     end
 
                     info
+                end
+
+                def time_start
+                    @metadata.order(:time_start).first.time_start
+                end
+
+                def time_end
+                    @metadata.order(:time_end).last.time_end
                 end
 
                 # Tests whether there are events with the given name
