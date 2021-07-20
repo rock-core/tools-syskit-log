@@ -763,6 +763,25 @@ module Syskit
                     .repeat(layer: Array(y))
                     .spec(spec)
             end
+
+            # Wrapper for a raw string to pass it to iruby as raw HTML
+            class RawHTML
+                def initialize(html)
+                    @html = html
+                end
+
+                def to_s
+                    @html
+                end
+
+                def to_html
+                    @html
+                end
+            end
+
+            def raw_html(html)
+                RawHTML.new(html)
+            end
         end
     end
 end
