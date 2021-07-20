@@ -209,6 +209,27 @@ module Syskit::Log
                     index = Roby::DRoby::Logfile::Index.read(index_path)
                     assert index.valid_for?(log_path)
                 end
+                it "skips the roby index if it fails to load" do
+                    FileUtils.cp roby_log_path("model_registration"),
+                                 logfile_pathname + "test-events.log"
+
+                    mtime = Time.now - 10
+                    FileUtils.touch logfile_pathname + "test-events.log",
+                                    mtime: mtime
+                    flexmock(RobySQLIndex::Index)
+                        .new_instances
+                        .should_receive(:add_one_cycle).and_raise(RuntimeError)
+                    imported = nil
+                    capture_io do
+                        imported = import.import([logfile_pathname])
+                    end
+
+                    log_path = imported.dataset_path + "roby-events.0.log"
+                    assert_equal mtime, log_path.stat.mtime
+
+                    refute (imported.cache_path + "roby.sql").exist?
+                    refute (imported.cache_path + "roby-events.0.idx").exist?
+                end
                 it "handles truncated Roby logs" do
                     in_log_path = logfile_pathname + "test-events.log"
                     FileUtils.cp roby_log_path("model_registration"), in_log_path
