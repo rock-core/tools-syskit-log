@@ -666,10 +666,17 @@ module Syskit
             #   Vega.lite.data(data).repeat(%w[speed power]).spec(line)
             #
             # @see daru_to_vega vega_simple_plot
-            def vega_simple_view(x:, y:, time: nil, mark: "line")
+            def vega_simple_view(x:, y:, time: nil, mark: "line", color: y)
                 order =
                     if time
                         { order: { field: time, type: "quantitative" } }
+                    else
+                        {}
+                    end
+
+                color =
+                    if color
+                        { color: { datum: color.to_s } }
                     else
                         {}
                     end
@@ -679,7 +686,7 @@ module Syskit
                     .encoding(
                         x: { field: x, type: "quantitative", scale: { zero: false } },
                         y: { field: y, type: "quantitative", scale: { zero: false } },
-                        **order
+                        **order, **color
                     )
             end
 
