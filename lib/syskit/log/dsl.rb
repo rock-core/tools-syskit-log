@@ -582,10 +582,17 @@ module Syskit
             end
 
             # Convert a Daru frame into a vega data array
-            def daru_to_vega(frame)
-                data = frame.each_row.map(&:to_h)
+            def daru_to_vega(frame, every: 1)
+                data = []
+                frame.each_row.each_with_index do |row, i|
+                    data << row.to_h if i % every == 0
+                end
 
                 keys = data.first.keys
+                frame.each_vector_with_index do |v, _|
+                    keys.delete(v) if v.dtype == :gsl
+                end
+
                 float_keys = []
                 data.each do |sample|
                     sample.each do |k, v|

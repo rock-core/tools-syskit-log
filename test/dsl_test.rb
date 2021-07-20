@@ -402,6 +402,19 @@ module Syskit
                     ]
                     assert_equal expected, @context.daru_to_vega(frame)
                 end
+
+                it "allows to do a simple resampling of the data" do
+                    frame = ::Daru::DataFrame.new(
+                        a: [nil, Float::NAN, 3.0, 4.0, 5.0],
+                        b: [nil, 5.0, Float::NAN, 6.0, 7.0]
+                    )
+                    expected = [
+                        { a: nil, b: nil },
+                        { a: 3.0, b: nil },
+                        { a: 5.0, b: 7.0 }
+                    ]
+                    assert_equal expected, @context.daru_to_vega(frame, every: 2)
+                end
             end
 
             def make_context
