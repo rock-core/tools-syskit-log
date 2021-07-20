@@ -8,7 +8,15 @@ module Syskit
                 # @api private
                 #
                 # Create the schema on a ROM database configuration
-                def self.schema(config)
+                def self.schema(config) # rubocop:disable Metrics/AbcSize
+                    config.default.create_table :metadata do
+                        primary_key :id
+                        column :name, String, null: false
+                        column :cycle_count, Integer, null: false
+                        column :time_start, Time, null: false
+                        column :time_end, Time, null: false
+                    end
+
                     config.default.create_table :models do
                         primary_key :id
                         column :name, String, null: false
@@ -31,7 +39,15 @@ module Syskit
                 def self.configure(config)
                     Sequel.application_timezone = :local
                     Sequel.database_timezone = :utc
-                    config.register_relation(Models, Tasks, EmittedEvents)
+                    config.register_relation(Models, Tasks, EmittedEvents, Metadata)
+                end
+
+                # Representation of metadata about the whole log
+                class Metadata < ROM::Relation[:sql]
+                    schema(:metadata, infer: true)
+
+                    struct_namespace Entities
+                    auto_struct true
                 end
 
                 # Representation of a Roby model

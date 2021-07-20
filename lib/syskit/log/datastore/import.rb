@@ -279,7 +279,8 @@ module Syskit::Log
                 )
 
                 rebuilder = Roby::DRoby::PlanRebuilder.new
-                roby_sql_index.start_roby_log_import
+                metadata_update =
+                    roby_sql_index.start_roby_log_import(File.basename(out_io.path))
                 until in_reader.eof?
                     begin
                         pos = in_reader.tell
@@ -291,7 +292,7 @@ module Syskit::Log
                         digest.update(chunk)
 
                         Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
-                        roby_sql_index.add_one_cycle(rebuilder, cycle)
+                        roby_sql_index.add_one_cycle(metadata_update, rebuilder, cycle)
                     rescue Roby::DRoby::Logfile::TruncatedFileError => e
                         reporter.warn e.message
                         reporter.warn "truncating Roby log file"
