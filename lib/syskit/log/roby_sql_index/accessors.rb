@@ -34,11 +34,12 @@ module Syskit
                     def method_missing(m, *args, **kw, &block)
                         full_name = "#{@prefix}#{m}"
                         pattern = "#{@prefix}#{m}#{@separator}"
-                        if m == :OroGen
-                            OroGenNamespace.new(@index, "OroGen")
-                        elsif @index.models.where(name: full_name).exist?
+                        return OroGenNamespace.new(@index, "OroGen") if m == :OroGen
+
+                        model_id = @index.models.where(name: full_name).pluck(:id).first
+                        if model_id
                             validate_method_missing_noargs(m, args, kw)
-                            TaskModel.new(@index, full_name)
+                            TaskModel.new(@index, full_name, model_id)
                         elsif @index.models.where { name.like("#{pattern}%") }.exist?
                             validate_method_missing_noargs(m, args, kw)
                             @namespace_class.new(@index, full_name)
@@ -79,10 +80,10 @@ module Syskit
                     # A unique ID for this task model
                     attr_reader :id
 
-                    def initialize(index, name)
+                    def initialize(index, name, id)
                         super(index, name)
                         @name = name
-                        @id = @index.models.where(name: name).one!.id
+                        @id = id
                         @query = @index.tasks.where(model_id: id)
                     end
 
