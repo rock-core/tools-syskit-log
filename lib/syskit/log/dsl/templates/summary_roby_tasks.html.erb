@@ -1,0 +1,32 @@
+<table>
+<thead>
+<tr>
+    <td>Model</td>
+    <td>ID</td>
+    <td>Start</td>
+    <td>Stop</td>
+    <td>Start (relative)</td>
+    <td>Stop (relative)</td>
+</tr>
+</thead>
+
+<% Array(roby_tasks).each do |task| %>
+<%
+    if (start_t = task.start_time)
+        start_t_relative = relative_time(start_t)
+    end
+
+    if (stop_t = task.stop_time)
+        stop_t_relative = relative_time(stop_t)
+    end
+%>
+<tr>
+    <td>roby.<%= task.model.name.gsub("::", ".") %></td>
+    <td><%= task.id %></td>
+    <td><%= start_t %></td>
+    <td><%= stop_t %></td>
+    <td><%= start_t_relative %></td>
+    <td><%= stop_t_relative %></td>
+</tr>
+<% end %>
+</table>

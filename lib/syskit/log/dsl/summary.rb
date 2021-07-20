@@ -5,9 +5,31 @@ module Syskit
         module DSL
             # @api private
             class Summary
-                def initialize(object, zero_time)
+                def initialize(object, zero_time, type: guess_type(object))
                     @object = object
                     @zero_time = zero_time
+                    @type = type
+                end
+
+                def summarize(object, type: guess_type(object))
+                    Summary.new(object, @zero_time, type: type).to_html
+                end
+
+                SUMMARY_TYPES = {
+                    Array => "array",
+                    Datastore::Dataset => "dataset",
+                    TaskStreams => "task_streams",
+                    LazyDataStream => "data_stream",
+                    RobySQLIndex::Accessors::TaskModel => "roby_task_model",
+                    RobySQLIndex::Accessors::Task => "roby_tasks"
+                }.freeze
+
+                def guess_type(object)
+                    SUMMARY_TYPES.each do |matcher, name|
+                        return name if matcher === object
+                    end
+
+                    raise ArgumentError, "do not know how to summarize #{object}"
                 end
 
                 def relative_time(time)
@@ -15,16 +37,7 @@ module Syskit
                 end
 
                 def to_html
-                    case @object
-                    when Datastore::Dataset
-                        object_to_html(@object, "dataset")
-                    when TaskStreams
-                        object_to_html(@object, "task_streams")
-                    when LazyDataStream
-                        object_to_html(@object, "data_stream")
-                    when RobySQLIndex::Accessors::TaskModel
-                        object_to_html(@object, "roby_task_model")
-                    end
+                    object_to_html(@object, @type)
                 end
 
                 def object_to_html(object, type)

@@ -486,8 +486,8 @@ module Syskit
             end
 
             # Generic entry point to see information about an object
-            def summarize(object)
-                DSL::Summary.new(object, interval_zero_time)
+            def summarize(object, **options)
+                DSL::Summary.new(object, interval_zero_time, **options)
             end
 
             # Sample period information about a port or all ports of a task
