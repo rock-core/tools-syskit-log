@@ -477,7 +477,7 @@ module Syskit
             def time_vector_of(stream, &block)
                 frame = to_daru_frame(stream) do |df|
                     if block
-                        df.add_time_field("time", &block) if block
+                        df.add_time_field("time", &block)
                     else
                         df.add_logical_time
                     end
