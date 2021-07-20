@@ -4,6 +4,9 @@ module Syskit
     module Log
         module RobySQLIndex
             module Accessors
+                # Exception raised when trying to access an event that is not registered
+                class NoSuchEvent < RuntimeError; end
+
                 # Represents the query root
                 #
                 # It gives access to the constants under it through the method
@@ -99,10 +102,10 @@ module Syskit
 
                     # Return the event model with the given name
                     #
-                    # @raise ArgumentError if there are no events with that name
+                    # @raise NoSuchEvent if there are no events with that name
                     def event(name)
                         unless @index.history_of(@query).where(name: name).first
-                            raise ArgumentError, "no events named '#{name}' in #{self}'"
+                            raise NoSuchEvent, "no events named '#{name}' in #{self}'"
                         end
 
                         EventModel.new(@index, name, self)
@@ -209,11 +212,26 @@ module Syskit
                         @model = model
                     end
 
+                    def start_time
+                        event("start").first&.time
+                    rescue NoSuchEvent # rubocop:disable Lint/SuppressedException
+                    end
+
+                    def stop_time
+                        stop_ev =
+                            begin
+                                event("stop").first
+                            rescue NoSuchEvent # rubocop:disable Lint/SuppressedException
+                            end
+
+                        stop_ev&.time || (@index.time_end if start_time)
+                    end
+
                     # Return the task's activation interval
                     #
                     # This is named like this to match Pocolog::DataStream's interface
                     def interval_lg
-                        [start_event.first.time, stop_event.first.time]
+                        [start_time, stop_time]
                     end
 
                     def ==(other)

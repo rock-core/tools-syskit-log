@@ -45,6 +45,26 @@ module Syskit
                     end
                 end
 
+                describe "truncated log files" do
+                    describe "tasks without a stop" do
+                        before do
+                            @index.add_roby_log(roby_log_path("event_emission_truncated"))
+                        end
+
+                        it "does not return the stop event" do
+                            task = @index.tasks.one!
+                            events = @index.history_of(task).to_a
+                            refute(events.find { |ev| ev.name == "stop" })
+                        end
+
+                        it "returns the end time of the log itself "\
+                           "as the end time of the task" do
+                            task = @index.task_by_id(@index.tasks.one!.id)
+                            assert_equal @index.time_end, task.stop_time
+                        end
+                    end
+                end
+
                 describe "log metadata" do
                     before do
                         @index.add_roby_log(roby_log_path("event_emission"))
