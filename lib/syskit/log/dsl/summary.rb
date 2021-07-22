@@ -21,7 +21,8 @@ module Syskit
                     TaskStreams => "task_streams",
                     LazyDataStream => "data_stream",
                     RobySQLIndex::Accessors::TaskModel => "roby_task_model",
-                    RobySQLIndex::Accessors::Task => "roby_tasks"
+                    RobySQLIndex::Accessors::Task => "roby_tasks",
+                    RobySQLIndex::Accessors::Event => "roby_events"
                 }.freeze
 
                 def guess_type(object)
