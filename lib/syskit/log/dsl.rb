@@ -190,6 +190,11 @@ module Syskit
                 interval_grow(grow)
             end
 
+            # Select the whole dataset as the interval
+            def interval_select_whole(reset_zero: true)
+                interval_select(*@dataset.interval_lg, reset_zero: reset_zero)
+            end
+
             # @api private
             #
             # Try to resolve the given object as a time
@@ -283,6 +288,12 @@ module Syskit
                 @interval_sample_by_time = seconds
             end
 
+            # Reset sampling intervals
+            def interval_sample_everything
+                @interval_sample_by_sample = nil
+                @interval_sample_by_time = nil
+            end
+
             # Reset the interval to the last interval selected by
             # {#interval_select_from_stream}
             def interval_reset(reset_zero: true)
@@ -356,16 +367,46 @@ module Syskit
             #
             # @param [Array] streams an array if objects that can be converted to
             #   samples using {#samples_of}
-            def to_daru_frame(*streams, timeout: nil)
+            # @param [Boolean] accurate prefer accuracy over speed (see below)
+            # @param [Float,nil] timeout how long, since the last received sample
+            #   from a stream, the method will start introducing NAs to replace
+            #   the stream's values (NA is either NAN for float values, or nil)
+            # @yield a {FrameBuilder} object used to describe the frame to be built
+            #
+            # This method uses the first given stream as a "master" stream, and
+            # attempts to load the value of the remaining columns at the same
+            # real time than the value from the master stream.
+            #
+            # How the method deals with resampling (when {#interval_sample_every} has
+            # been called) depends on the `accurate` parameter. When `false`,
+            # the streams are first re-sampled and then aligned. When doing coarse
+            # sampling, this can introduce significant misalignments. When true,
+            # the method resamples only the first stream, and then aligns the
+            # other full non-resampled streams. accurante: false is significantly
+            # faster for very dense streams (w.r.t. the sampling period)
+            def to_daru_frame(*streams, accurate: false, timeout: nil)
+                return ::Daru::DataFrame.new if streams.empty?
+
                 interval_start, interval_end = streams.map(&:interval_lg).transpose
                 interval_start = interval_start.min
                 interval_end = interval_end.max
                 interval_start = [interval_start, @interval[0]].max if @interval[0]
                 interval_end = [interval_end, @interval[1]].min if @interval[1]
 
-                samples = streams.map do |s|
-                    samples_of(s, from: interval_start, to: interval_end)
+                if accurate
+                    first_samples =
+                        samples_of(streams[0], from: interval_start, to: interval_end)
+
+                    samples = [first_samples] + streams[1..-1].map do |s|
+                        samples_of(s, from: interval_start, to: interval_end,
+                                      every_samples: nil, every_seconds: nil)
+                    end
+                else
+                    samples = streams.map do |s|
+                        samples_of(s, from: interval_start, to: interval_end)
+                    end
                 end
+
                 builders = streams.map { |s| Daru::FrameBuilder.new(s.type) }
                 yield(*builders)
 
@@ -387,17 +428,21 @@ module Syskit
             # Restricts a data stream to the current interval and sample selection
             #
             # @see interval_select interval_shift_start interval_shift_end
-            def samples_of(stream, from: @interval[0], to: @interval[1])
+            def samples_of(
+                stream, from: @interval[0], to: @interval[1],
+                every_samples: @interval_sample_by_sample,
+                every_seconds: @interval_sample_by_time
+            )
                 stream = stream.syskit_eager_load if stream.syskit_eager_load
                 stream = stream.from_logical_time(from) if from
                 stream = stream.to_logical_time(to + TIME_EPSILON) if to
 
-                if @interval_sample_by_sample
-                    stream = stream.resample_by_index(@interval_sample_by_sample)
+                if every_samples
+                    stream = stream.resample_by_index(every_samples)
                 end
 
-                if @interval_sample_by_time
-                    stream = stream.resample_by_time(@interval_sample_by_time)
+                if every_seconds
+                    stream = stream.resample_by_time(every_seconds)
                 end
                 stream
             end
@@ -486,8 +531,8 @@ module Syskit
             end
 
             # Generic entry point to see information about an object
-            def summarize(object)
-                DSL::Summary.new(object, interval_zero_time)
+            def summarize(object, **options)
+                DSL::Summary.new(object, interval_zero_time, **options)
             end
 
             # Sample period information about a port or all ports of a task
@@ -537,10 +582,17 @@ module Syskit
             end
 
             # Convert a Daru frame into a vega data array
-            def daru_to_vega(frame)
-                data = frame.each_row.map(&:to_h)
+            def daru_to_vega(frame, every: 1)
+                data = []
+                frame.each_row.each_with_index do |row, i|
+                    data << row.to_h if i % every == 0
+                end
 
                 keys = data.first.keys
+                frame.each_vector_with_index do |v, _|
+                    keys.delete(v) if v.dtype == :gsl
+                end
+
                 float_keys = []
                 data.each do |sample|
                     sample.each do |k, v|
@@ -552,7 +604,7 @@ module Syskit
 
                 data.each do |h|
                     float_keys.each do |k|
-                        h[k] = nil if h[k].nan?
+                        h[k] = nil if h[k]&.nan?
                     end
                 end
             end
@@ -621,10 +673,17 @@ module Syskit
             #   Vega.lite.data(data).repeat(%w[speed power]).spec(line)
             #
             # @see daru_to_vega vega_simple_plot
-            def vega_simple_view(x:, y:, time: nil, mark: "line")
+            def vega_simple_view(x:, y:, time: nil, mark: "line", color: y)
                 order =
                     if time
                         { order: { field: time, type: "quantitative" } }
+                    else
+                        {}
+                    end
+
+                color =
+                    if color
+                        { color: { datum: color.to_s } }
                     else
                         {}
                     end
@@ -634,7 +693,7 @@ module Syskit
                     .encoding(
                         x: { field: x, type: "quantitative", scale: { zero: false } },
                         y: { field: y, type: "quantitative", scale: { zero: false } },
-                        **order
+                        **order, **color
                     )
             end
 
@@ -703,6 +762,25 @@ module Syskit
                     .data(data)
                     .repeat(layer: Array(y))
                     .spec(spec)
+            end
+
+            # Wrapper for a raw string to pass it to iruby as raw HTML
+            class RawHTML
+                def initialize(html)
+                    @html = html
+                end
+
+                def to_s
+                    @html
+                end
+
+                def to_html
+                    @html
+                end
+            end
+
+            def raw_html(html)
+                RawHTML.new(html)
             end
         end
     end
