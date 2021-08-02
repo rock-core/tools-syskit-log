@@ -4,6 +4,9 @@ module Syskit
     module Log
         module RobySQLIndex
             module Accessors
+                # Exception raised when trying to access an event that is not registered
+                class NoSuchEvent < RuntimeError; end
+
                 # Represents the query root
                 #
                 # It gives access to the constants under it through the method
@@ -34,11 +37,12 @@ module Syskit
                     def method_missing(m, *args, **kw, &block)
                         full_name = "#{@prefix}#{m}"
                         pattern = "#{@prefix}#{m}#{@separator}"
-                        if m == :OroGen
-                            OroGenNamespace.new(@index, "OroGen")
-                        elsif @index.models.where(name: full_name).exist?
+                        return OroGenNamespace.new(@index, "OroGen") if m == :OroGen
+
+                        model_id = @index.models.where(name: full_name).pluck(:id).first
+                        if model_id
                             validate_method_missing_noargs(m, args, kw)
-                            TaskModel.new(@index, full_name)
+                            TaskModel.new(@index, full_name, model_id)
                         elsif @index.models.where { name.like("#{pattern}%") }.exist?
                             validate_method_missing_noargs(m, args, kw)
                             @namespace_class.new(@index, full_name)
@@ -79,10 +83,10 @@ module Syskit
                     # A unique ID for this task model
                     attr_reader :id
 
-                    def initialize(index, name)
+                    def initialize(index, name, id)
                         super(index, name)
                         @name = name
-                        @id = @index.models.where(name: name).one!.id
+                        @id = id
                         @query = @index.tasks.where(model_id: id)
                     end
 
@@ -98,10 +102,10 @@ module Syskit
 
                     # Return the event model with the given name
                     #
-                    # @raise ArgumentError if there are no events with that name
+                    # @raise NoSuchEvent if there are no events with that name
                     def event(name)
                         unless @index.history_of(@query).where(name: name).first
-                            raise ArgumentError, "no events named '#{name}' in #{self}'"
+                            raise NoSuchEvent, "no events named '#{name}' in #{self}'"
                         end
 
                         EventModel.new(@index, name, self)
@@ -208,11 +212,26 @@ module Syskit
                         @model = model
                     end
 
+                    def start_time
+                        event("start").first&.time
+                    rescue NoSuchEvent # rubocop:disable Lint/SuppressedException
+                    end
+
+                    def stop_time
+                        stop_ev =
+                            begin
+                                event("stop").first
+                            rescue NoSuchEvent # rubocop:disable Lint/SuppressedException
+                            end
+
+                        stop_ev&.time || (@index.time_end if start_time)
+                    end
+
                     # Return the task's activation interval
                     #
                     # This is named like this to match Pocolog::DataStream's interface
                     def interval_lg
-                        [start_event.first.time, stop_event.first.time]
+                        [start_time, stop_time]
                     end
 
                     def ==(other)

@@ -4,6 +4,9 @@ module Syskit
     module Log
         module RobySQLIndex
             module Entities
+                class Metadatum < ROM::Struct
+                end
+
                 class Model < ROM::Struct
                 end
 
