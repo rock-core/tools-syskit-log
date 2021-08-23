@@ -166,14 +166,25 @@ module Syskit::Log
                 assert_equal @digest, datastore.get(root_digest).digest
             end
 
-            it "lists redirections in the dataset digests" do
+            it "does not list redirections in the dataset digests by default" do
+                root_digest = Datastore::Dataset.string_digest("root")
+                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                datastore.write_redirect(root_digest, to: intermediate_digest)
+                datastore.write_redirect(intermediate_digest, to: @digest)
+
+                expected = Set[@digest]
+                assert_equal expected, datastore.each_dataset_digest.to_set
+            end
+
+            it "optionally lists redirections in the dataset digests" do
                 root_digest = Datastore::Dataset.string_digest("root")
                 intermediate_digest = Datastore::Dataset.string_digest("intermediate")
                 datastore.write_redirect(root_digest, to: intermediate_digest)
                 datastore.write_redirect(intermediate_digest, to: @digest)
 
                 expected = Set[root_digest, intermediate_digest, @digest]
-                assert_equal expected, datastore.each_dataset_digest.to_set
+                assert_equal expected,
+                             datastore.each_dataset_digest(redirects: true).to_set
             end
 
             it "resolves a partial digest that is a redirection" do
@@ -228,13 +239,13 @@ module Syskit::Log
             end
 
             it "resolves all datasets that have the given values in their metadata" do
-                datasets = @datastore.find_all("a" => %w[values])
+                datasets = @datastore.find_all({ "a" => %w[values] })
                 assert_equal [@ds_e, @ds_f].map(&:dataset_path).to_set,
                              datasets.map(&:dataset_path).to_set
             end
 
             it "requires all the given values to match (AND)" do
-                datasets = @datastore.find_all("a" => %w[some values])
+                datasets = @datastore.find_all({ "a" => %w[some values] })
                 assert_equal [@ds_e.dataset_path],
                              datasets.map(&:dataset_path).to_a
             end

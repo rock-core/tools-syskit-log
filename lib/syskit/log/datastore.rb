@@ -54,7 +54,7 @@ module Syskit::Log
         #
         # @param (see #get)
         def find_dataset_from_short_digest(digest, **get_arguments)
-            datasets = each_dataset_digest.find_all do |on_disk_digest|
+            datasets = each_dataset_digest(redirects: true).find_all do |on_disk_digest|
                 on_disk_digest.start_with?(digest)
             end
             if datasets.size > 1
@@ -83,15 +83,17 @@ module Syskit::Log
         end
 
         # Enumerate the store's datasets
-        def each_dataset_digest
-            return enum_for(__method__) unless block_given?
+        def each_dataset_digest(redirects: false)
+            return enum_for(__method__, redirects: redirects) unless block_given?
 
             core_path = (datastore_path + "core")
             core_path.each_entry do |dataset_path|
                 full_path = core_path + dataset_path
-                if Dataset.dataset?(full_path) || self.class.redirect?(full_path)
-                    yield(dataset_path.to_s)
-                end
+                valid_dataset =
+                    Dataset.dataset?(full_path) ||
+                    (redirects && self.class.redirect?(full_path))
+
+                yield(dataset_path.to_s) if valid_dataset
             end
         end
 
@@ -110,7 +112,7 @@ module Syskit::Log
         def each_dataset(**get_arguments)
             return enum_for(__method__, **get_arguments) unless block_given?
 
-            each_dataset_digest do |digest|
+            each_dataset_digest(redirects: false) do |digest|
                 yield(get(digest, **get_arguments))
             end
         end
