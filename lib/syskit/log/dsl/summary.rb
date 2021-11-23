@@ -5,14 +5,20 @@ module Syskit
         module DSL
             # @api private
             class Summary
-                def initialize(object, zero_time, type: guess_type(object))
+                # Option hash passed to {#initialize}
+                #
+                # It is accessible within the templates as 'options'
+                attr_reader :options
+
+                def initialize(object, zero_time, type: guess_type(object), **options)
                     @object = object
                     @zero_time = zero_time
                     @type = type
+                    @options = options
                 end
 
-                def summarize(object, type: guess_type(object))
-                    Summary.new(object, @zero_time, type: type).to_html
+                def summarize(object, type: guess_type(object), **options)
+                    Summary.new(object, @zero_time, type: type, **options).to_html
                 end
 
                 ARRAY_RENDERERS = {
