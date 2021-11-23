@@ -1,19 +1,22 @@
+<% arguments = options.fetch(:task_arguments, {}) %>
+
 <table>
 <thead>
 <tr>
-    <td>Task Model</td>
-    <td>Task ID</td>
     <td>Name</td>
-    <td>Time</td>
+    <td>Event ID</td>
+    <td>Task</td>
+    <td><% arguments.each do |name| %><%= name %><% end %></td>
 </tr>
 </thead>
 
 <% Array(roby_events).each do |ev| %>
+<% task = ev.task %>
 <tr>
-    <td>roby.<%= ev.task.model.name.gsub("::", ".") %></td>
-    <td><%= ev.task.id %></td>
-    <td><%= ev.model.name %></td>
+    <td>roby.<%= ev.task.model.name.gsub("::", ".") %>.<%= ev.model.name %>_event</td>
+    <td><%= ev.id %></td>
     <td><%= ev.time %></td>
+    <td><% arguments.each do |name| %><%= task.arguments.keys %><% end %></td>
 </tr>
 <% end %>
 </table>
