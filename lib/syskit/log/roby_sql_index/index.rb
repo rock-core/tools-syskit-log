@@ -166,7 +166,19 @@ module Syskit
                         !@registered_tasks[task.droby_id]
                     end
 
-                    model_ids = new_tasks.map { |t| { model_id: add_model(t.model) } }
+                    model_ids = new_tasks.map do |t|
+                        arguments_json =
+                            begin
+                                JSON.dump(t.arguments.to_hash)
+                            rescue StandardError
+                                JSON.dump({})
+                            end
+
+                        {
+                            model_id: add_model(t.model),
+                            arguments: arguments_json
+                        }
+                    end
                     new_task_ids =
                         @tasks
                         .command(:create, result: :many)
@@ -259,11 +271,11 @@ module Syskit
 
                 # Task accessor from its ID
                 def task_by_id(id)
-                    model_id = @tasks.where(id: id).pluck(:model_id).first
-                    raise ArgumentError, "no task with ID #{id}" unless model_id
+                    task = @tasks.where(id: id).first
+                    raise ArgumentError, "no task with ID #{id}" unless task
 
-                    model = task_model_by_id(model_id)
-                    Accessors::Task.new(self, id, model)
+                    model = task_model_by_id(task.model_id)
+                    Accessors::Task.new(self, task, model)
                 end
 
                 # Returns the full name of an event

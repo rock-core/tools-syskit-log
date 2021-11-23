@@ -116,6 +116,10 @@ module Syskit
                         @task = @root.Namespace.M.each_task.first
                     end
 
+                    it "gives access to the task's arguments" do
+                        assert_equal({ arg: 10 }, @task.arguments)
+                    end
+
                     it "allows to enumerate its emissions" do
                         emissions = @task.each_emission.to_a
                         assert_equal 3, emissions.size

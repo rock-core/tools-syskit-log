@@ -115,7 +115,7 @@ module Syskit
                         return enum_for(__method__) unless block_given?
 
                         @query.each do |obj|
-                            yield Task.new(@index, obj.id, self)
+                            yield Task.new(@index, obj, self)
                         end
                     end
 
@@ -149,7 +149,7 @@ module Syskit
 
                     # Return the task instance object with the given ID
                     def by_id(id)
-                        Task.new(@index, id, self)
+                        @index.task_by_id(id)
                     end
 
                     # @api private
@@ -199,17 +199,25 @@ module Syskit
 
                 # Represents a task instance
                 class Task
-                    # A unique ID
-                    attr_reader :id
                     # The task model
                     #
                     # @return [TaskModel]
                     attr_reader :model
 
-                    def initialize(index, id, model)
+                    def initialize(index, obj, model)
                         @index = index
-                        @id = id
+                        @obj = obj
                         @model = model
+                    end
+
+                    def id
+                        @obj.id
+                    end
+
+                    def arguments
+                        return @arguments if @arguments
+
+                        @arguments = JSON.load(@obj.arguments).transform_keys(&:to_sym) # rubocop:disable Security/JSONLoad
                     end
 
                     def start_time
@@ -242,7 +250,7 @@ module Syskit
                         return enum_for(__method__, **where) unless block_given?
 
                         query = @index.emitted_events
-                                      .where(task_id: @id, **where)
+                                      .where(task_id: id, **where)
                         query.each do |emission|
                             name = emission.name
                             yield Event.new(@index, emission.id, emission.time, name,

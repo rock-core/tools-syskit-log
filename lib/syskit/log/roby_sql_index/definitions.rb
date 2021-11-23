@@ -25,6 +25,8 @@ module Syskit
                     config.default.create_table :tasks do
                         primary_key :id
                         foreign_key :model_id, :models, null: false
+
+                        column :arguments, String, null: false
                     end
 
                     config.default.create_table :emitted_events do
