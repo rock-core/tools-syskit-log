@@ -33,6 +33,7 @@ module Syskit
                     TaskStreams => "task_streams",
                     LazyDataStream => "data_stream",
                     RobySQLIndex::Accessors::TaskModel => "roby_task_model",
+                    RobySQLIndex::Accessors::EventModel => "roby_event_model"
                 }.merge(ARRAY_RENDERERS).freeze
 
                 def guess_type(object)
