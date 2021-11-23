@@ -15,15 +15,19 @@ module Syskit
                     Summary.new(object, @zero_time, type: type).to_html
                 end
 
+                ARRAY_RENDERERS = {
+                    RobySQLIndex::Accessors::Task => "roby_tasks",
+                    RobySQLIndex::Accessors::Event => "roby_events"
+                }.freeze
+
                 SUMMARY_TYPES = {
                     Array => "array",
+                    Enumerator => "array",
                     Datastore::Dataset => "dataset",
                     TaskStreams => "task_streams",
                     LazyDataStream => "data_stream",
                     RobySQLIndex::Accessors::TaskModel => "roby_task_model",
-                    RobySQLIndex::Accessors::Task => "roby_tasks",
-                    RobySQLIndex::Accessors::Event => "roby_events"
-                }.freeze
+                }.merge(ARRAY_RENDERERS).freeze
 
                 def guess_type(object)
                     SUMMARY_TYPES.each do |matcher, name|
