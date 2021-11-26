@@ -318,11 +318,8 @@ module Syskit
 
             # Map a Time object into the interval value
             #
-            # @return [nil,Integer] nil if the time is outside the interval's bounds,
-            #   the relative time otherwise
+            # @return [Float] time relative to the current interval's zero time
             def interval_map_time(time)
-                return if time < @interval[0] || time > @interval[1]
-
                 time - @interval_zero_time
             end
 
