@@ -481,17 +481,32 @@ module Syskit::Log
             end
 
             desc "index [DATASETS]", "refreshes or rebuilds (with --force) the datastore indexes"
-            method_option :force, desc: "force rebuilding even indexes that look up-to-date",
-                                  type: :boolean, default: false
+            option :force, desc: "force rebuilding even indexes that look up-to-date",
+                           type: :boolean, default: false
+            option(
+                :only,
+                desc: "rebuild only these logs (accepted values are roby, pocolog)",
+                type: :array, default: %w[roby pocolog]
+            )
+
+            option :roby, desc: "rebuild only the Roby index", type: :boolean, default: false
             def index(*datasets)
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
                 reporter = create_reporter
                 datasets.each do |d|
                     reporter.title "Processing #{d.compute_dataset_digest}"
-                    Syskit::Log::Datastore.index_build(
-                        store, d, force: options[:force], reporter: reporter
-                    )
+                    index_build = Syskit::Log::Datastore::IndexBuild.new(store, d)
+                    if options[:only].include?("pocolog")
+                        index_build.rebuild_pocolog_indexes(
+                            force: options[:force], reporter: reporter
+                        )
+                    end
+                    if options[:only].include?("roby")
+                        index_build.rebuild_roby_index(
+                            force: options[:force], reporter: reporter
+                        )
+                    end
                 end
             end
 
