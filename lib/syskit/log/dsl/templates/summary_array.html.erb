@@ -6,19 +6,21 @@ elsif array.size < 1000
     klass = array[0].class
     if (r = ARRAY_RENDERERS[klass]) && array.all? { |o| o.kind_of?(klass) }
 %>
-        <%= summarize(array, kind: r) %>
+
+        <%= summarize(array, type: r) %>
 <%
     else
         array.each do |o|
 %>
-        <div><%= summarize(o) %></div>
+            <div><%= summarize(o) %></div>
 <%
         end
     end
 else
     array.each do |o|
 %>
-    <div><%= summarize(o) %></div>
-    <% end %>
+        <div><%= summarize(o) %></div>
+<%
+    end
 end
 %>

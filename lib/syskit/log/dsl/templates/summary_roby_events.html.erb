@@ -1,22 +1,39 @@
-<% arguments = options.fetch(:task_arguments, {}) %>
+<%
+roby_events = Array(roby_events)
+
+arguments = options.fetch(:task_arguments, []).map(&:to_sym)
+with_task_model =
+    if options.key?(:with_task_model)
+        options[:with_task_model]
+    elsif roby_events.size < 1000
+        roby_events.map { |ev| ev.task.model.id }.uniq.size > 1
+    else
+        true
+    end
+%>
 
 <table>
 <thead>
 <tr>
     <td>Name</td>
     <td>Event ID</td>
-    <td>Task</td>
+    <td>Task ID</td>
+    <td>Time</td>
     <td><% arguments.each do |name| %><%= name %><% end %></td>
 </tr>
 </thead>
 
-<% Array(roby_events).each do |ev| %>
-<% task = ev.task %>
+<%
+roby_events.each do |ev|
+    task = ev.task
+    event_name_prefix = "roby.#{ev.task.model.name.gsub("::", ".")}." if with_task_model
+%>
 <tr>
-    <td>roby.<%= ev.task.model.name.gsub("::", ".") %>.<%= ev.model.name %>_event</td>
+    <td><%= event_name_prefix %><%= ev.model.name %>_event</td>
     <td><%= ev.id %></td>
-    <td><%= ev.time %></td>
-    <td><% arguments.each do |name| %><%= task.arguments.keys %><% end %></td>
+    <td><%= ev.task.id %></td>
+    <td><%= relative_time(ev.time) %></td>
+    <td><% arguments.each do |name| %><%= task.arguments[name] %><% end %></td>
 </tr>
 <% end %>
 </table>
