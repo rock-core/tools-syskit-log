@@ -391,10 +391,14 @@ module Syskit::Log
                         matcher.send(k, v)
                     end
 
-                    datasets.flat_map do |ds|
-                        matches = ds.streams.find_all_streams(matcher)
-                        matches.sort_by { |s| [s.interval_lg[0] || 0, s.name] }
-                    end
+                    matches, empty =
+                        datasets
+                        .flat_map { |ds| ds.streams.find_all_streams(matcher) }
+                        .partition { |ds| ds.interval_lg[0] }
+
+                    empty = empty.sort_by(&:name)
+                    matches = matches.sort_by { |a| a.interval_lg[0] }
+                    empty + matches
                 end
             end
 
