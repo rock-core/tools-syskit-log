@@ -95,8 +95,7 @@ module Syskit::Log
             def rebuild_roby_own_index(
                 roby_log_path, force: false, reporter: Pocolog::CLI::NullReporter.new
             )
-                roby_index_path =
-                    dataset.cache_path + roby_log_path.basename.sub_ext(".idx")
+                roby_index_path = dataset.roby_index_path(roby_log_path)
                 needs_rebuild =
                     force ||
                     !Roby::DRoby::Logfile::Index.valid_file?(

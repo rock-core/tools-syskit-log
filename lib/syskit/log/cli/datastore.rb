@@ -23,6 +23,9 @@ module Syskit::Log
             class_option :progress, type: :boolean, default: TTY::Color.color?
             class_option :store, type: :string
 
+            stop_on_unknown_option! :roby_log
+            check_unknown_options! except: :roby_log
+
             no_commands do
                 def create_reporter(
                     format = "",
@@ -683,6 +686,32 @@ module Syskit::Log
                 name_field_size = streams.map { |s| s.name.size }.max
                 streams = streams.map { |s| [s.name, s] }
                 show_task_objects(streams, name_field_size)
+            end
+
+            desc "roby-log MODE DATASET [args]",
+                 "execute roby-log on a the Roby log of a dataset"
+            def roby_log(mode, dataset, *args)
+                store = open_store
+                datasets = resolve_datasets(store, dataset)
+
+                if datasets.empty?
+                    raise ArgumentError, "no dataset matches #{ds}"
+                elsif datasets.size > 1
+                    raise ArgumentError, "more than one dataset matches #{ds}"
+                end
+
+                dataset = datasets.first
+                roby_logs = dataset.each_roby_log_path.to_a
+                if roby_logs.empty?
+                    raise ArgumentError, "no Roby logs in #{ds}"
+                elsif roby_logs.size > 1
+                    raise ArgumentError, "more than one Roby log in #{ds}"
+                end
+
+                roby_log_path = roby_logs.first
+                exec("roby-log", mode, roby_log_path.to_s,
+                     "--index-file", dataset.roby_index_path(roby_log_path).to_s,
+                     *args)
             end
         end
     end
