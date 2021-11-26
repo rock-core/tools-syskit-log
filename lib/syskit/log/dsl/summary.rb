@@ -57,7 +57,9 @@ module Syskit
                     template = File.read(path)
                     bind = binding
                     bind.local_variable_set type.to_sym, object
-                    ERB.new(template).result(bind)
+                    erb = ERB.new(template)
+                    erb.location = [path, 0]
+                    erb.result(bind)
                 end
             end
         end
