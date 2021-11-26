@@ -34,6 +34,26 @@ module Syskit
                             super
                     end
 
+                    def event_propagation_query
+                        @index.event_propagations
+                    end
+
+                    def each_event_propagation(where: nil, **where_kw)
+                        unless block_given?
+                            return enum_for(__method__, where: where, **where_kw)
+                        end
+
+                        query = event_propagation_query
+                                .order(:time).where(**where_kw, &where)
+                        query.each do |entity|
+                            task = @index.task_by_id(entity.task_id)
+                            event_m = task.model.event(entity.name)
+                            yield EventPropagation.from_entity(
+                                @index, entity, task, event_m
+                            )
+                        end
+                    end
+
                     def method_missing(m, *args, **kw, &block)
                         full_name = "#{@prefix}#{m}"
                         pattern = "#{@prefix}#{m}#{@separator}"
@@ -87,35 +107,79 @@ module Syskit
                         super(index, name)
                         @name = name
                         @id = id
-                        @query = @index.tasks.where(model_id: id)
+                        @events = {}
+                        @tasks = {}
                     end
 
                     def each_event
                         return enum_for(__method__) unless block_given?
 
-                        @index.history_of(@query)
-                              .select(:name).distinct
-                              .pluck(:name).each do |event_name|
-                                  yield(EventModel.new(@index, event_name, self))
-                              end
+                        event_propagations_query
+                            .select(:name).distinct
+                            .pluck(:name).each do |event_name|
+                                yield(EventModel.new(@index, event_name, self))
+                            end
+                    end
+
+                    def event_propagations_query
+                        @index.event_propagations.where(task_id: task_ids)
+                    end
+
+                    def each_event_propagation(**where)
+                        return enum_for(__method__, **where) unless block_given?
+
+                        query = event_propagations_query.where(**where).order(:time)
+                        query.each do |entity|
+                            event_m = event(entity.name)
+                            task = task_by_id(entity.task_id)
+                            yield EventPropagation.from_entity(
+                                @index, entity, task, event_m
+                            )
+                        end
+                    end
+
+                    def each_emission(**where, &block)
+                        each_event_propagation(
+                            kind: EVENT_PROPAGATION_EMIT, **where, &block
+                        )
+                    end
+
+                    # Tests whether this task model seems to have an event with that name
+                    def event?(name)
+                        @index.event_propagations
+                              .from_task_id(task_ids).where(name: name).exist?
                     end
 
                     # Return the event model with the given name
                     #
+                    # @param [String] name
+                    # @return [EventModel]
                     # @raise NoSuchEvent if there are no events with that name
                     def event(name)
-                        unless @index.history_of(@query).where(name: name).first
+                        if (ev = @events[name])
+                            return ev
+                        end
+
+                        unless event?(name)
                             raise NoSuchEvent, "no events named '#{name}' in #{self}'"
                         end
 
-                        EventModel.new(@index, name, self)
+                        @events[name] = EventModel.new(@index, name, self)
                     end
 
+                    # @api private
+                    #
+                    # Query that returns the tasks from this model
+                    def tasks_query
+                        @index.tasks.where(model_id: id)
+                    end
+
+                    # Enumerate the tasks that are instances of this model
                     def each_task
                         return enum_for(__method__) unless block_given?
 
-                        @query.each do |obj|
-                            yield Task.new(@index, obj, self)
+                        tasks_query.each do |entity|
+                            yield task_from_entity(entity)
                         end
                     end
 
@@ -133,12 +197,7 @@ module Syskit
                             raise NoMethodError.new(msg, m)
                         end
 
-                        has_events =
-                            @index.history_of(@index.tasks_by_model_name(@name))
-                                  .where(name: event_name)
-                                  .exist?
-
-                        unless has_events
+                        unless event?(event_name)
                             msg = "there are emitted events named #{event_name}, but "\
                                   "not for a task of model #{@name}"
                             raise NoMethodError.new(msg, m)
@@ -148,15 +207,37 @@ module Syskit
                     end
 
                     # Return the task instance object with the given ID
-                    def by_id(id)
-                        @index.task_by_id(id)
+                    def task_by_id(task_id)
+                        if (task = @tasks[task_id])
+                            return task
+                        end
+
+                        entity = @index.tasks.by_pk(task_id).where(model_id: id).one
+                        unless entity
+                            raise ArgumentError,
+                                  "no task with ID #{task_id} and model #{name}"
+                        end
+
+                        @tasks[task_id] = task_from_entity(entity)
                     end
+
+                    # Enumerate the
 
                     # @api private
                     #
                     # The query that returns the task IDs of the instances of this model
                     def task_ids
-                        @query.pluck(:id)
+                        @task_ids ||= tasks_query.pluck(:id)
+                    end
+
+                    # @api private
+                    #
+                    # Create a Task from the database entity
+                    #
+                    # @param [Entities::Task]
+                    # @return [Task]
+                    def task_from_entity(entity)
+                        Task.new(@index, entity, self)
                     end
                 end
 
@@ -171,8 +252,6 @@ module Syskit
                         @index = index
                         @name = name
                         @task_model = task_model
-                        @query = @index.emitted_events
-                                       .where(name: name, task_id: task_model.task_ids)
                     end
 
                     def ==(other)
@@ -181,19 +260,38 @@ module Syskit
                             other.task_model == task_model
                     end
 
-                    # List the matching event emissions
-                    def each_emission
-                        return enum_for(__method__) unless block_given?
+                    def event_propagations_query
+                        task_model.event_propagations_query.by_name(name)
+                    end
 
-                        @query.each do |obj|
-                            yield Event.new(@index, obj.id, obj.time, obj.name,
-                                            @task_model.by_id(obj.task_id), self)
+                    # Enumerate the event propagations coming from generators of
+                    # this model
+                    def each_event_propagation(**where)
+                        return enum_for(__method__, **where) unless block_given?
+
+                        query = event_propagations_query.where(**where).order(:time)
+                        query.each do |entity|
+                            task = @task_model.task_by_id(entity.task_id)
+                            yield EventPropagation.from_entity(
+                                @index, entity, task, self
+                            )
                         end
+                    end
+
+                    # List the matching event emissions
+                    def each_emission(**where, &block)
+                        each_event_propagation(
+                            kind: EVENT_PROPAGATION_EMIT, **where, &block
+                        )
                     end
 
                     # Get the first emission
                     def first_emission
                         each_emission.first
+                    end
+
+                    def full_name
+                        "#{task_model.name}.#{name}_event"
                     end
                 end
 
@@ -246,16 +344,26 @@ module Syskit
                         other.kind_of?(Task) && other.id == id
                     end
 
-                    def each_emission(**where)
+                    def event_propagations_query
+                        @model.event_propagations_query.from_task_id(id)
+                    end
+
+                    # Enumerate event propagations from events of this task
+                    def each_event_propagation(**where)
                         return enum_for(__method__, **where) unless block_given?
 
-                        query = @index.emitted_events
-                                      .where(task_id: id, **where)
-                        query.each do |emission|
-                            name = emission.name
-                            yield Event.new(@index, emission.id, emission.time, name,
-                                            self, model.event(name))
+                        query = event_propagations_query.where(**where).order(:time)
+                        query.each do |entity|
+                            yield EventPropagation.from_entity(
+                                @index, entity, self, model
+                            )
                         end
+                    end
+
+                    def each_emission(**where, &block)
+                        each_event_propagation(
+                            kind: EVENT_PROPAGATION_EMIT, **where, &block
+                        )
                     end
 
                     def event(name)
@@ -305,18 +413,25 @@ module Syskit
                 end
 
                 # Represents an emitted event
-                class Event
+                class EventPropagation
                     # The event's emission time
                     attr_reader :time
                     # The event's name
                     attr_reader :name
+                    # The event propagation's type (as one of the
+                    # EVENT_PROPAGATION_ constants)
+                    attr_reader :kind
 
                     # The event's task
+                    #
+                    # @return [Task]
                     attr_reader :task
                     # The event's model
+                    #
+                    # @return [EventModel]
                     attr_reader :model
 
-                    # A unique ID for this event
+                    # A unique ID for this propagation
                     attr_reader :id
 
                     def ==(other)
@@ -327,8 +442,16 @@ module Syskit
                         "#{task.model.name}.#{name}"
                     end
 
-                    def initialize(index, id, time, name, task, model) # rubocop:disable Metrics/ParameterLists
+                    def self.from_entity(index, entity, task, model)
+                        new(index, entity.kind, entity.id, entity.time, entity.name,
+                            task, model)
+                    end
+
+                    # @param [Task] task
+                    # @param [EventModel] model
+                    def initialize(index, kind, id, time, name, task, model) # rubocop:disable Metrics/ParameterLists
                         @index = index
+                        @kind = kind
                         @id = id
                         @time = time
                         @name = name

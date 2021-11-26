@@ -30,7 +30,7 @@ module Syskit
                     @rom = rom
                     @models = rom.relations[:models]
                     @tasks = rom.relations[:tasks]
-                    @emitted_events = rom.relations[:emitted_events]
+                    @event_propagations = rom.relations[:event_propagations]
                     @metadata = rom.relations[:metadata]
                 end
 
@@ -48,10 +48,10 @@ module Syskit
                 # @return [Tasks]
                 attr_reader :tasks
 
-                # Access to emitted events stored in the index
+                # Access to information about event propagation
                 #
-                # @return [EmittedEvents]
-                attr_reader :emitted_events
+                # @return [EventPropagations]
+                attr_reader :event_propagations
 
                 # Add information from a raw Roby log
                 def add_roby_log(path, reporter: Pocolog::CLI::NullReporter.new)
@@ -102,8 +102,9 @@ module Syskit
                         rebuilder.process_one_event(m, sec, usec, args)
                     end
 
-                    @emitted_events.transaction do
-                        add_log_emitted_events(rebuilder.plan.emitted_events)
+                    @event_propagations.transaction do
+                        add_log_propagated_events(rebuilder.plan.propagated_events)
+                        add_log_failed_emissions(rebuilder.plan.failed_emissions)
                     end
 
                     update_log_metadata(metadata, data)
@@ -141,17 +142,54 @@ module Syskit
 
                 # @api private
                 #
+                # Add information about an event propagation (call or emission)
+                #
+                # @param [Array] records records, as stored in
+                #   {Roby::PlanRebuilder#propagated_events}
+                # @return [Integer] the record ID
+                def add_log_propagated_events(records)
+                    records = records.map do |time, is_forwarding, _, generator|
+                        kind =
+                            if is_forwarding
+                                EVENT_PROPAGATION_EMIT
+                            else
+                                EVENT_PROPAGATION_CALL
+                            end
+
+                        [kind, time, generator]
+                    end
+
+                    add_log_event_propagations(records)
+                end
+
+                # @api private
+                #
                 # Add information about an emitted event
                 #
                 # @param [Roby::Event] ev
                 # @return [Integer] the record ID
-                def add_log_emitted_events(events)
-                    task_ids = add_log_tasks(events.map { |e| e.generator.task })
-                    records = events.zip(task_ids).map do |ev, task_id|
-                        { name: ev.symbol.to_s, time: ev.time, task_id: task_id }
+                def add_log_failed_emissions(records)
+                    records = records.map do |time, generator, _|
+                        [EVENT_PROPAGATION_EMIT_FAILED, time, generator]
                     end
+                    add_log_event_propagations(records)
+                end
 
-                    @emitted_events.command(:create, result: :many).call(records)
+                # @api private
+                #
+                # Helper for the other methods that add event propagations to the log
+                #
+                # @param [Array] records the info to add, as (kind, time, generator)
+                def add_log_event_propagations(records)
+                    tasks = records.map { |_, _, g| g.task }
+                    task_ids = add_log_tasks(tasks)
+                    records =
+                        records.zip(task_ids).map do |(kind, time, generator), task_id|
+                            { name: generator.symbol.to_s, time: time, task_id: task_id,
+                              kind: kind }
+                        end
+
+                    @event_propagations.command(:create, result: :many).call(records)
                 end
 
                 # @api private
@@ -209,15 +247,6 @@ module Syskit
                         @models.insert({ name: model.name })
                 end
 
-                # Return the events emitted by the given task
-                def history_of(task)
-                    if task.respond_to?(:pluck)
-                        @emitted_events.where(task_id: task.pluck(:id))
-                    else
-                        @emitted_events.where(task_id: task.id)
-                    end
-                end
-
                 # Exception raised when trying to get information about a logfile
                 # that is not registered in the index
                 class NoSuchLogfile < RuntimeError; end
@@ -246,43 +275,24 @@ module Syskit
                     @metadata.order(:time_end).last.time_end
                 end
 
-                # Tests whether there are events with the given name
+                # Tests whether there is an event with this name
                 def event_with_name?(name)
-                    @emitted_events.where(name: name).exist?
+                    @event_propagations.with(name: name).exist?
                 end
 
-                # Return the events emitted by the given task
-                def tasks_by_model_name(name)
-                    @tasks.where(model_id: @models.where(name: name).pluck(:id))
+                def task_model_by_id(id)
+                    entity = @models.by_pk(id).one
+                    raise ArgumentError, "no task model with ID #{id}" unless entity
+
+                    Accessors::TaskModel.new(self, entity.name, entity.id)
                 end
 
-                # Return the events emitted by the given task
-                def tasks_by_model(model)
-                    @tasks.where(model: model)
-                end
-
-                # Task model accessor from its ID
-                def task_model_by_id(model_id)
-                    name = @models.where(id: model_id).pluck(:name).first
-                    raise ArgumentError, "no task model with ID #{model_id}" unless name
-
-                    Accessors::TaskModel.new(self, name, model_id)
-                end
-
-                # Task accessor from its ID
                 def task_by_id(id)
-                    task = @tasks.where(id: id).first
-                    raise ArgumentError, "no task with ID #{id}" unless task
+                    entity = @tasks.by_pk(id).one
+                    raise ArgumentError, "no task with ID #{id}" unless entity
 
-                    model = task_model_by_id(task.model_id)
-                    Accessors::Task.new(self, task, model)
-                end
-
-                # Returns the full name of an event
-                def event_full_name(event)
-                    model_id = @tasks.by_pk(event.task_id).pluck(:id)
-                    model_name = @models.by_pk(model_id).pluck(:name).first
-                    "#{model_name}.#{event.name}_event"
+                    task_model = task_model_by_id(entity.model_id)
+                    Accessors::Task.new(self, entity, task_model)
                 end
             end
         end

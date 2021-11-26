@@ -23,7 +23,8 @@ module Syskit
 
                 ARRAY_RENDERERS = {
                     RobySQLIndex::Accessors::Task => "roby_tasks",
-                    RobySQLIndex::Accessors::Event => "roby_events"
+                    RobySQLIndex::Accessors::EventPropagation =>
+                        "roby_event_propagations"
                 }.freeze
 
                 SUMMARY_TYPES = {

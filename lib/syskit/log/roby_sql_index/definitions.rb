@@ -3,6 +3,10 @@
 module Syskit
     module Log
         module RobySQLIndex
+            EVENT_PROPAGATION_CALL = 0
+            EVENT_PROPAGATION_EMIT = 1
+            EVENT_PROPAGATION_EMIT_FAILED = 2
+
             # Namespace for the definition of the SQL schema and relations
             module Definitions
                 # @api private
@@ -29,19 +33,20 @@ module Syskit
                         column :arguments, String, null: false
                     end
 
-                    config.default.create_table :emitted_events do
+                    config.default.create_table :event_propagations do
                         primary_key :id
                         foreign_key :task_id, :tasks, null: false
 
                         column :time, Time, null: false
                         column :name, String, null: false
+                        column :kind, Integer, null: false
                     end
                 end
 
                 def self.configure(config)
                     Sequel.application_timezone = :local
                     Sequel.database_timezone = :utc
-                    config.register_relation(Models, Tasks, EmittedEvents, Metadata)
+                    config.register_relation(Models, Tasks, EventPropagations, Metadata)
                 end
 
                 # Representation of metadata about the whole log
@@ -73,23 +78,22 @@ module Syskit
                     schema(:tasks, infer: true) do
                         associations do
                             belongs_to :model
-                            has_many :emitted_events
+                            has_many :event_propagations
                         end
                     end
 
                     struct_namespace Entities
                     auto_struct true
 
-                    # Returns the list of events that were emitted by the given
-                    # task
+                    # Returns the list of event propagation related to this task
                     def history_of(task)
-                        where(id: task.id).left_join(:emitted_events).to_a
+                        where(id: task.id).left_join(:event_propagations).to_a
                     end
                 end
 
                 # Representation of a Roby emitted event
-                class EmittedEvents < ROM::Relation[:sql]
-                    schema(:emitted_events, infer: true) do
+                class EventPropagations < ROM::Relation[:sql]
+                    schema(:event_propagations, infer: true) do
                         associations do
                             belongs_to :task
                         end
@@ -98,8 +102,24 @@ module Syskit
                     struct_namespace Entities
                     auto_struct true
 
+                    def calls
+                        where(kind: EVENT_PROPAGATION_CALL)
+                    end
+
+                    def emissions
+                        where(kind: EVENT_PROPAGATION_EMIT)
+                    end
+
+                    def failed_emissions
+                        where(kind: EVENT_PROPAGATION_EMIT_FAILED)
+                    end
+
                     def by_name(name)
                         where(name: name.to_s)
+                    end
+
+                    def from_task_id(task_id)
+                        where(task_id: task_id)
                     end
                 end
             end

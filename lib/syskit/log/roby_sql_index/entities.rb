@@ -14,7 +14,7 @@ module Syskit
                 end
 
                 # Representation of an event emission
-                class EmittedEvent < ROM::Struct
+                class EventPropagations < ROM::Struct
                     def full_name
                         "#{task.model.name}.#{name}"
                     end
