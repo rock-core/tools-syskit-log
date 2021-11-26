@@ -651,13 +651,9 @@ module Syskit::Log
 
                 - "ports" or "properties" restrict to streams that are resp. from a port
                   or a property
-
                 - "object_name" matches the port/property name
-
                 - "task_name" matches the name of the port/poperty's task
-
                 - "task_model" matches the model of the port/property's task
-
                 - "type" matches the typename of the port/property's task
 
                 All matchers except ports and properties expect a string to match
