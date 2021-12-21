@@ -1,3 +1,7 @@
+<%
+arguments = options.fetch(:task_arguments, []).map(&:to_sym)
+%>
+
 <table>
 <thead>
 <tr>
@@ -7,6 +11,7 @@
     <td>Stop</td>
     <td>Start (relative)</td>
     <td>Stop (relative)</td>
+    <% arguments.each do |name| %><td><%= name %></td><% end %>
 </tr>
 </thead>
 
@@ -27,6 +32,7 @@
     <td><%= stop_t %></td>
     <td><%= start_t_relative %></td>
     <td><%= stop_t_relative %></td>
+    <% arguments.each do |name| %><td><%= task.arguments[name] %></td><% end %>
 </tr>
 <% end %>
 </table>
