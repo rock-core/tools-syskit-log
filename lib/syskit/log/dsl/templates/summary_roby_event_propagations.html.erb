@@ -25,7 +25,7 @@ kind_to_s = {
     <td>Event ID</td>
     <td>Task ID</td>
     <td>Time</td>
-    <td><% arguments.each do |name| %><%= name %><% end %></td>
+    <% arguments.each do |name| %><td><%= name %></td><% end %>
 </tr>
 </thead>
 
@@ -40,7 +40,7 @@ propagations.each do |p|
     <td><%= p.id %></td>
     <td><%= p.task.id %></td>
     <td><%= relative_time(p.time) %></td>
-    <td><% arguments.each do |name| %><%= task.arguments[name] %><% end %></td>
+    <% arguments.each do |name| %><td><%= task.arguments[name] %></td><% end %>
 </tr>
 <% end %>
 </table>
