@@ -3,6 +3,10 @@
 require "syskit/log/cli/datastore"
 
 class CLI < Thor
+    def self.exit_on_failure?
+        true
+    end
+
     desc "datastore", "data management"
     subcommand "datastore", Syskit::Log::CLI::Datastore
 

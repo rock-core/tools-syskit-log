@@ -26,6 +26,10 @@ module Syskit::Log
             stop_on_unknown_option! :roby_log
             check_unknown_options! except: :roby_log
 
+            def self.exit_on_failure?
+                true
+            end
+
             no_commands do
                 def create_reporter(
                     format = "",
