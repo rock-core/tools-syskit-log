@@ -448,8 +448,10 @@ module Syskit::Log
                                  type: :array, default: []
             method_option :metadata, desc: "metadata values as key=value pairs",
                                      type: :array, default: []
-            method_option :merge, desc: "create a single dataset from multiple log dirs",
-                                  type: :boolean, default: false
+            method_option :merge,
+                          desc: "create a single dataset from the "\
+                                "datasets directly under PATH",
+                          type: :boolean, default: false
             def import(root_path, description = nil)
                 root_path = Pathname.new(root_path).realpath
                 if options[:auto]
