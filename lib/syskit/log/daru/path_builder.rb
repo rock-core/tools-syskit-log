@@ -41,6 +41,7 @@ module Syskit
 
                 def __terminal?
                     @transform ||
+                        @type <= ::Typelib::CharacterType ||
                         @type <= ::Typelib::NumericType ||
                         @type <= ::Typelib::EnumType
                 end
