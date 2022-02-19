@@ -670,7 +670,7 @@ module Syskit
             #   Vega.lite.data(data).repeat(%w[speed power]).spec(line)
             #
             # @see daru_to_vega vega_simple_plot
-            def vega_simple_view(x:, y:, time: nil, mark: "line", color: y)
+            def vega_simple_view(x:, y:, time: nil, mark: "line", color: y, width: 800) # rubocop:disable Metrics/ParameterLists
                 order =
                     if time
                         { order: { field: time, type: "quantitative" } }
@@ -692,6 +692,7 @@ module Syskit
                         y: { field: y, type: "quantitative", scale: { zero: false } },
                         **order, **color
                     )
+                    .width(width)
             end
 
             # Create a reusable view to plot geo data using Vega lite
