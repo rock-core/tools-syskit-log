@@ -35,6 +35,8 @@ module Syskit::Log
                     raise ArgumentError, "#{non_existent} does not exist"
                 end
 
+                paths = paths.map(&:expand_path)
+
                 setup_common
                 setup_roby_for_running(run_controllers: true)
                 script_paths, dataset_paths =
