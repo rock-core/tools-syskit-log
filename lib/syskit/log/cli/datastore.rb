@@ -696,6 +696,15 @@ module Syskit::Log
 
             desc "roby-log MODE DATASET [args]",
                  "execute roby-log on a the Roby log of a dataset"
+            option :index,
+                   type: :numeric, desc: "1-based index of the log to pick",
+                   long_desc: <<~DOC
+                       roby-log is able to process only one log at a time. Use "
+                       --index to pick which log to process if the dataset has more than
+                       one. Use list --roby to get details on available logs, or run
+                       roby-log without --index to know how many logs there actually
+                       are in a dataset.
+                   DOC
             def roby_log(mode, dataset, *args)
                 store = open_store
                 datasets = resolve_datasets(store, dataset)
@@ -708,10 +717,24 @@ module Syskit::Log
 
                 dataset = datasets.first
                 roby_logs = dataset.each_roby_log_path.to_a
-                if roby_logs.empty?
-                    raise ArgumentError, "no Roby logs in #{ds}"
-                elsif roby_logs.size > 1
-                    raise ArgumentError, "more than one Roby log in #{ds}"
+                raise ArgumentError, "no Roby logs in #{dataset}" if roby_logs.empty?
+
+                if (index = options[:index])
+                    selected_log =
+                        roby_logs.find { |p| /\.#{index}\.log$/.match?(p.basename.to_s) }
+                    unless selected_log
+                        raise ArgumentError,
+                              "no log with index #{index} in #{dataset}. There are "\
+                              "#{roby_logs.size} logs in this dataset"
+                    end
+
+                    roby_logs = [selected_log]
+                end
+
+                if roby_logs.size > 1
+                    raise ArgumentError,
+                          "#{roby_logs.size} Roby logs in #{dataset}, pick one with "\
+                          "--index. Logs are numbered starting at 1"
                 end
 
                 roby_log_path = roby_logs.first
