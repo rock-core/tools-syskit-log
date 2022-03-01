@@ -739,7 +739,7 @@ module Syskit::Log
 
                 roby_log_path = roby_logs.first
                 exec("roby-log", mode, roby_log_path.to_s,
-                     "--index-file", dataset.roby_index_path(roby_log_path).to_s,
+                     "--index-path", dataset.roby_index_path(roby_log_path).to_s,
                      *args)
             end
         end
