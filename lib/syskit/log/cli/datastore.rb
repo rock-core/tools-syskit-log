@@ -403,6 +403,20 @@ module Syskit::Log
                     matches = matches.sort_by { |a| a.interval_lg[0] }
                     empty + matches
                 end
+
+                def index_dataset(store, dataset, reporter:, roby: true, pocolog: true)
+                    index_build = Syskit::Log::Datastore::IndexBuild.new(store, dataset)
+                    if pocolog
+                        index_build.rebuild_pocolog_indexes(
+                            force: options[:force], reporter: reporter
+                        )
+                    end
+                    if roby
+                        index_build.rebuild_roby_index(
+                            force: options[:force], reporter: reporter
+                        )
+                    end
+                end
             end
 
             desc "normalize PATH [--out OUTPUT]", "normalizes a data stream into a format that is suitable for the other log management commands to work"
@@ -495,25 +509,18 @@ module Syskit::Log
                 desc: "rebuild only these logs (accepted values are roby, pocolog)",
                 type: :array, default: %w[roby pocolog]
             )
-
-            option :roby, desc: "rebuild only the Roby index", type: :boolean, default: false
             def index(*datasets)
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
                 reporter = create_reporter
-                datasets.each do |d|
-                    reporter.title "Processing #{d.compute_dataset_digest}"
-                    index_build = Syskit::Log::Datastore::IndexBuild.new(store, d)
-                    if options[:only].include?("pocolog")
-                        index_build.rebuild_pocolog_indexes(
-                            force: options[:force], reporter: reporter
-                        )
-                    end
-                    if options[:only].include?("roby")
-                        index_build.rebuild_roby_index(
-                            force: options[:force], reporter: reporter
-                        )
-                    end
+                datasets.each do |dataset|
+                    reporter.title "Processing #{dataset.compute_dataset_digest}"
+                    index_dataset(
+                        store, dataset,
+                        pocolog: options[:only].include?("pocolog"),
+                        roby: options[:only].include?("roby"),
+                        reporter: reporter
+                    )
                 end
             end
 
