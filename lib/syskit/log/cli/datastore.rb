@@ -716,29 +716,54 @@ module Syskit::Log
                 show_task_objects(streams, name_field_size)
             end
 
-            desc "roby-log MODE DATASET [args]",
+            desc "roby-log MODE [options] DATASET [roby-log arguments]",
                  "execute roby-log on a the Roby log of a dataset"
+            option :index,
+                   type: :numeric, desc: "0-based index of the log to pick",
+                   long_desc: <<~DOC
+                       roby-log is able to process only one log at a time. Use "
+                       --index to pick which log to process if the dataset has more than
+                       one (starting at 0). Use list --roby to get details on available
+                       logs, or run roby-log without --index to know how many logs there
+                       actually are in a dataset.
+                   DOC
             def roby_log(mode, dataset, *args)
                 store = open_store
                 datasets = resolve_datasets(store, dataset)
 
                 if datasets.empty?
-                    raise ArgumentError, "no dataset matches #{ds}"
+                    raise ArgumentError, "no dataset matches #{dataset}"
                 elsif datasets.size > 1
-                    raise ArgumentError, "more than one dataset matches #{ds}"
+                    raise ArgumentError, "more than one dataset matches #{dataset}"
                 end
 
                 dataset = datasets.first
                 roby_logs = dataset.each_roby_log_path.to_a
                 if roby_logs.empty?
-                    raise ArgumentError, "no Roby logs in #{ds}"
-                elsif roby_logs.size > 1
-                    raise ArgumentError, "more than one Roby log in #{ds}"
+                    raise ArgumentError, "no Roby logs in #{dataset.digest}"
+                end
+
+                if (index = options[:index])
+                    selected_log =
+                        roby_logs.find { |p| /\.#{index}\.log$/.match?(p.basename.to_s) }
+                    unless selected_log
+                        raise ArgumentError,
+                              "no log with index #{index} in #{dataset.digest}. There "\
+                              "are #{roby_logs.size} logs in this dataset"
+                    end
+
+                    roby_logs = [selected_log]
+                end
+
+                if roby_logs.size > 1
+                    raise ArgumentError,
+                          "#{roby_logs.size} Roby logs in #{dataset.digest}, pick one with "\
+                          "--index. Logs are numbered starting at 1"
                 end
 
                 roby_log_path = roby_logs.first
                 exec("roby-log", mode, roby_log_path.to_s,
-                     "--index-file", dataset.roby_index_path(roby_log_path).to_s,
+                     "--index-path", dataset.roby_index_path(roby_log_path).to_s,
                      *args)
             end
         end

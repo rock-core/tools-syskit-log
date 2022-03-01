@@ -1,0 +1,10 @@
+---
+layout_version: 1
+sha2: 735509d05200117eadfe4d3c3beb91bfc02009ee5c030d1a1ccb285efbda07a2
+identity:
+- path: roby-events.0.log
+  sha2: f343e94c858b8af1ebb52667c74ab4481a8b731916fec777d265ef7af2675ac6
+  size: 33019
+- path: roby-events.1.log
+  sha2: b5914fa9722fd879316150fb8d9be75c7fa7780f7b6c26376ac058593e25a45d
+  size: 44813
