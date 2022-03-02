@@ -28,40 +28,8 @@ module Syskit
                     end
 
                     it "registers an emitted event" do
-                        event = @index.emitted_events.by_name(:start).one!
+                        event = @index.event_propagations.emissions.by_name(:start).one!
                         assert_equal "start", event.name
-                    end
-
-                    it "builds its full name" do
-                        event = @index.emitted_events.by_name(:start).one!
-                        assert_equal "M.start_event", @index.event_full_name(event)
-                    end
-
-                    it "allows to get a task history" do
-                        task = @index.tasks.one!
-                        events = @index.history_of(task).to_a
-                        assert(events.find { |ev| ev.name == "start" })
-                        assert(events.find { |ev| ev.name == "stop" })
-                    end
-                end
-
-                describe "truncated log files" do
-                    describe "tasks without a stop" do
-                        before do
-                            @index.add_roby_log(roby_log_path("event_emission_truncated"))
-                        end
-
-                        it "does not return the stop event" do
-                            task = @index.tasks.one!
-                            events = @index.history_of(task).to_a
-                            refute(events.find { |ev| ev.name == "stop" })
-                        end
-
-                        it "returns the end time of the log itself "\
-                           "as the end time of the task" do
-                            task = @index.task_by_id(@index.tasks.one!.id)
-                            assert_equal @index.time_end, task.stop_time
-                        end
                     end
                 end
 

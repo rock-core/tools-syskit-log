@@ -638,6 +638,20 @@ module Syskit::Log
                 (@lazy_data_streams ||= read_lazy_data_streams).each(&block)
             end
 
+            # Enumerate the paths to the Roby logs available in this dataset
+            #
+            # @yieldparam [Pathname] path to the roby log
+            def each_roby_log_path(&block)
+                Syskit::Log.logfiles_in_dir(dataset_path).each(&block)
+            end
+
+            # Path to Roby's own index file for the given roby log
+            #
+            # @param [Pathname] roby_log_path
+            def roby_index_path(roby_log_path)
+                cache_path + roby_log_path.basename.sub_ext(".idx")
+            end
+
             # Return an object that allows to query the set of data streams in
             # this dataset
             #

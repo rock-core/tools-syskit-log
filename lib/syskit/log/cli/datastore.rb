@@ -23,6 +23,9 @@ module Syskit::Log
             class_option :progress, type: :boolean, default: TTY::Color.color?
             class_option :store, type: :string
 
+            stop_on_unknown_option! :roby_log
+            check_unknown_options! except: :roby_log
+
             no_commands do
                 def create_reporter(
                     format = "",
@@ -391,9 +394,27 @@ module Syskit::Log
                         matcher.send(k, v)
                     end
 
-                    datasets.flat_map do |ds|
-                        matches = ds.streams.find_all_streams(matcher)
-                        matches.sort_by { |s| [s.interval_lg[0] || 0, s.name] }
+                    matches, empty =
+                        datasets
+                        .flat_map { |ds| ds.streams.find_all_streams(matcher) }
+                        .partition { |ds| ds.interval_lg[0] }
+
+                    empty = empty.sort_by(&:name)
+                    matches = matches.sort_by { |a| a.interval_lg[0] }
+                    empty + matches
+                end
+
+                def index_dataset(store, dataset, reporter:, roby: true, pocolog: true)
+                    index_build = Syskit::Log::Datastore::IndexBuild.new(store, dataset)
+                    if pocolog
+                        index_build.rebuild_pocolog_indexes(
+                            force: options[:force], reporter: reporter
+                        )
+                    end
+                    if roby
+                        index_build.rebuild_roby_index(
+                            force: options[:force], reporter: reporter
+                        )
                     end
                 end
             end
@@ -481,16 +502,24 @@ module Syskit::Log
             end
 
             desc "index [DATASETS]", "refreshes or rebuilds (with --force) the datastore indexes"
-            method_option :force, desc: "force rebuilding even indexes that look up-to-date",
-                                  type: :boolean, default: false
+            option :force, desc: "force rebuilding even indexes that look up-to-date",
+                           type: :boolean, default: false
+            option(
+                :only,
+                desc: "rebuild only these logs (accepted values are roby, pocolog)",
+                type: :array, default: %w[roby pocolog]
+            )
             def index(*datasets)
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
                 reporter = create_reporter
-                datasets.each do |d|
-                    reporter.title "Processing #{d.compute_dataset_digest}"
-                    Syskit::Log::Datastore.index_build(
-                        store, d, force: options[:force], reporter: reporter
+                datasets.each do |dataset|
+                    reporter.title "Processing #{dataset.compute_dataset_digest}"
+                    index_dataset(
+                        store, dataset,
+                        pocolog: options[:only].include?("pocolog"),
+                        roby: options[:only].include?("roby"),
+                        reporter: reporter
                     )
                 end
             end
@@ -632,13 +661,9 @@ module Syskit::Log
 
                 - "ports" or "properties" restrict to streams that are resp. from a port
                   or a property
-
                 - "object_name" matches the port/property name
-
                 - "task_name" matches the name of the port/poperty's task
-
                 - "task_model" matches the model of the port/property's task
-
                 - "type" matches the typename of the port/property's task
 
                 All matchers except ports and properties expect a string to match
@@ -668,6 +693,32 @@ module Syskit::Log
                 name_field_size = streams.map { |s| s.name.size }.max
                 streams = streams.map { |s| [s.name, s] }
                 show_task_objects(streams, name_field_size)
+            end
+
+            desc "roby-log MODE DATASET [args]",
+                 "execute roby-log on a the Roby log of a dataset"
+            def roby_log(mode, dataset, *args)
+                store = open_store
+                datasets = resolve_datasets(store, dataset)
+
+                if datasets.empty?
+                    raise ArgumentError, "no dataset matches #{ds}"
+                elsif datasets.size > 1
+                    raise ArgumentError, "more than one dataset matches #{ds}"
+                end
+
+                dataset = datasets.first
+                roby_logs = dataset.each_roby_log_path.to_a
+                if roby_logs.empty?
+                    raise ArgumentError, "no Roby logs in #{ds}"
+                elsif roby_logs.size > 1
+                    raise ArgumentError, "more than one Roby log in #{ds}"
+                end
+
+                roby_log_path = roby_logs.first
+                exec("roby-log", mode, roby_log_path.to_s,
+                     "--index-file", dataset.roby_index_path(roby_log_path).to_s,
+                     *args)
             end
         end
     end

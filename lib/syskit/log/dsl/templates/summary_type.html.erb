@@ -1,11 +1,5 @@
-<%= type.name %>
-
-<% if type <= Typelib::CompoundType %>
-{<% type.fields.each do |name, type| %><div style="margin: 1em">
-    <%= name %>: <%= object_to_html(type, "type") %>
-    </div><% end %>}
-<% elsif type <= Typelib::ArrayType %>
-[<%= type.length %>] <%= object_to_html(type.deference, "type") %>
-<% elsif type <= Typelib::ContainerType %>
-[] <%= object_to_html(type.deference, "type") %>
-<% end %>
+<p>
+<pre style="font-size: 80%">
+<%= PP.pp(type, +"") %>
+</pre>
+</p>

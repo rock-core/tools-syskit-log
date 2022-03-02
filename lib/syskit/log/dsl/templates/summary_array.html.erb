@@ -1,3 +1,26 @@
-<% array.each do |o| %>
-<div><%= summarize(o) %></div>
-<% end %>
+<%
+array = Array(array)
+if array.empty?
+elsif array.size < 1000
+    # Check if it is an uniform array and render it accordingly
+    klass = array[0].class
+    if (r = ARRAY_RENDERERS[klass]) && array.all? { |o| o.kind_of?(klass) }
+%>
+
+        <%= summarize(array, type: r) %>
+<%
+    else
+        array.each do |o|
+%>
+            <div><%= summarize(o) %></div>
+<%
+        end
+    end
+else
+    array.each do |o|
+%>
+        <div><%= summarize(o) %></div>
+<%
+    end
+end
+%>

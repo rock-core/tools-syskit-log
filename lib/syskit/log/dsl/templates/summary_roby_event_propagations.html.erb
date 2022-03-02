@@ -1,0 +1,46 @@
+<%
+propagations = Array(roby_event_propagations)
+
+arguments = options.fetch(:task_arguments, []).map(&:to_sym)
+with_task_model =
+    if options.key?(:with_task_model)
+        options[:with_task_model]
+    elsif propagations.size < 1000
+        propagations.map { |ev| ev.task.model.id }.uniq.size > 1
+    else
+        true
+    end
+kind_to_s = {
+    RobySQLIndex::EVENT_PROPAGATION_CALL => "call",
+    RobySQLIndex::EVENT_PROPAGATION_EMIT => "emit",
+    RobySQLIndex::EVENT_PROPAGATION_EMIT_FAILED => "emit failed"
+}.freeze
+%>
+
+<table>
+<thead>
+<tr>
+    <td>Name</td>
+    <td>Kind</td>
+    <td>Event ID</td>
+    <td>Task ID</td>
+    <td>Time</td>
+    <% arguments.each do |name| %><td><%= name %></td><% end %>
+</tr>
+</thead>
+
+<%
+propagations.each do |p|
+    task = p.task
+    event_name_prefix = "roby.#{task.model.name.gsub("::", ".")}." if with_task_model
+%>
+<tr>
+    <td><%= event_name_prefix %><%= p.model.name %>_event</td>
+    <td><%= kind_to_s[p.kind] %></td>
+    <td><%= p.id %></td>
+    <td><%= p.task.id %></td>
+    <td><%= relative_time(p.time) %></td>
+    <% arguments.each do |name| %><td><%= task.arguments[name] %></td><% end %>
+</tr>
+<% end %>
+</table>

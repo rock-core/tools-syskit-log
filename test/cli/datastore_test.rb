@@ -313,23 +313,34 @@ module Syskit::Log
                     ->(dataset) { dataset.dataset_path == datastore.get(digest).dataset_path }
                 end
 
+                def expect_builds_indexes(datasets, roby: true, pocolog: true)
+                    mock = flexmock(CLI::Datastore).new_instances
+                    reporter = Pocolog::CLI::NullReporter.new
+                    mock.should_receive(:create_reporter).and_return(reporter)
+
+                    datasets.each do |ds|
+                        mock.should_receive(:index_dataset)
+                            .with(expected_store, expected_dataset(ds),
+                                  hsh({ roby: roby, pocolog: pocolog, reporter: reporter }))
+                            .once.pass_thru
+                    end
+                end
+
                 it "runs the indexer on all datasets of the store if none are provided on the command line" do
-                    flexmock(Syskit::Log::Datastore)
-                        .should_receive(:index_build)
-                        .with(expected_store, expected_dataset("a"), Hash).once
-                        .pass_thru
-                    flexmock(Syskit::Log::Datastore)
-                        .should_receive(:index_build)
-                        .with(expected_store, expected_dataset("b"), Hash).once
-                        .pass_thru
+                    expect_builds_indexes(%w[a b])
                     call_cli("index", "--store", datastore_path.to_s)
                 end
                 it "runs the indexer on the datasets of the store specified on the command line" do
-                    flexmock(Syskit::Log::Datastore)
-                        .should_receive(:index_build)
-                        .with(expected_store, expected_dataset("a"), Hash).once
-                        .pass_thru
+                    expect_builds_indexes(%w[a])
                     call_cli("index", "--store", datastore_path.to_s, "a")
+                end
+                it "only builds the pocolog indexes if --only pocolog is given" do
+                    expect_builds_indexes(%w[a], roby: false)
+                    call_cli("index", "--store", datastore_path.to_s, "a", "--only", "pocolog")
+                end
+                it "only builds the roby indexes if --only roby is given" do
+                    expect_builds_indexes(%w[a], pocolog: false)
+                    call_cli("index", "--store", datastore_path.to_s, "a", "--only", "roby")
                 end
             end
 
