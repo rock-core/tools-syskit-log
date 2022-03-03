@@ -18,7 +18,8 @@ module Syskit
                 end
 
                 def summarize(object, type: guess_type(object), **options)
-                    Summary.new(object, @zero_time, type: type, **options).to_html
+                    Summary.new(object, @zero_time, type: type, **options)
+                           .object_to_html
                 end
 
                 ARRAY_RENDERERS = {
@@ -42,18 +43,20 @@ module Syskit
                         return name if matcher === object
                     end
 
-                    raise ArgumentError, "do not know how to summarize #{object}"
+                    :iruby
                 end
 
                 def relative_time(time)
                     time - @zero_time if @zero_time
                 end
 
-                def to_html
-                    object_to_html(@object, @type)
+                def to_iruby
+                    return @object.to_iruby if @type == :iruby
+
+                    ["text/html", object_to_html(@object, @type)]
                 end
 
-                def object_to_html(object, type)
+                def object_to_html(object = @object, type = @type)
                     path = File.expand_path("templates/summary_#{type}.html.erb", __dir__)
                     template = File.read(path)
                     bind = binding
