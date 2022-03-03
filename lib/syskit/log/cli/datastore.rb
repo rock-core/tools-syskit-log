@@ -404,7 +404,10 @@ module Syskit::Log
                     empty + matches
                 end
 
-                def index_dataset(store, dataset, reporter:, roby: true, pocolog: true)
+                def index_dataset(
+                    store, dataset,
+                    reporter:, roby: true, pocolog: true, rebuild_orogen_models: true
+                )
                     index_build = Syskit::Log::Datastore::IndexBuild.new(store, dataset)
                     if pocolog
                         index_build.rebuild_pocolog_indexes(
@@ -412,6 +415,7 @@ module Syskit::Log
                         )
                     end
                     if roby
+                        Syskit::DRoby::V5.rebuild_orogen_models = rebuild_orogen_models
                         index_build.rebuild_roby_index(
                             force: options[:force], reporter: reporter
                         )
@@ -509,6 +513,16 @@ module Syskit::Log
                 desc: "rebuild only these logs (accepted values are roby, pocolog)",
                 type: :array, default: %w[roby pocolog]
             )
+
+            option :rebuild_orogen_models,
+                   type: :boolean, default: true,
+                   desc: "use this to disable rebuilding orogen models",
+                   long_desc: <<~DESC
+                       Enabled by default. Disabling it will allow to load older
+                       logs for which syskit ds reports mismatching types, at the
+                       cost of reducing the amount of information available.
+                   DESC
+
             def index(*datasets)
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
@@ -519,6 +533,7 @@ module Syskit::Log
                         store, dataset,
                         pocolog: options[:only].include?("pocolog"),
                         roby: options[:only].include?("roby"),
+                        rebuild_orogen_models: options[:rebuild_orogen_models],
                         reporter: reporter
                     )
                 end
