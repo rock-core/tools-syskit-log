@@ -34,6 +34,12 @@ module Syskit
                             super
                     end
 
+                    def model_query
+                        # !!! pattern must be calculated outside of `where`
+                        pattern = "#{@prefix}%"
+                        @index.models.where { name.like(pattern) }
+                    end
+
                     def event_propagation_query
                         @index.event_propagations
                     end
@@ -69,6 +75,11 @@ module Syskit
                         else
                             super
                         end
+                    end
+
+                    def to_iruby
+                        names = model_query.pluck(:name).sort
+                        ["text/html", IRuby::HTML.table(names, maxrows: nil)]
                     end
                 end
 
