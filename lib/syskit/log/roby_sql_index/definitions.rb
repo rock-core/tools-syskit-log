@@ -36,10 +36,14 @@ module Syskit
                     config.default.create_table :event_propagations do
                         primary_key :id
                         foreign_key :task_id, :tasks, null: false
+                        index :task_id
 
                         column :time, Time, null: false
+                        index :time
                         column :name, String, null: false
+                        index :name
                         column :kind, Integer, null: false
+                        index :kind
                     end
                 end
 
