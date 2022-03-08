@@ -404,7 +404,7 @@ module Syskit::Log
                     empty + matches
                 end
 
-                def index_dataset(
+                def index_dataset( # rubocop:disable Metrics/ParameterLists
                     store, dataset,
                     reporter:, roby: true, pocolog: true, rebuild_orogen_models: true
                 )
