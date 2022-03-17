@@ -193,6 +193,18 @@ module Syskit
 
                         assert_equal [@event_model], p.map(&:model).uniq
                     end
+
+                    it "returns the first propagation of a given event model" do
+                        p = @event_model.first_event_propagation
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_CALL, p.kind)
+                    end
+
+                    it "returns the last propagation of a given event model" do
+                        p = @event_model.last_event_propagation
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
                 end
 
                 describe "a task" do

@@ -277,6 +277,14 @@ module Syskit
                         task_model.event_propagations_query.by_name(name)
                     end
 
+                    def first_event_propagation(**where)
+                        event_propagations_query.where(**where).order(:time).first
+                    end
+
+                    def last_event_propagation(**where)
+                        event_propagations_query.where(**where).order(:time).last
+                    end
+
                     # Enumerate the event propagations coming from generators of
                     # this model
                     def each_event_propagation(**where)
@@ -300,7 +308,12 @@ module Syskit
 
                     # Get the first emission
                     def first_emission
-                        each_emission.first
+                        first(kind: EVENT_PROPAGATION_EMIT, **where, &block)
+                    end
+
+                    # Last emission
+                    def last_emission
+                        last(kind: EVENT_PROPAGATION_EMIT, **where, &block)
                     end
 
                     def full_name
@@ -361,6 +374,17 @@ module Syskit
                         @model.event_propagations_query.from_task_id(id)
                     end
 
+                    def first_emission(**where)
+                        event_propagations_query
+                            .where(kind: EVENT_PROPAGATION_EMIT, **where)
+                            .order(:time).first
+                    end
+
+                    def last_emission(**where)
+                        event_propagations_query
+                            .where(kind: EVENT_PROPAGATION_EMIT, **where)
+                            .order(:time).last
+                    end
                     # Enumerate event propagations from events of this task
                     def each_event_propagation(**where)
                         return enum_for(__method__, **where) unless block_given?
@@ -422,7 +446,11 @@ module Syskit
                     end
 
                     def first
-                        each_emission.first
+                        task.first_emission(name: name)
+                    end
+
+                    def last
+                        task.last_emission(name: name)
                     end
                 end
 
