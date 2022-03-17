@@ -77,7 +77,7 @@ module Syskit::Log
                     call_cli("import", "--min-duration=0",
                              "--store", datastore_path.to_s, logfile_pathname.to_s,
                              "some description", "--tags", "test", "tags",
-                             "--metadata", "key0=value0a", "key0=value0b", "key1=value1",
+                             "--metadata", "key0=value0a", "key0+value0b", "key1=value1",
                              silent: true)
 
                     dataset = Syskit::Log::Datastore.new(datastore_path)
@@ -599,9 +599,15 @@ a0fa <no description>
                         assert_equal Set["true"], datastore.get("a0ea").metadata["debug"]
                         assert_equal Set["true"], datastore.get("a0fa").metadata["debug"]
                     end
-                    it "collects all set arguments with the same key" do
-                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test=a", "test=b", "test=c", silent: false)
-                        assert_equal Set["a", "b", "c"], datastore.get("a0ea").metadata["test"]
+                    it "adds an entry with +VALUE" do
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test=a", "test+b", "test+c", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test+d", silent: false)
+                        assert_equal Set["a", "b", "c", "d"], datastore.get("a0ea").metadata["test"]
+                    end
+                    it "removes an entry with -VALUE" do
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test=a", "test+b", "test+c", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test-b", silent: false)
+                        assert_equal Set["a", "c"], datastore.get("a0ea").metadata["test"]
                     end
                     it "raises if the argument to set is not a key=value association" do
                         assert_raises(ArgumentError) do

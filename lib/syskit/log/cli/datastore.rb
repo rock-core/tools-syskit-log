@@ -166,15 +166,30 @@ module Syskit::Log
                 # @api private
                 #
                 # Parse a metadata option such as --set some=value some-other=value
-                def parse_metadata_option(hash)
-                    hash.each_with_object({}) do |arg, metadata|
-                        key, value = arg.split("=")
-                        unless value
+                def parse_metadata_option(dataset, option)
+                    option.each_with_object({}) do |arg, metadata|
+                        if arg.start_with?("-")
+                            dataset.metadata_delete(arg[1..-1])
+                            next
+                        end
+
+                        unless (match = /^([^=\-+]+)([=\-+])(.*)$/.match(arg))
                             raise ArgumentError,
                                   "metadata setters need to be specified as "\
-                                  "key=value (got #{arg})"
+                                  "keyOPvalue where OP is =, + or - (got #{arg})"
                         end
-                        (metadata[key] ||= Set.new) << value
+
+                        key, op, value = match.captures
+                        metadata[key] ||= Set.new
+                        if op == "+"
+                            dataset.metadata_add(key, value)
+                        elsif op == "-"
+                            existing = dataset.metadata_get(key) || Set.new
+                            existing.delete(value)
+                            dataset.metadata_set(key, *existing)
+                        else
+                            dataset.metadata_set(key, value)
+                        end
                     end
                 end
 
@@ -524,12 +539,12 @@ module Syskit::Log
                 metadata = {}
                 metadata["description"] = description if description
                 metadata["tags"] = options[:tags]
-                metadata.merge!(parse_metadata_option(options[:metadata]))
 
                 paths.each do |p|
                     dataset = import_dataset(p, reporter, datastore, metadata,
                                              merge: options[:merge], include: include)
                     if dataset
+                        parse_metadata_option(dataset, options[:metadata])
                         Syskit::Log::Datastore::Import.save_import_info(p, dataset)
                         puts dataset.digest
                     end
@@ -648,12 +663,39 @@ module Syskit::Log
 
             desc "metadata [QUERY] [--set=KEY=VALUE KEY=VALUE|--get=KEY]",
                  "sets or gets metadata values for a dataset or datasets"
+            long_desc <<~TXT
+                Gets, sets or updates metadata values for a data set or a set of datasets.
+                See the global help message for the format of QUERY
+
+                Getting a key is for instance
+
+                   syskit ds metadata 0bef34 --get description
+
+                And setting one is conversely
+
+                   syskit ds metadata 0bef34 --set id=2022-034
+
+                Metadata values are all arrays. You can add a value to a key by using `+`
+                instead of `=`, and remove a value with `-`. For instance, assuming
+                id=["42", "rj"], the following line turns it into ["42", "2022-034"]
+
+                   syskit ds metadata 0bef34 --set id+2022-034 id-rj
+
+                The processing is sequential, so you may set a key and then add more, for
+                instance, the following line will set `id` to ["2022-34", "rj"], regardless
+                of its current value
+
+                   syskit ds metadata 0bef34 --set id=2022-034 id+rj
+            TXT
             method_option :set, desc: "the key=value associations to set",
                                 type: :array
             method_option :get, desc: "the keys to get",
                                 type: :array, lazy_default: []
-            method_option :long_digest, desc: "display digests in full form, instead of shortening them",
-                                        type: :boolean, default: false
+            method_option(
+                :long_digest,
+                desc: "display digests in full form, instead of shortening them",
+                type: :boolean, default: false
+            )
             def metadata(*query)
                 if !options[:get] && !options[:set]
                     raise ArgumentError, "provide either --get or --set"
@@ -672,11 +714,8 @@ module Syskit::Log
                     end
 
                 if options[:set]
-                    setters = parse_metadata_option(options[:set])
                     datasets.each do |set|
-                        setters.each do |k, v|
-                            set.metadata_set(k, *v)
-                        end
+                        parse_metadata_option(set, options[:set])
                         set.metadata_write_to_file
                     end
                 elsif options[:get].empty?
