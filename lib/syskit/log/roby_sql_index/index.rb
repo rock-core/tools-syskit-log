@@ -217,23 +217,11 @@ module Syskit
                         !@registered_tasks[task.droby_id]
                     end
 
-                    model_ids = new_tasks.map do |t|
-                        arguments_json =
-                            begin
-                                JSON.dump(t.arguments.to_hash)
-                            rescue StandardError
-                                JSON.dump({})
-                            end
-
-                        {
-                            model_id: add_model(t.model),
-                            arguments: arguments_json
-                        }
-                    end
+                    model_records = new_tasks.map { |t| make_task_record(t) }
                     new_task_ids =
                         @tasks
                         .command(:create, result: :many)
-                        .call(model_ids)
+                        .call(model_records)
                         .map(&:id)
                     new_tasks.zip(new_task_ids).each do |task, id|
                         @registered_tasks[task.droby_id] = id
@@ -242,22 +230,45 @@ module Syskit
                     tasks.map { |t| @registered_tasks.fetch(t.droby_id) }
                 end
 
+                def make_task_record(task)
+                    arguments_json =
+                        begin
+                            JSON.dump(task.arguments.to_hash)
+                        rescue StandardError
+                            JSON.dump({})
+                        end
+
+                    model_name = task.model.name
+                    # Workaround a bug in syskit, where deployment models are
+                    # named weird
+                    case model_name
+                    when "Syskit::Deployment#"
+                        model_name = "Deployments.#{task.arguments[:process_name]}"
+                    when /^Deployments?::RubyTasks/
+                        model_name = "Deployments.RubyTasks#{$'.gsub('::', '.')}"
+                    end
+
+                    {
+                        model_id: add_model(task.model, name: model_name),
+                        arguments: arguments_json
+                    }
+                end
+
                 # @api private
                 #
                 # Add information about a Roby model
                 #
                 # @param [Class<Roby::Task>] model
                 # @return [Integer] the record ID
-                def add_model(model)
+                def add_model(model, name: model.name)
                     if (model_id = @registered_models[model.droby_id])
                         return model_id
                     end
 
-                    match = @models.where(name: model.name).pluck(:id).first
+                    match = @models.where(name: name).pluck(:id).first
                     return @registered_models[model.droby_id] = match if match
 
-                    @registered_models[model.droby_id] =
-                        @models.insert({ name: model.name })
+                    @registered_models[model.droby_id] = @models.insert({ name: name })
                 end
 
                 # Exception raised when trying to get information about a logfile

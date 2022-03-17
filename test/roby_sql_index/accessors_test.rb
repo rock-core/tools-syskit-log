@@ -261,6 +261,17 @@ module Syskit
                     end
                 end
 
+                describe "the deployments" do
+                    it "gives access through the OroGen.Deployments namespace" do
+                        Roby.app.plugins_enabled = true
+                        index = Index.create(logfile_pathname("roby2.sql"))
+                        index.add_roby_log(roby_log_path("deployments"))
+                        root = Accessors::Root.new(index)
+                        task_model = root.Deployments.RubyTasks.T
+                        assert_equal "Deployments.RubyTasks.T", task_model.name
+                    end
+                end
+
                 def read_snapshot(name)
                     Pathname.new(__dir__).join("#{name}.snapshot").read
                             .gsub(/\s/, "")

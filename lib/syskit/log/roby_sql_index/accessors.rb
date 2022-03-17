@@ -63,7 +63,9 @@ module Syskit
                     def method_missing(m, *args, **kw, &block)
                         full_name = "#{@prefix}#{m}"
                         pattern = "#{@prefix}#{m}#{@separator}"
-                        return OroGenNamespace.new(@index, "OroGen") if m == :OroGen
+                        if %I[Orogen Deployments].include?(m)
+                            return OroGenNamespace.new(@index, m.to_s)
+                        end
 
                         model_id = @index.models.where(name: full_name).pluck(:id).first
                         if model_id
