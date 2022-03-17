@@ -40,6 +40,14 @@ module Syskit
                         @index.models.where { name.like(pattern) }
                     end
 
+                    def each_task_model
+                        return enum_for(__method__) unless block_given?
+
+                        model_query.pluck(:name, :id).each do |name, model_id|
+                            yield TaskModel.new(@index, name, model_id)
+                        end
+                    end
+
                     def event_propagation_query
                         @index.event_propagations
                     end

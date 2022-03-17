@@ -40,6 +40,14 @@ module Syskit
                         assert_equal expected, propagations
                     end
 
+                    it "enumerates its task models" do
+                        models = @root.each_task_model.to_a
+                        assert_equal(
+                            [@root.Namespace.M, @root.Namespace.M.Submodel],
+                            models.sort_by(&:name)
+                        )
+                    end
+
                     it "displays the list of models children of self in to_iruby" do
                         mime, body = @root.to_iruby
                         assert_equal "text/html", mime
