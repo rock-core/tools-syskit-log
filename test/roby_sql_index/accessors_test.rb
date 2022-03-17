@@ -182,6 +182,17 @@ module Syskit
                         assert_equal ev.model.task_model.each_task.first,
                                      ev.task
                     end
+
+                    it "enumerates the event propagations from this event model" do
+                        p = @event_model.each_event_propagation.to_a
+                        assert_equal %w[start start], p.map(&:name)
+
+                        call = EVENT_PROPAGATION_CALL
+                        emit = EVENT_PROPAGATION_EMIT
+                        assert_equal([call, emit], p.map(&:kind))
+
+                        assert_equal [@event_model], p.map(&:model).uniq
+                    end
                 end
 
                 describe "a task" do

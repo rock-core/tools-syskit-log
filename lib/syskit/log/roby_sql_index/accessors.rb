@@ -367,8 +367,9 @@ module Syskit
 
                         query = event_propagations_query.where(**where).order(:time)
                         query.each do |entity|
+                            event_m = model.event(entity.name)
                             yield EventPropagation.from_entity(
-                                @index, entity, self, model
+                                @index, entity, self, event_m
                             )
                         end
                     end
