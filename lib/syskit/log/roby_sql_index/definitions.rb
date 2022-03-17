@@ -44,6 +44,8 @@ module Syskit
                         index :name
                         column :kind, Integer, null: false
                         index :kind
+
+                        column :context, String
                     end
                 end
 

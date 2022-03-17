@@ -103,6 +103,7 @@ module Syskit
                     end
 
                     @event_propagations.transaction do
+                        add_log_emitted_events(rebuilder.plan.emitted_events)
                         add_log_propagated_events(rebuilder.plan.propagated_events)
                         add_log_failed_emissions(rebuilder.plan.failed_emissions)
                     end
@@ -142,21 +143,13 @@ module Syskit
 
                 # @api private
                 #
-                # Add information about an event propagation (call or emission)
-                #
-                # @param [Array] records records, as stored in
-                #   {Roby::PlanRebuilder#propagated_events}
-                # @return [Integer] the record ID
-                def add_log_propagated_events(records)
-                    records = records.map do |time, is_forwarding, _, generator|
-                        kind =
-                            if is_forwarding
-                                EVENT_PROPAGATION_EMIT
-                            else
-                                EVENT_PROPAGATION_CALL
-                            end
+                # Add information about event emissions
+                def add_log_emitted_events(records)
+                    records = records.map do |time, event|
+                        next unless event.generator
 
-                        [kind, time, generator]
+                        [EVENT_PROPAGATION_EMIT, time, event.generator,
+                         (event.context unless !event.context || event.context.empty?)]
                     end
 
                     add_log_event_propagations(records)
@@ -164,7 +157,25 @@ module Syskit
 
                 # @api private
                 #
-                # Add information about an emitted event
+                # Add information about an event call
+                #
+                # @param [Array] records records, as stored in
+                #   {Roby::PlanRebuilder#propagated_events}
+                # @return [Integer] the record ID
+                def add_log_propagated_events(records)
+                    records = records.map do |time, is_forwarding, _, generator|
+                        # emissions are handled by add_log_event_emissions
+                        next if is_forwarding
+
+                        [EVENT_PROPAGATION_CALL, time, generator]
+                    end
+
+                    add_log_event_propagations(records.compact)
+                end
+
+                # @api private
+                #
+                # Add information about an event emission that failed
                 #
                 # @param [Roby::Event] ev
                 # @return [Integer] the record ID
@@ -184,9 +195,11 @@ module Syskit
                     tasks = records.map { |_, _, g| g.task }
                     task_ids = add_log_tasks(tasks)
                     records =
-                        records.zip(task_ids).map do |(kind, time, generator), task_id|
+                        records
+                        .zip(task_ids)
+                        .map do |(kind, time, generator, context), task_id|
                             { name: generator.symbol.to_s, time: time, task_id: task_id,
-                              kind: kind }
+                              context: JSON.dump(context), kind: kind }
                         end
 
                     @event_propagations.command(:create, result: :many).call(records)

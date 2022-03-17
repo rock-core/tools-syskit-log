@@ -432,6 +432,10 @@ module Syskit
                     # The event propagation's type (as one of the
                     # EVENT_PROPAGATION_ constants)
                     attr_reader :kind
+                    # The emission context (if kind is EVENT_PROPAGATION_EMIT)
+                    def context
+                        @context ||= (JSON.parse(@json_context) if @json_context)
+                    end
 
                     # The event's task
                     #
@@ -455,17 +459,18 @@ module Syskit
 
                     def self.from_entity(index, entity, task, model)
                         new(index, entity.kind, entity.id, entity.time, entity.name,
-                            task, model)
+                            entity.context, task, model)
                     end
 
                     # @param [Task] task
                     # @param [EventModel] model
-                    def initialize(index, kind, id, time, name, task, model) # rubocop:disable Metrics/ParameterLists
+                    def initialize(index, kind, id, time, name, context, task, model) # rubocop:disable Metrics/ParameterLists
                         @index = index
                         @kind = kind
                         @id = id
                         @time = time
                         @name = name
+                        @json_context = context
                         @task = task
                         @model = model
                     end
