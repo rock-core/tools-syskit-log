@@ -154,9 +154,10 @@ module Syskit::Log
         #
         # @return [Array<Dataset>]
         def find_all(metadata, **get_arguments)
+            metadata = metadata.transform_keys(&:to_s)
+            metadata = metadata.transform_values { |v| Array(v).to_set }
             each_dataset(**get_arguments).find_all do |ds|
                 metadata.all? do |key, values|
-                    values = Array(values).to_set
                     (values - (ds.metadata[key] || Set.new)).empty?
                 end
             end
