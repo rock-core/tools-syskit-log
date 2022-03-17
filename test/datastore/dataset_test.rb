@@ -443,6 +443,26 @@ module Syskit::Log
                 end
             end
 
+            describe "#metadata?" do
+                it "returns true if the key exists" do
+                    dataset.metadata_add "test", 10
+                    assert dataset.metadata?("test")
+                end
+                it "returns false if the key does not exist" do
+                    refute dataset.metadata?("test")
+                end
+            end
+
+            describe "#metadata_get" do
+                it "returns the entry's set" do
+                    dataset.metadata_add "test", 10
+                    assert_equal Set[10], dataset.metadata_get("test")
+                end
+                it "returns nil if the key does not exist" do
+                    assert_nil dataset.metadata_get("test")
+                end
+            end
+
             describe "#metadata_fetch" do
                 it "returns a single value" do
                     dataset.metadata_add "test", 10

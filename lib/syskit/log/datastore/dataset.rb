@@ -455,6 +455,18 @@ module Syskit::Log
                 end
             end
 
+            # Whether there is a given metadata entry
+            def metadata?(key)
+                metadata.key?(key)
+            end
+
+            # Return a metadata entry
+            #
+            # @return [Set,nil] the entry contents, or nil if there is no such entry
+            def metadata_get(key)
+                metadata[key]
+            end
+
             # Get a single metadata value
             #
             # @param [String] key
