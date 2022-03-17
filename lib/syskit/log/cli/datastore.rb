@@ -470,7 +470,18 @@ module Syskit::Log
                           desc: "create a single dataset from the "\
                                 "datasets directly under PATH",
                           type: :boolean, default: false
+            option :rebuild_orogen_models,
+                   type: :boolean, default: true,
+                   desc: "use this to disable rebuilding orogen models",
+                   long_desc: <<~DESC
+                       Enabled by default. Disabling it will allow to load older
+                       logs for which syskit ds reports mismatching types, at the
+                       cost of reducing the amount of information available.
+                   DESC
+
             def import(root_path, description = nil)
+                Syskit::DRoby::V5.rebuild_orogen_models = options[:rebuild_orogen_models]
+
                 root_path = Pathname.new(root_path).realpath
                 if options[:auto]
                     paths = []
