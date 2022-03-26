@@ -1,10 +1,13 @@
 <%
+guess_array_type_limit = options.fetch(:guess_array_type_limit, 1000)
+
 array = Array(array)
 if array.empty?
-elsif array.size < 1000
+elsif array.size < guess_array_type_limit
     # Check if it is an uniform array and render it accordingly
     klass = array[0].class
-    if (r = ARRAY_RENDERERS[klass]) && array.all? { |o| o.kind_of?(klass) }
+    if (r = find_array_type_from_element(array[0])) &&
+       array.all? { |o| find_array_type_from_element(o) == r }
 %>
 
         <%= summarize(array, type: r) %>

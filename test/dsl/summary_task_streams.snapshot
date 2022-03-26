@@ -1,0 +1,14 @@
+task(some::Task)
+<h3>Ports:</h3>
+<table>
+    <thead><tr><td>Name</td><td>Type</td><td>Size</td><td>From</td><td>To</td></tr></thead>
+    <tr><td>task_task.object0_port</td><td>/int32_t</td><td>2</td><td>1969-12-3123:46:50-0300</td><td>1969-12-3123:46:51-0300</td></tr>
+    <tr><td>task_task.object1_port</td><td>/int32_t</td><td>0</td><td></td><td></td></tr>
+</table>
+
+<h3>Properties:</h3>
+<table>
+    <thead><tr><td>Name</td><td>Type</td><td>Size</td><td>From</td><td>To</td></tr></thead>
+    <tr><td>task_task.properties.object0</td><td>/int32_t</td><td>2</td><td>1969-12-3123:46:52-0300</td><td>1969-12-3123:46:53-0300</td></tr>
+    <tr><td>task_task.properties.object1</td><td>/int32_t</td><td>0</td><td></td><td></td></tr>
+</table>

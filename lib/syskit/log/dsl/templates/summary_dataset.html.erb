@@ -1,4 +1,4 @@
-<b> <%= dataset.metadata_fetch("description") %> (<%= dataset.digest %>) </b>
+<b> <%= dataset.metadata_fetch("description", "No description") %> (<%= dataset.digest %>) </b>
 <ul>
 <% dataset.metadata.each do |key, values| %>
 <li><%= key %>: <%= values.map(&:to_s).join(", ") %></li>
