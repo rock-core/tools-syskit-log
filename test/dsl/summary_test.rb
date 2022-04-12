@@ -245,7 +245,7 @@ module Syskit
                     "rock_task_name" => "task", "rock_task_model" => "some::Task",
                     "rock_stream_type" => "property"
                 }
-                base_time = Time.at(10_000, 100, :usec, in: "-0300")
+                base_time = Time.at(10_000, 100, :usec)
                 create_logfile "test.0.log" do
                     stream = create_logfile_stream "/port0", metadata:
                         port_metadata.merge({ "rock_task_object_name" => "object0" })
