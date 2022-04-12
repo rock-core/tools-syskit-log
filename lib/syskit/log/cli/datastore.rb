@@ -26,6 +26,10 @@ module Syskit::Log
             stop_on_unknown_option! :roby_log
             check_unknown_options! except: :roby_log
 
+            def self.exit_on_failure?
+                true
+            end
+
             no_commands do
                 def create_reporter(
                     format = "",
@@ -193,7 +197,10 @@ module Syskit::Log
                     dataset.each_pocolog_stream.map(&:duration_lg).max || 0
                 end
 
-                def import_dataset(path, reporter, datastore, metadata, merge: false)
+                def import_dataset( # rubocop:disable Metrics/ParameterLists
+                    path, reporter, datastore, metadata,
+                    include:, merge: false
+                )
                     return unless import_dataset?(datastore, path, reporter: reporter)
 
                     paths =
@@ -207,7 +214,8 @@ module Syskit::Log
                         importer = Syskit::Log::Datastore::Import.new(datastore)
                         dataset = importer.normalize_dataset(
                             paths, core_path,
-                            cache_path: cache_path, reporter: reporter
+                            cache_path: cache_path, reporter: reporter,
+                            include: include
                         )
                         metadata.each { |k, v| dataset.metadata_set(k, *v) }
                         dataset.metadata_write_to_file
@@ -462,9 +470,32 @@ module Syskit::Log
                                  type: :array, default: []
             method_option :metadata, desc: "metadata values as key=value pairs",
                                      type: :array, default: []
-            method_option :merge, desc: "create a single dataset from multiple log dirs",
-                                  type: :boolean, default: false
+            method_option :merge,
+                          desc: "create a single dataset from the "\
+                                "datasets directly under PATH",
+                          type: :boolean, default: false
+            option :rebuild_orogen_models,
+                   type: :boolean, default: true,
+                   desc: "use this to disable rebuilding orogen models",
+                   long_desc: <<~DESC
+                       Enabled by default. Disabling it will allow to load older
+                       logs for which syskit ds reports mismatching types, at the
+                       cost of reducing the amount of information available.
+                   DESC
+
+            steps_str = Syskit::Log::Datastore::Import::IMPORT_DEFAULT_STEPS.join(", ")
+            option :include,
+                   desc: "steps to perform during import. Valid steps are: #{steps_str},"\
+                         " roby_no_index",
+                   type: :array,
+                   default:
+                       Syskit::Log::Datastore::Import::IMPORT_DEFAULT_STEPS.map(&:to_s)
+
             def import(root_path, description = nil)
+                Syskit::DRoby::V5.rebuild_orogen_models = options[:rebuild_orogen_models]
+
+                include = options[:include].map(&:to_sym)
+
                 root_path = Pathname.new(root_path).realpath
                 if options[:auto]
                     paths = []
@@ -497,7 +528,7 @@ module Syskit::Log
 
                 paths.each do |p|
                     dataset = import_dataset(p, reporter, datastore, metadata,
-                                             merge: options[:merge])
+                                             merge: options[:merge], include: include)
                     if dataset
                         Syskit::Log::Datastore::Import.save_import_info(p, dataset)
                         puts dataset.digest
@@ -710,29 +741,54 @@ module Syskit::Log
                 show_task_objects(streams, name_field_size)
             end
 
-            desc "roby-log MODE DATASET [args]",
+            desc "roby-log MODE [options] DATASET [roby-log arguments]",
                  "execute roby-log on a the Roby log of a dataset"
+            option :index,
+                   type: :numeric, desc: "0-based index of the log to pick",
+                   long_desc: <<~DOC
+                       roby-log is able to process only one log at a time. Use "
+                       --index to pick which log to process if the dataset has more than
+                       one (starting at 0). Use list --roby to get details on available
+                       logs, or run roby-log without --index to know how many logs there
+                       actually are in a dataset.
+                   DOC
             def roby_log(mode, dataset, *args)
                 store = open_store
                 datasets = resolve_datasets(store, dataset)
 
                 if datasets.empty?
-                    raise ArgumentError, "no dataset matches #{ds}"
+                    raise ArgumentError, "no dataset matches #{dataset}"
                 elsif datasets.size > 1
-                    raise ArgumentError, "more than one dataset matches #{ds}"
+                    raise ArgumentError, "more than one dataset matches #{dataset}"
                 end
 
                 dataset = datasets.first
                 roby_logs = dataset.each_roby_log_path.to_a
                 if roby_logs.empty?
-                    raise ArgumentError, "no Roby logs in #{ds}"
-                elsif roby_logs.size > 1
-                    raise ArgumentError, "more than one Roby log in #{ds}"
+                    raise ArgumentError, "no Roby logs in #{dataset.digest}"
+                end
+
+                if (index = options[:index])
+                    selected_log =
+                        roby_logs.find { |p| /\.#{index}\.log$/.match?(p.basename.to_s) }
+                    unless selected_log
+                        raise ArgumentError,
+                              "no log with index #{index} in #{dataset.digest}. There "\
+                              "are #{roby_logs.size} logs in this dataset"
+                    end
+
+                    roby_logs = [selected_log]
+                end
+
+                if roby_logs.size > 1
+                    raise ArgumentError,
+                          "#{roby_logs.size} Roby logs in #{dataset.digest}, pick one with "\
+                          "--index. Logs are numbered starting at 1"
                 end
 
                 roby_log_path = roby_logs.first
                 exec("roby-log", mode, roby_log_path.to_s,
-                     "--index-file", dataset.roby_index_path(roby_log_path).to_s,
+                     "--index-path", dataset.roby_index_path(roby_log_path).to_s,
                      *args)
             end
         end

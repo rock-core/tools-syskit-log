@@ -219,38 +219,18 @@ module Syskit::Log
                 logfile_path, output_path,
                 reporter: Pocolog::CLI::NullReporter.new, compute_sha256: false
             )
-                state = Struct
-                        .new(:out_io_streams, :control_blocks, :followup_stream_time)
-                        .new([], +"", [])
-
-                reporter_offset = reporter.current
-                last_progress_report = Time.now
-
-                in_io = logfile_path.open
-                in_block_stream = Pocolog::BlockStream.new(in_io)
-                begin
-                    in_block_stream.read_prologue
-                rescue Pocolog::InvalidFile
-                    reporter.warn "#{logfile_path.basename} does not seem to be "\
-                                  "a valid pocolog file, skipping"
-                    reporter.current = in_io.size + reporter_offset
-                    return nil, []
-                end
-
                 state = NormalizationState.new([], +"", [])
 
-                while (block_header = in_block_stream.read_next_block_header)
-                    normalize_logfile_process_block(
-                        output_path, state, block_header, in_block_stream.read_payload,
-                        compute_sha256: compute_sha256
-                    )
+                in_io = logfile_path.open
+                in_block_stream =
+                    normalize_logfile_init(logfile_path, in_io, reporter: reporter)
+                return nil, [] unless in_block_stream
 
-                    now = Time.now
-                    if (now - last_progress_report) > 0.1
-                        reporter.current = in_block_stream.tell + reporter_offset
-                        last_progress_report = now
-                    end
-                end
+                reporter_offset = reporter.current
+                normalize_logfile_process_block_stream(
+                    output_path, state, in_block_stream,
+                    reporter: reporter, compute_sha256: compute_sha256
+                )
                 [nil, state.out_io_streams]
             rescue Pocolog::InvalidBlockFound => e
                 reporter.warn "#{logfile_path.basename} looks truncated or contains "\
@@ -263,6 +243,30 @@ module Syskit::Log
             ensure
                 state.out_io_streams.each(&:flush)
                 in_block_stream&.close
+            end
+
+            def normalize_logfile_process_block_stream(
+                output_path, state, in_block_stream, reporter:, compute_sha256:
+            )
+                reporter_offset = reporter.current
+
+                last_progress_report = Time.now
+                while (block_header = in_block_stream.read_next_block_header)
+                    begin
+                        normalize_logfile_process_block(
+                            output_path, state, block_header, in_block_stream.read_payload,
+                            compute_sha256: compute_sha256
+                        )
+                    rescue InvalidFollowupStream => e
+                        raise e, "while processing #{in_block_stream.io.path}: #{e.message}"
+                    end
+
+                    now = Time.now
+                    if (now - last_progress_report) > 0.1
+                        reporter.current = in_block_stream.tell + reporter_offset
+                        last_progress_report = now
+                    end
+                end
             end
 
             # @api private
@@ -292,6 +296,20 @@ module Syskit::Log
                         state, stream_index, block_header.raw_data, raw_payload
                     )
                 end
+            end
+
+            # @api private
+            #
+            # Open a log file and make sure it's actually a pocolog logfile
+            def normalize_logfile_init(logfile_path, in_io, reporter:)
+                in_block_stream = Pocolog::BlockStream.new(in_io)
+                in_block_stream.read_prologue
+                in_block_stream
+            rescue Pocolog::InvalidFile
+                reporter.warn "#{logfile_path.basename} does not seem to be "\
+                                "a valid pocolog file, skipping"
+                reporter.current += in_io.size
+                nil
             end
 
             # @api private

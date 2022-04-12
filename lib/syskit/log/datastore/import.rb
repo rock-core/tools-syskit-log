@@ -42,17 +42,23 @@ module Syskit::Log
                 [pocolog_files, text_files, roby_files, remaining]
             end
 
+            # Default steps for the "include" argument to {#import} and
+            # {#normalize_dataset}
+            IMPORT_DEFAULT_STEPS = %I[pocolog roby text ignored].freeze
+
             # Import a dataset into the store
             #
             # @param [Pathname] dir_path the input directory
             # @return [Pathname] the directory of the imported dataset in the store
             def import(
-                in_dataset_paths, force: false, reporter: Pocolog::CLI::NullReporter.new
+                in_dataset_paths,
+                force: false, reporter: Pocolog::CLI::NullReporter.new,
+                include: IMPORT_DEFAULT_STEPS
             )
                 datastore.in_incoming do |core_path, cache_path|
                     dataset = normalize_dataset(
                         in_dataset_paths, core_path,
-                        cache_path: cache_path, reporter: reporter
+                        cache_path: cache_path, reporter: reporter, include: include
                     )
                     validate_dataset_import(
                         dataset, force: force, reporter: reporter
@@ -156,23 +162,60 @@ module Syskit::Log
             # @param [Pathname] output_dir_path the output directory
             # @return [Dataset] the resulting dataset
             def normalize_dataset(
-                dir_paths,
-                output_dir_path,
-                cache_path: output_dir_path,
-                reporter: CLI::NullReporter.new
+                dir_paths, output_dir_path,
+                cache_path: output_dir_path, reporter: CLI::NullReporter.new,
+                include: IMPORT_DEFAULT_STEPS
             )
                 pocolog_files, text_files, roby_event_logs, ignored_entries =
                     dir_paths.map { |dir| prepare_import(dir) }
                              .transpose.map(&:flatten)
 
-                reporter.info "Normalizing pocolog log files"
-                normalize_pocolog_files(
-                    output_dir_path, pocolog_files,
-                    cache_path: cache_path,
-                    reporter: reporter
-                )
+                if include.include?(:pocolog)
+                    reporter.info "Normalizing pocolog log files"
+                    normalize_pocolog_files(
+                        output_dir_path, pocolog_files,
+                        cache_path: cache_path,
+                        reporter: reporter
+                    )
+                end
 
-                reporter.info "Copying the Roby event logs"
+                if include.include?(:roby)
+                    reporter.info "Copying the Roby event logs"
+                    normalize_roby_logs(
+                        roby_event_logs, output_dir_path,
+                        cache_path: cache_path, reporter: reporter
+                    )
+                elsif include.include?(:roby_no_index)
+                    roby_event_logs.each do |log|
+                        copy_roby_event_log_no_index(
+                            output_dir_path, log, reporter: reporter
+                        )
+                    end
+                end
+
+                if include.include?(:text)
+                    reporter.info "Copying #{text_files.size} text files"
+                    copy_text_files(output_dir_path, text_files)
+                end
+
+                if include.include?(:ignored)
+                    reporter.info "Copying #{ignored_entries.size} remaining "\
+                                "files and folders"
+                    copy_ignored_entries(output_dir_path, ignored_entries)
+                end
+
+                import_generate_identity(
+                    dir_paths, output_dir_path, cache_path: cache_path
+                )
+            end
+
+            # @api private
+            #
+            # Copy roby logs to the output path while generating a SQL index
+            def normalize_roby_logs(
+                roby_event_logs, output_dir_path, cache_path: output_dir_path,
+                reporter: CLI::NullReporter.new
+            )
                 roby_sql_index = RobySQLIndex::Index.create(cache_path + "roby.sql")
                 roby_event_logs.each do |roby_event_log|
                     copy_roby_event_log(
@@ -194,27 +237,6 @@ module Syskit::Log
                         output_dir_path, roby_event_log, reporter: reporter
                     )
                 end
-
-                reporter.info "Copying #{text_files.size} text files"
-                copy_text_files(output_dir_path, text_files)
-
-                reporter.info "Copying #{ignored_entries.size} remaining "\
-                              "files and folders"
-                copy_ignored_entries(output_dir_path, ignored_entries)
-
-                dataset = Dataset.new(output_dir_path, cache: cache_path)
-                dataset.write_dataset_identity_to_metadata_file
-
-                dir_paths.reverse.each do |dir_path|
-                    roby_info_yml_path = (dir_path + "info.yml")
-                    if roby_info_yml_path.exist?
-                        import_roby_metadata(dataset, roby_info_yml_path)
-                    end
-                end
-
-                dataset.timestamp # computes the timestamp
-                dataset.metadata_write_to_file
-                dataset
             end
 
             # @api private
@@ -265,6 +287,27 @@ module Syskit::Log
                 out_text_dir = (output_dir + "text")
                 out_text_dir.mkpath
                 FileUtils.cp files, out_text_dir
+            end
+
+            # @api private
+            #
+            # Generate identity and metadata files at the end of an import
+            def import_generate_identity(
+                input_paths, output_dir_path, cache_path: output_dir_path
+            )
+                dataset = Dataset.new(output_dir_path, cache: cache_path)
+                dataset.write_dataset_identity_to_metadata_file
+
+                input_paths.reverse.each do |dir_path|
+                    roby_info_yml_path = (dir_path + "info.yml")
+                    if roby_info_yml_path.exist?
+                        import_roby_metadata(dataset, roby_info_yml_path)
+                    end
+                end
+
+                dataset.timestamp # computes the timestamp
+                dataset.metadata_write_to_file
+                dataset
             end
 
             # @api private

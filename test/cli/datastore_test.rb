@@ -906,6 +906,95 @@ a0fa <no description>
                                  @ds.parse_approximate_timestamp(time_s)
                 end
             end
+
+            describe "#roby_log" do
+                before do
+                    path = Pathname.new(__dir__) +
+                           ".." + "datastore" + "fixtures" + "cli-roby-log"
+                    FileUtils.cp_r path, @root_path
+                end
+
+                def setup_dataset(dataset_id)
+                    @dataset_id = dataset_id
+
+                    @datastore_path = @root_path + "cli-roby-log"
+                    @core_path = @datastore_path + "core" + dataset_id
+                    @cache_path = @datastore_path + "cache" + dataset_id
+                end
+
+                it "executes roby-log on the log of the given dataset" do
+                    setup_dataset(
+                        "bc200efbbcd8b58783a3f1cb7149b8c5d62c8be58450e595c665186aee46393f"
+                    )
+                    log_path = @core_path + "roby-events.0.log"
+                    cache_path = @cache_path + "roby-events.0.idx"
+                    flexmock(Datastore)
+                        .new_instances.should_receive(:exec).explicitly.once
+                        .with("roby-log", "display", log_path.to_s,
+                              "--index-path", cache_path.to_s, "extra", "args",
+                              "--colors=f", "--progress=f", "--silent")
+                    call_cli("roby-log", "display", @dataset_id, "extra", "args")
+                end
+
+                it "raises if the dataset does not exist" do
+                    setup_dataset("does_not_exist")
+                    e = assert_raises(ArgumentError) do
+                        call_cli("roby-log", "display", "description~does_not_exist")
+                    end
+                    assert_equal "no dataset matches description~does_not_exist",
+                                 e.message
+                end
+
+                it "raises if more than one dataset exists" do
+                    setup_dataset("does_not_exist")
+                    e = assert_raises(ArgumentError) do
+                        call_cli("roby-log", "display", "description~set")
+                    end
+                    assert_equal "more than one dataset matches description~set",
+                                 e.message
+                end
+
+                it "raises if more than one roby-log index exists" do
+                    setup_dataset(
+                        "735509d05200117eadfe4d3c3beb91bfc02009ee5c030d1a1ccb285efbda07a2"
+                    )
+                    e = assert_raises(ArgumentError) do
+                        call_cli("roby-log", "display", @dataset_id)
+                    end
+                    assert_equal "2 Roby logs in #{@dataset_id}, pick one with --index. "\
+                                 "Logs are numbered starting at 1", e.message
+                end
+
+                it "allows to choose the roby log" do
+                    setup_dataset(
+                        "735509d05200117eadfe4d3c3beb91bfc02009ee5c030d1a1ccb285efbda07a2"
+                    )
+                    log_path = @core_path + "roby-events.1.log"
+                    cache_path = @cache_path + "roby-events.1.idx"
+                    flexmock(Datastore)
+                        .new_instances.should_receive(:exec).explicitly.once
+                        .with("roby-log", "display", log_path.to_s,
+                              "--index-path", cache_path.to_s,
+                              "--colors=f", "--progress=f", "--silent")
+                    call_cli("roby-log", "--index=1", "display", @dataset_id)
+                end
+
+                it "raises if the chosen roby log is out of bounds" do
+                    setup_dataset(
+                        "735509d05200117eadfe4d3c3beb91bfc02009ee5c030d1a1ccb285efbda07a2"
+                    )
+                    e = assert_raises(ArgumentError) do
+                        call_cli("roby-log", "--index=2", "display", @dataset_id)
+                    end
+                    assert_equal "no log with index 2 in 735509d05200117eadfe4d3"\
+                                 "c3beb91bfc02009ee5c030d1a1ccb285efbda07a2. There are "\
+                                 "2 logs in this dataset", e.message
+                end
+
+                def call_cli(mode, *args, silent: true)
+                    super(mode, "--store", @datastore_path.to_s, *args, silent: silent)
+                end
+            end
         end
     end
 end
