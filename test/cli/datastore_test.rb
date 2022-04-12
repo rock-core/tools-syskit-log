@@ -479,7 +479,6 @@ a0fa <no description>
                     assert_equal [show_a0fa, show_a0ea].join, out
                 end
                 it "handles an exact timestamp in direct form" do
-                    puts a0ea_time.tv_sec
                     out, _err = capture_io do
                         call_cli("list", "--store", datastore_path.to_s,
                                  "timestamp=#{a0ea_time.tv_sec}", silent: false)
@@ -830,6 +829,15 @@ a0fa <no description>
 
                 it "handles a full date and time in local time" do
                     time_s = "2021-02-15 15:32:06"
+                    time = Time.parse("#{time_s} -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..time.tv_sec),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                # Regression: '09' is interpreted by Ruby's Integer as an octal
+                # number ... We need to provide the basis explicitly
+                it "handles months after the 8th properly" do
+                    time_s = "2021-09-15 15:32:06"
                     time = Time.parse("#{time_s} -03:00") # we set TZ in setup
                     assert_equal (time.tv_sec..time.tv_sec),
                                  @ds.parse_approximate_timestamp(time_s)

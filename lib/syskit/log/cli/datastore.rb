@@ -307,7 +307,9 @@ module Syskit::Log
                         tz = match.post_match.strip
                     end
 
-                    elements = 6.times.map { |i| Integer(match[i + 1]) if match[i + 1] }
+                    elements = 6.times.map do |i|
+                        Integer(match[i + 1], 10) if match[i + 1]
+                    end
                     base = Time.new(*elements, tz).tv_sec
                     scale, = TIMESTAMP_APPROX_SCALES
                              .each_with_index.find { |_, i| !match[i + 1] }
