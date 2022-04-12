@@ -551,7 +551,7 @@ module Syskit
                 data = roby_vega_task_timeline_data(*tasks)
                 Vega.lite
                     .data(data)
-                    .mark("bar")
+                    .mark(type: "bar")
                     .encoding(y: { field: "task", type: "ordinal" },
                               x: { field: "start", type: "quantitative",
                                    scale: { zero: false } },
