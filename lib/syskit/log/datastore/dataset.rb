@@ -686,6 +686,13 @@ module Syskit::Log
                 Streams.new(each_pocolog_lazy_stream.to_a)
             end
 
+            # Access to the Roby log information, such as tasks or events
+            #
+            # @return [RobySQLIndex::Accessors::Root]
+            def roby
+                RobySQLIndex::Accessors::Root.new(roby_sql_index)
+            end
+
             # Path to the Roby SQL index
             #
             # @return [Pathname]
@@ -697,7 +704,7 @@ module Syskit::Log
             #
             # @return [RobySQLIndex]
             def roby_sql_index
-                RobySQLIndex::Index.open(roby_sql_index_path)
+                RobySQLIndex::Index.open(roby_sql_index_path, dataset: self)
             end
 
             # Enumerate the streams per task

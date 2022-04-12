@@ -17,3 +17,6 @@ Roby.app.backward_compatible_naming = false
 # FlatFish
 #
 # Roby.app.module_name = 'Override'
+
+require "roby/schedulers/temporal"
+Roby.scheduler = Roby::Schedulers::Temporal.new

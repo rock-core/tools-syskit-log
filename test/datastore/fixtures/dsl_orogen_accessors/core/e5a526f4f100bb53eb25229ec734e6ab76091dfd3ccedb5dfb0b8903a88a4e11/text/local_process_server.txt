@@ -1,0 +1,13 @@
+Syskit::RobyApp::RemoteProcesses::Server[INFO]: starting on port 20202
+Syskit::RobyApp::RemoteProcesses::Server[INFO]: process server listening on port 40675
+Syskit::RobyApp::RemoteProcesses::Server[DEBUG]: new connection: #<TCPSocket:0x000055f0c2fd45e0>
+Syskit::RobyApp::RemoteProcesses::Server[DEBUG]: #<TCPSocket:0x000055f0c2fd45e0> requested PID
+Syskit::RobyApp::RemoteProcesses::Server[DEBUG]: #<TCPSocket:0x000055f0c2fd45e0> requested system information
+Syskit::RobyApp::RemoteProcesses::Server[DEBUG]: #<TCPSocket:0x000055f0c2fd45e0> requested startup of echo with {:working_directory=>"/home/doudou/dev/tidewise/wetpaint/tools/syskit-log/test/roby-log-generation/logs/20230117-1609.1", :output=>"%m-%p.txt", :valgrind=>nil, :gdb=>nil, :cmdline_args=>{}, :wait=>false, :log_level=>nil, :oro_logfile=>"orocos.%m-%p.txt"} and mappings {"orogen_default_orogen_syskit_tests__Echo"=>"echo", "orogen_default_orogen_syskit_tests__Echo_Logger"=>"echo_Logger"}
+Syskit::RobyApp::RemoteProcesses::Server[DEBUG]: echo, from orogen_default_orogen_syskit_tests__Echo, is started (47574)
+Syskit::RobyApp::RemoteProcesses::Server[DEBUG]: #<TCPSocket:0x000055f0c2fd45e0> requested end of echo
+[35morocos.rb[WARN]: sending SIGINT to echo
+[0mSyskit::RobyApp::RemoteProcesses::Server[DEBUG]: announcing death of echo
+Syskit::RobyApp::RemoteProcesses::Server[DEBUG]:   announcing to #<TCPSocket:0x000055f0c2fd45e0>
+Syskit::RobyApp::RemoteProcesses::Server[INFO]: process server exited normally
+Syskit::RobyApp::RemoteProcesses::Server[INFO]: stopping process server

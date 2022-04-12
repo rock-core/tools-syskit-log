@@ -58,6 +58,14 @@ module Syskit::Log
             @pocolog_stream = nil
         end
 
+        def task_name
+            metadata["rock_task_name"]
+        end
+
+        def task_object_name
+            metadata["rock_task_object_name"]
+        end
+
         # True if the size of this stream is zero
         def empty?
             size == 0

@@ -132,6 +132,10 @@ module Syskit
                         @tasks = {}
                     end
 
+                    def ==(other)
+                        other.kind_of?(TaskModel) && other.id == id
+                    end
+
                     def each_event
                         return enum_for(__method__) unless block_given?
 
@@ -157,6 +161,46 @@ module Syskit
                                 @index, entity, task, event_m
                             )
                         end
+                    end
+
+                    def orogen_model_name
+                        unless (m = /^OroGen\./.match(name))
+                            raise ArgumentError, "#{name} is not an orogen model"
+                        end
+
+                        m.post_match.gsub(".", "::")
+                    end
+
+                    def each_port_model
+                        return enum_for(__method__) unless block_given?
+
+                        streams = @index.find_all_streams(
+                            RockStreamMatcher
+                            .new.ports
+                            .task_orogen_model_name(orogen_model_name)
+                        )
+                        port_names = streams.map(&:task_object_name).uniq
+                        port_names.each do |name|
+                            streams = streams.find_all_streams(
+                                RockStreamMatcher.new.object_name(name)
+                            )
+                            yield PortModel.new(self, name, streams)
+                        end
+                    end
+
+                    def find_port_by_name(name)
+                        streams = @index.find_all_streams(
+                            RockStreamMatcher
+                            .new.ports
+                            .task_orogen_model_name(orogen_model_name)
+                            .object_name(name)
+                        )
+                        if streams.empty?
+                            raise ArgumentError,
+                                  "no port stream named #{name} in this dataset"
+                        end
+
+                        PortModel.new(self, name, Streams.new(streams))
                     end
 
                     def each_emission(**where, &block)
@@ -204,27 +248,28 @@ module Syskit
                         end
                     end
 
-                    def ==(other)
-                        other.kind_of?(TaskModel) && other.id == id
+                    def find_event_by_name(event_name)
+                        event_name = event_name.to_str
+                        return unless @index.event_with_name?(event_name)
+                        return unless event?(event_name)
+
+                        EventModel.new(@index, event_name, self)
+                    end
+
+                    def respond_to_missing?(m, include_private = true)
+                        MetaRuby::DSLs.has_through_method_missing?(
+                            self, m,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
                     end
 
                     def method_missing(m, *args, **kw, &block)
-                        m_to_s = m.to_s
-                        return super unless m_to_s.end_with?("_event")
-
-                        event_name = m_to_s[0..-7]
-                        unless @index.event_with_name?(event_name)
-                            msg = "no events named #{event_name} have been emitted"
-                            raise NoMethodError.new(msg, m)
-                        end
-
-                        unless event?(event_name)
-                            msg = "there are emitted events named #{event_name}, but "\
-                                  "not for a task of model #{@name}"
-                            raise NoMethodError.new(msg, m)
-                        end
-
-                        EventModel.new(@index, event_name, self)
+                        MetaRuby::DSLs.find_through_method_missing(
+                            self, m, args,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
                     end
 
                     # Return the task instance object with the given ID
@@ -262,6 +307,35 @@ module Syskit
                     end
                 end
 
+                # Representation of a port on a task model
+                #
+                # Use {Task#find_port} or {#each_port} to get ports of actual task
+                # instances
+                class PortModel
+                    attr_reader :task_model
+                    attr_reader :name
+                    attr_reader :streams
+
+                    def initialize(task_model, name, streams)
+                        @task_model = task_model
+                        @name = name
+                        @streams = streams
+                    end
+
+                    def bind(task)
+                        orocos_name = task.arguments[:orocos_name]
+                        task_stream =
+                            @streams.find_task_by_name(orocos_name).streams.first
+                        Port.new(task, @name, task_stream)
+                    end
+
+                    def each_port
+                        return enum_for(__method__) unless block_given?
+
+                        task_model.each_task { |task| yield bind(task) }
+                    end
+                end
+
                 # Represents an event generator model
                 class EventModel
                     # The event's name
@@ -273,6 +347,13 @@ module Syskit
                         @index = index
                         @name = name
                         @task_model = task_model
+                    end
+
+                    # Returns the event generator model for the given task instance
+                    #
+                    # @return [Event]
+                    def bind(task)
+                        Event.new(@index, @name, task, self)
                     end
 
                     def ==(other)
@@ -346,6 +427,10 @@ module Syskit
                         @obj.id
                     end
 
+                    def ==(other)
+                        other.kind_of?(Task) && other.id == id
+                    end
+
                     def arguments
                         return @arguments if @arguments
 
@@ -374,10 +459,6 @@ module Syskit
                         [start_time, stop_time]
                     end
 
-                    def ==(other)
-                        other.kind_of?(Task) && other.id == id
-                    end
-
                     def event_propagations_query
                         @model.event_propagations_query.from_task_id(id)
                     end
@@ -393,6 +474,7 @@ module Syskit
                             .where(kind: EVENT_PROPAGATION_EMIT, **where)
                             .order(:time).last
                     end
+
                     # Enumerate event propagations from events of this task
                     def each_event_propagation(**where)
                         return enum_for(__method__, **where) unless block_given?
@@ -413,28 +495,74 @@ module Syskit
                     end
 
                     def event(name)
-                        BoundEvent.new(@index, name, self, model.event(name))
+                        unless (ev = find_event_by_name(name))
+                            raise NoSuchEvent,
+                                  "cannot find an event '#{name}' on #{self}"
+                        end
+
+                        ev
+                    end
+
+                    def find_event_by_name(name)
+                        model.find_event_by_name(name)&.bind(self)
+                    end
+
+                    def find_port_by_name(name)
+                        model.find_port_by_name(name)&.bind(self)
+                    end
+
+                    def each_port
+                        return enum_for(__method__) unless block_given?
+
+                        task_model.each_port_model { |p| p.bind(self) }
                     end
 
                     def respond_to_missing?(m, include_private = false)
-                        super || m.to_s.end_with?("_event")
+                        MetaRuby::DSLs.has_through_method_missing?(
+                            self, m,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
                     end
 
                     def method_missing(m, *args, **kw, &block)
-                        if m.to_s.end_with?("_event")
-                            unless args.empty? && kw.empty?
-                                raise ArgumentError, "wrong number of arguments"
-                            end
+                        MetaRuby::DSLs.find_through_method_missing(
+                            self, m, args,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
+                    end
+                end
 
-                            event(m[0..-7])
-                        else
-                            super
-                        end
+                class Port
+                    attr_reader :task
+                    attr_reader :name
+
+                    def ==(other)
+                        other.task == task && other.name == name
+                    end
+
+                    def initialize(task, name, global_stream)
+                        @task = task
+                        @name = name
+                        @global_stream = global_stream
+                    end
+
+                    def stream
+                        s = @global_stream.syskit_eager_load
+                        start, stop = @task.interval_lg
+                        return unless start
+
+                        s.from_logical_time(start).to_logical_time(stop)
+                    end
+
+                    def samples
+                        stream.samples
                     end
                 end
 
                 # An event model bound to a particular task instance
-                class BoundEvent
+                class Event
                     # The event name
                     attr_reader :name
                     # The task it is bound to

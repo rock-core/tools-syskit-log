@@ -303,6 +303,45 @@ module Syskit
                     end
                 end
 
+                describe "the relationship with data streams" do
+                    before do
+                        @datastore, @dataset =
+                            prepare_fixture_datastore "dsl_orogen_accessors"
+                    end
+
+                    it "gives access to the port stream through the port model" do
+                        task_m = @dataset.roby.OroGen.orogen_syskit_tests.Echo.out_port
+                        samples = task_m.streams.echo_task.out_port.samples.to_a
+
+                        assert samples[0].last < 1000
+                        assert samples[-1].last > 1000
+                    end
+
+                    it "restricts the port streams for a given task instance" do
+                        task_m = @dataset.roby.OroGen.orogen_syskit_tests.Echo
+                        tasks = task_m.each_task.to_a
+                        assert_equal 2, tasks.size
+
+                        all_samples =
+                            task_m.out_port.streams.echo_task.out_port.samples.to_a
+                        samples0 = tasks.first.out_port.samples.to_a
+                        samples1 = tasks.last.out_port.samples.to_a
+                        assert samples0[0].last < 1000
+                        assert samples0[-1].last < 1000
+                        assert samples1[0].last > 1000
+                        assert samples1[-1].last > 1000
+                        assert_equal all_samples, (samples0 + samples1)
+                    end
+
+                    it "allows to get a port either form its model or from the task" do
+                        task_m = @dataset.roby.OroGen.orogen_syskit_tests.Echo
+                        port_from_model = task_m.out_port.each_port.first
+                        port_from_task = task_m.each_task.first.out_port
+
+                        assert_equal port_from_model, port_from_task
+                    end
+                end
+
                 def read_snapshot(name)
                     Pathname.new(__dir__).join("#{name}.snapshot").read
                             .gsub(/\s/, "")
