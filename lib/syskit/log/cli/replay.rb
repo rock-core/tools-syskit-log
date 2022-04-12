@@ -30,6 +30,7 @@ module Syskit::Log
             option :single, type: :boolean, default: true
             option :robot, aliases: "r", type: :string,
                            desc: "the robot configuration to load"
+            option :controller, aliases: "c", type: :boolean, default: false
             def start(*path)
                 paths = path.map { |p| Pathname.new(p) }
                 if (non_existent = paths.find { |p| !p.exist? })
@@ -39,7 +40,7 @@ module Syskit::Log
                 paths = paths.map(&:expand_path)
 
                 setup_common
-                setup_roby_for_running(run_controllers: true)
+                setup_roby_for_running(run_controllers: options[:controller])
                 app.single if options[:single]
                 script_paths, dataset_paths =
                     paths.partition { |p| p.extname == ".rb" }
