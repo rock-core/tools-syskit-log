@@ -197,7 +197,10 @@ module Syskit::Log
                     dataset.each_pocolog_stream.map(&:duration_lg).max || 0
                 end
 
-                def import_dataset(path, reporter, datastore, metadata, merge: false)
+                def import_dataset( # rubocop:disable Metrics/ParameterLists
+                    path, reporter, datastore, metadata,
+                    include:, merge: false
+                )
                     return unless import_dataset?(datastore, path, reporter: reporter)
 
                     paths =
@@ -211,7 +214,8 @@ module Syskit::Log
                         importer = Syskit::Log::Datastore::Import.new(datastore)
                         dataset = importer.normalize_dataset(
                             paths, core_path,
-                            cache_path: cache_path, reporter: reporter
+                            cache_path: cache_path, reporter: reporter,
+                            include: include
                         )
                         metadata.each { |k, v| dataset.metadata_set(k, *v) }
                         dataset.metadata_write_to_file
@@ -479,8 +483,18 @@ module Syskit::Log
                        cost of reducing the amount of information available.
                    DESC
 
+            steps_str = Syskit::Log::Datastore::Import::IMPORT_DEFAULT_STEPS.join(", ")
+            option :include,
+                   desc: "steps to perform during import. Valid steps are: #{steps_str},"\
+                         " roby_no_index",
+                   type: :array,
+                   default:
+                       Syskit::Log::Datastore::Import::IMPORT_DEFAULT_STEPS.map(&:to_s)
+
             def import(root_path, description = nil)
                 Syskit::DRoby::V5.rebuild_orogen_models = options[:rebuild_orogen_models]
+
+                include = options[:include].map(&:to_sym)
 
                 root_path = Pathname.new(root_path).realpath
                 if options[:auto]
@@ -514,7 +528,7 @@ module Syskit::Log
 
                 paths.each do |p|
                     dataset = import_dataset(p, reporter, datastore, metadata,
-                                             merge: options[:merge])
+                                             merge: options[:merge], include: include)
                     if dataset
                         Syskit::Log::Datastore::Import.save_import_info(p, dataset)
                         puts dataset.digest
