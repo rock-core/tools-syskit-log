@@ -27,6 +27,7 @@ module Syskit::Log
             desc "start [SCRIPTS] [DATASETS]",
                  "replays a data replay script. If no script is given, allows "\
                  "to replay streams using profile definitions"
+            option :single, type: :boolean, default: true
             option :robot, aliases: "r", type: :string,
                            desc: "the robot configuration to load"
             def start(*path)
@@ -39,6 +40,7 @@ module Syskit::Log
 
                 setup_common
                 setup_roby_for_running(run_controllers: true)
+                app.single if options[:single]
                 script_paths, dataset_paths =
                     paths.partition { |p| p.extname == ".rb" }
 
