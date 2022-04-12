@@ -45,16 +45,17 @@ module Syskit::Log
                 script_paths, dataset_paths =
                     paths.partition { |p| p.extname == ".rb" }
 
+                streams = Syskit::Log::Streams.new
+                dataset_paths.each do |p|
+                    if p.directory?
+                        streams.add_dir(p)
+                    else
+                        streams.add_file(p)
+                    end
+                end
+
                 app.setup
                 begin
-                    streams = Syskit::Log::Streams.new
-                    dataset_paths.each do |p|
-                        if p.directory?
-                            streams.add_dir(p)
-                        else
-                            streams.add_file(p)
-                        end
-                    end
                     Syskit::Log.streams = streams
 
                     if script_paths.empty?
