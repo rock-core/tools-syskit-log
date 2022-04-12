@@ -28,6 +28,15 @@ module Syskit
                 end
                 @context.datastore_select @datastore_path
                 @context.dataset_select
+
+                # We test the templates, which are timezone
+                # dependent
+                @tz = ENV["TZ"]
+                ENV["TZ"] = "America/Sao_Paulo"
+            end
+
+            after do
+                ENV["TZ"] = @tz
             end
 
             it "renders a template based on the object type" do
