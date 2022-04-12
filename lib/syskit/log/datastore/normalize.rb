@@ -240,10 +240,14 @@ module Syskit::Log
                 state = NormalizationState.new([], +"", [])
 
                 while (block_header = in_block_stream.read_next_block_header)
-                    normalize_logfile_process_block(
-                        output_path, state, block_header, in_block_stream.read_payload,
-                        compute_sha256: compute_sha256
-                    )
+                    begin
+                        normalize_logfile_process_block(
+                            output_path, state, block_header, in_block_stream.read_payload,
+                            compute_sha256: compute_sha256
+                        )
+                    rescue InvalidFollowupStream => e
+                        raise e, "while processing #{in_block_stream.io.path}: #{e.message}"
+                    end
 
                     now = Time.now
                     if (now - last_progress_report) > 0.1
