@@ -54,16 +54,17 @@ module Syskit::Log
                     end
                 end
 
+                app.on_require(user: true) do
+                    script_paths.each { |p| require p.to_s }
+                end
+
                 app.setup
                 begin
                     Syskit::Log.streams = streams
-
                     if script_paths.empty?
                         # Load the default script
                         Syskit::Log::Plugin
                             .override_all_deployments_by_replay_streams(streams)
-                    else
-                        script_paths.each { |p| require p.to_s }
                     end
                     app.run
                 ensure
