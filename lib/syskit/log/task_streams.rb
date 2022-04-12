@@ -167,8 +167,14 @@ module Syskit::Log
             model_name
         end
 
+        def to_deployment_group
+            group = Syskit::Models::DeploymentGroup.new
+            group.use_pocolog_task(self)
+            group
+        end
+
         def to_instance_requirements
-            requirements = self.replay_model.to_instance_requirements
+            requirements = model.to_instance_requirements
             requirements.use_deployment_group(to_deployment_group)
             requirements
         end
