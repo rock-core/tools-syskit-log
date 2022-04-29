@@ -34,6 +34,12 @@ module Syskit
                             super
                     end
 
+                    def model_query
+                        # !!! pattern must be calculated outside of `where`
+                        pattern = "#{@prefix}%"
+                        @index.models.where { name.like(pattern) }
+                    end
+
                     def event_propagation_query
                         @index.event_propagations
                     end
@@ -57,7 +63,9 @@ module Syskit
                     def method_missing(m, *args, **kw, &block)
                         full_name = "#{@prefix}#{m}"
                         pattern = "#{@prefix}#{m}#{@separator}"
-                        return OroGenNamespace.new(@index, "OroGen") if m == :OroGen
+                        if %I[Orogen Deployments].include?(m)
+                            return OroGenNamespace.new(@index, m.to_s)
+                        end
 
                         model_id = @index.models.where(name: full_name).pluck(:id).first
                         if model_id
@@ -69,6 +77,11 @@ module Syskit
                         else
                             super
                         end
+                    end
+
+                    def to_iruby
+                        names = model_query.pluck(:name).sort
+                        ["text/html", IRuby::HTML.table(names, maxrows: nil)]
                     end
                 end
 
@@ -421,6 +434,10 @@ module Syskit
                     # The event propagation's type (as one of the
                     # EVENT_PROPAGATION_ constants)
                     attr_reader :kind
+                    # The emission context (if kind is EVENT_PROPAGATION_EMIT)
+                    def context
+                        @context ||= (JSON.parse(@json_context) if @json_context)
+                    end
 
                     # The event's task
                     #
@@ -444,17 +461,18 @@ module Syskit
 
                     def self.from_entity(index, entity, task, model)
                         new(index, entity.kind, entity.id, entity.time, entity.name,
-                            task, model)
+                            entity.context, task, model)
                     end
 
                     # @param [Task] task
                     # @param [EventModel] model
-                    def initialize(index, kind, id, time, name, task, model) # rubocop:disable Metrics/ParameterLists
+                    def initialize(index, kind, id, time, name, context, task, model) # rubocop:disable Metrics/ParameterLists
                         @index = index
                         @kind = kind
                         @id = id
                         @time = time
                         @name = name
+                        @json_context = context
                         @task = task
                         @model = model
                     end

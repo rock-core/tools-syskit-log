@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "iruby"
 
 module Syskit
     module Log
@@ -38,6 +39,12 @@ module Syskit
                                             .map { |p| [p.name, p.kind] }
                         assert_equal expected, propagations
                     end
+
+                    it "displays the list of models children of self in to_iruby" do
+                        mime, body = @root.to_iruby
+                        assert_equal "text/html", mime
+                        assert_equal read_snapshot("root_to_iruby"), body
+                    end
                 end
 
                 describe "a namespace" do
@@ -54,6 +61,12 @@ module Syskit
 
                     it "gives access to a task model" do
                         assert @namespace.M
+                    end
+
+                    it "displays the list of models children of self in to_iruby" do
+                        mime, body = @namespace.to_iruby
+                        assert_equal "text/html", mime
+                        assert_equal read_snapshot("namespace_to_iruby"), body
                     end
                 end
 
@@ -246,6 +259,22 @@ module Syskit
                         assert_equal ev.model.task_model.each_task.first,
                                      ev.task
                     end
+                end
+
+                describe "the deployments" do
+                    it "gives access through the OroGen.Deployments namespace" do
+                        Roby.app.plugins_enabled = true
+                        index = Index.create(logfile_pathname("roby2.sql"))
+                        index.add_roby_log(roby_log_path("deployments"))
+                        root = Accessors::Root.new(index)
+                        task_model = root.Deployments.RubyTasks.T
+                        assert_equal "Deployments.RubyTasks.T", task_model.name
+                    end
+                end
+
+                def read_snapshot(name)
+                    Pathname.new(__dir__).join("#{name}.snapshot").read
+                            .gsub(/\s/, "")
                 end
             end
         end

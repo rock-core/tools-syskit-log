@@ -1,0 +1,7 @@
+<table>
+    <thead>
+        <tr><td>Name</td><td>Kind</td><td>EventID</td><td>TaskID</td><td>Time</td></tr>
+    </thead>
+    <tr><td>start_event</td><td>call</td><td>4</td><td>2</td><td>1637627749.774233</td></tr>
+    <tr><td>start_event</td><td>emit</td><td>2</td><td>2</td><td>1637627749.774357</td></tr>
+</table>
