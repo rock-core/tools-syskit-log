@@ -129,11 +129,11 @@ module Syskit::Log
                 create_logfile("test0.2.log") {}
                 create_logfile("test1.0.log") {}
                 groups = subject.make_file_groups_in_dir(logfile_pathname)
-                expected = [
+                expected = Set[
                     [(logfile_pathname + "test0.0.log"), (logfile_pathname + "test0.1.log"), (logfile_pathname + "test0.2.log")],
                     [logfile_pathname + "test1.0.log"]
                 ]
-                assert_equal expected, groups
+                assert_equal expected, groups.to_set
             end
         end
 
