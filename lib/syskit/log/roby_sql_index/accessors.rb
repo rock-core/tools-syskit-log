@@ -622,16 +622,19 @@ module Syskit
                         @global_stream = global_stream
                     end
 
-                    def stream
+                    def syskit_eager_load
+                        return @pocolog_stream if @pocolog_stream
+
                         s = @global_stream.syskit_eager_load
                         start, stop = @task.interval_lg
                         return unless start
 
-                        s.from_logical_time(start).to_logical_time(stop)
+                        @pocolog_stream =
+                            s.from_logical_time(start).to_logical_time(stop)
                     end
 
                     def samples
-                        stream.samples
+                        syskit_eager_load.samples
                     end
                 end
 

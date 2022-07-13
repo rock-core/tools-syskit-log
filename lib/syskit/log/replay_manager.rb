@@ -106,7 +106,13 @@ module Syskit::Log
                 if (pocolog = @stream_syskit_to_pocolog[s])
                     @dispatch_info[pocolog].deployments << deployment_task
                 else
-                    pocolog = s.syskit_eager_load
+                    pocolog =
+                        if s.respond_to?(:syskit_eager_load)
+                            s.syskit_eager_load
+                        else
+                            s
+                        end
+
                     @stream_syskit_to_pocolog[s] = pocolog
                     @dispatch_info[pocolog] = DispatchInfo.new([deployment_task], s)
                     new_streams << pocolog
