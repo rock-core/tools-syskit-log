@@ -33,7 +33,7 @@ module Syskit::Log
         # The stream metadata
         #
         # @return [Hash]
-        attr_reader :metadata
+        attr_accessor :metadata
 
         # The size, in samples, of the stream
         #

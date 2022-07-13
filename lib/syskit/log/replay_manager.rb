@@ -84,15 +84,9 @@ module Syskit::Log
         # @return [void]
         def register(deployment_task)
             new_streams = []
-            deployment_task.model.each_stream_mapping.each do |s, _|
-                if (pocolog = @stream_syskit_to_pocolog[s])
-                    @dispatch_info[pocolog].deployments << deployment_task
-                else
-                    pocolog = s.syskit_eager_load
-                    @stream_syskit_to_pocolog[s] = pocolog
-                    @dispatch_info[pocolog] = DispatchInfo.new([deployment_task], s)
-                    new_streams << pocolog
-                end
+            deployment_task.model.each_stream_mapping do |s, _|
+                pocolog, new = update_dispatch_info_for_stream(deployment_task, s)
+                new_streams << pocolog if new
             end
 
             if stream_aligner.add_streams(*new_streams)
@@ -102,6 +96,34 @@ module Syskit::Log
                 @time = stream_aligner.eof? ? end_time : start_time
             end
             reset_replay_base_times
+        end
+
+        # @api private
+        #
+        # Update dispatching for a stream that is being used by a task
+        #
+        # This updates the internal datastructure that associates the stream
+        # with the actual pocolog stream (if it is a lazy-loaded stream) and the
+        # task
+        #
+        # @return [Boolean] true if the stream is new (never seen before), and false
+        #   otherwise
+        def update_dispatch_info_for_stream(deployment_task, stream)
+            if (pocolog = @stream_syskit_to_pocolog[stream])
+                @dispatch_info[pocolog].deployments << deployment_task
+                return [pocolog, false]
+            end
+
+            pocolog =
+                if stream.respond_to?(:syskit_eager_load)
+                    stream.syskit_eager_load
+                else
+                    stream
+                end
+
+            @stream_syskit_to_pocolog[stream] = pocolog
+            @dispatch_info[pocolog] = DispatchInfo.new([deployment_task], stream)
+            [pocolog, true]
         end
 
         # Deregisters a deployment task
