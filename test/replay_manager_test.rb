@@ -37,13 +37,14 @@ module Syskit::Log
                 subject.register(deployment_task)
                 other_task = deployment_m.new
                 subject.register(other_task)
-                assert_equal Hash[port_stream => Set[deployment_task, other_task]],
-                             subject.stream_to_deployment
+                assert_equal [deployment_task, other_task],
+                             subject.find_deployments_of_stream(port_stream)
             end
             it "deregisters the stream if no deployment tasks are still using it" do
                 deployment_task = deployment_m.new
                 subject.register(deployment_task)
-                assert_equal Hash[port_stream => Set[deployment_task]], subject.stream_to_deployment
+                assert_equal [deployment_task],
+                             subject.find_deployments_of_stream(port_stream)
             end
             it "aligns the streams that are managed by the deployment task" do
                 deployment_task = deployment_m.new
@@ -93,13 +94,14 @@ module Syskit::Log
                 other_task = deployment_m.new
                 subject.register(other_task)
                 subject.deregister(other_task)
-                assert_equal Hash[port_stream => Set[deployment_task]], subject.stream_to_deployment
+                assert_equal [deployment_task],
+                             subject.find_deployments_of_stream(port_stream)
             end
             it "deregisters the stream if no deployment tasks are still using it" do
                 deployment_task = deployment_m.new
                 subject.register(deployment_task)
                 subject.deregister(deployment_task)
-                assert_equal Hash[], subject.stream_to_deployment
+                assert_equal [], subject.find_deployments_of_stream(port_stream)
             end
         end
 
