@@ -130,14 +130,16 @@ module Syskit::Log
                     end
                 end
                 it "normalizes the pocolog logfiles" do
+                    incoming_path = datastore_path + "incoming" + "0"
                     expected_normalize_args = hsh(
-                        output_path: datastore_path + "incoming" + "0" + "core" + "pocolog",
-                        index_dir: datastore_path + "incoming" + "0" + "cache" + "pocolog"
+                        output_path: incoming_path + "core" + "pocolog",
+                        index_dir: incoming_path + "cache" + "pocolog"
                     )
 
-                    flexmock(Syskit::Log::Datastore).should_receive(:normalize)
-                                                    .with([logfile_pathname("test.0.log")], expected_normalize_args).once
-                                                    .pass_thru
+                    flexmock(Syskit::Log::Datastore)
+                        .should_receive(:normalize)
+                        .with([logfile_pathname("test.0.log")], expected_normalize_args)
+                        .once.pass_thru
                     dataset = import.import([logfile_pathname])
                     assert (dataset.dataset_path + "pocolog" + "task0::port.0.log").exist?
                 end

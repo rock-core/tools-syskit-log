@@ -33,12 +33,12 @@ module Syskit::Log
 
             # The basename of the file that contains identifying metadata
             #
-            # @see write_identifying_metadata
+            # @see write_dataset_identity_to_metadata_file
             BASENAME_IDENTITY_METADATA = "syskit-dataset.yml"
 
             # The basename of the file that contains identifying metadata
             #
-            # @see write_identifying_metadata
+            # @see write_dataset_identity_to_metadata_file
             BASENAME_METADATA = "syskit-metadata.yml"
 
             IdentityEntry = Struct.new :path, :size, :sha2
@@ -140,7 +140,8 @@ module Syskit::Log
 
             # Computes the dataset identity by reading the files
             #
-            # The result is suitable to call e.g. {#write_identifying_metadata}
+            # The result is suitable to call e.g.
+            # {#write_dataset_identity_to_metadata_file}
             #
             # @return [Array<IdentityEntry>]
             def compute_dataset_identity_from_files
