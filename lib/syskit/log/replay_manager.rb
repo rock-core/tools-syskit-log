@@ -100,9 +100,9 @@ module Syskit::Log
         #
         # @param [Deployment] deployment_task the task to register
         # @return [void]
-        def register(deployment_task, streams)
+        def register(deployment_task)
             new_streams = []
-            streams.each do |s|
+            deployment_task.model.each_stream_mapping.each do |s, _|
                 if (pocolog = @stream_syskit_to_pocolog[s])
                     @dispatch_info[pocolog].deployments << deployment_task
                 else
