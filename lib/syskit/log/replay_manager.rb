@@ -125,11 +125,12 @@ module Syskit::Log
 
             if stream_aligner.add_streams(*new_streams)
                 _, @time = stream_aligner.step_back
+                reset_replay_base_times
             else
                 reset_replay_base_times
+                seek(@initial_seek) if @initial_seek
                 @time = stream_aligner.eof? ? end_time : start_time
             end
-            reset_replay_base_times
         end
 
         # Deregisters a deployment task
@@ -157,6 +158,11 @@ module Syskit::Log
 
         # Seek to the given time or sample index
         def seek(time_or_index)
+            if stream_aligner.empty?
+                @initial_seek = time_or_index
+                return
+            end
+
             stream_index, time = stream_aligner.seek(time_or_index, false)
             return unless stream_index
 
