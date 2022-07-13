@@ -43,13 +43,17 @@ module Syskit::Log
             end
         end
 
-        def initialize(execution_engine)
+        def initialize(
+            execution_engine, log_file: File.join(Roby.app.log_dir, "replay.0.log")
+        )
             @execution_engine = execution_engine
             @handler_id = nil
             @stream_aligner = Pocolog::StreamAligner.new(false)
 
             @stream_syskit_to_pocolog = {}
             @dispatch_info = {}
+            @log_file = Pocolog::Logfiles.create(log_file)
+            @log_streams = {}
         end
 
         # Time of the first sample in the aligner
@@ -60,6 +64,20 @@ module Syskit::Log
         # Time of the last sample in the aligner
         def end_time
             stream_aligner.interval_lg[1]
+        end
+
+        OutputLog = Struct.new :block_stream, :index_as_buffer, :sample
+
+        # Add the given stream to the replay log
+        #
+        # @param [Pocolog::DataStream] in_stream the replayed stream
+        # @return [Pocolog::OutputLog] information about the stream in the output log
+        def add_log_stream(stream)
+            output_stream =
+                @log_file.create_stream(stream.name, stream.type, stream.metadata)
+            OutputLog.new(stream.logfile.block_stream.dup,
+                          [output_stream.index].pack("v"),
+                          output_stream.type.new)
         end
 
         # Return the deployment tasks that are "interested by" a given stream
@@ -87,6 +105,10 @@ module Syskit::Log
             deployment_task.model.each_stream_mapping do |s, _|
                 pocolog, new = update_dispatch_info_for_stream(deployment_task, s)
                 new_streams << pocolog if new
+            end
+
+            new_streams.each do |pocolog|
+                @log_streams[pocolog] ||= add_log_stream(pocolog)
             end
 
             if stream_aligner.add_streams(*new_streams)
@@ -239,10 +261,41 @@ module Syskit::Log
             pocolog_stream = stream_aligner.streams[stream_index]
             info = @dispatch_info.fetch(pocolog_stream)
 
-            sample = stream_aligner.single_data(stream_index)
+            stream, position = stream_aligner.sample_info(stream_index)
+            sample = log_read_sample(stream, position)
             info.deployments.each do |task|
                 task.process_sample(info.syskit_stream, time, sample)
             end
+        end
+
+        # Read a sample as indicated by the stream aligner
+        #
+        # This is reimplemented from pocolog to copy the raw data to the output
+        # logs without having to re-marshal it
+        def log_read_sample(stream, position)
+            input = @log_streams[stream]
+            block_pos = stream.stream_index.file_position_by_sample_number(position)
+            bs = input.block_stream
+            bs.seek(block_pos)
+            _, block_raw, payload_raw = bs.read_block_raw
+            log_update_stream_index(block_raw, input.index_as_buffer)
+            log_update_realtime(payload_raw, Time.now)
+            @log_file.io.write(block_raw)
+            @log_file.io.write(payload_raw)
+
+            input.sample.from_buffer_direct(
+                payload_raw[Pocolog::Format::Current::DATA_BLOCK_HEADER_SIZE,
+                            payload_raw.size]
+            )
+            input.sample
+        end
+
+        def log_update_stream_index(block_raw, index_as_buffer)
+            block_raw[2, 2] = index_as_buffer
+        end
+
+        def log_update_realtime(payload_raw, time)
+            payload_raw[0, 8] = [time.tv_sec, time.tv_usec].pack("VV")
         end
 
         # @api private
