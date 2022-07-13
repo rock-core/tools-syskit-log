@@ -71,7 +71,7 @@ module Syskit
             # is recommended to call {#dataset_select} last in a cell to have that
             # information displayed
             #
-            # @see {dataset}
+            # @see #dataset
             def dataset_select(query = nil)
                 matches =
                     if query.respond_to?(:to_str)
