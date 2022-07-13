@@ -58,6 +58,9 @@ module Syskit::Log
                     script_paths.each { |p| require p.to_s }
                 end
 
+                app.public_shell_interface = true
+                app.public_logs = true
+                app.public_log_server = true
                 app.setup
                 begin
                     Syskit::Log.streams = streams
