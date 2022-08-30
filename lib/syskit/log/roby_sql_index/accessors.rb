@@ -63,7 +63,7 @@ module Syskit
                     def method_missing(m, *args, **kw, &block)
                         full_name = "#{@prefix}#{m}"
                         pattern = "#{@prefix}#{m}#{@separator}"
-                        if %I[Orogen Deployments].include?(m)
+                        if %I[OroGen Deployments].include?(m)
                             return OroGenNamespace.new(@index, m.to_s)
                         end
 
