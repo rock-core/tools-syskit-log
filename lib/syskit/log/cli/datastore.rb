@@ -491,7 +491,7 @@ module Syskit::Log
                                 "datasets directly under PATH",
                           type: :boolean, default: false
             option :rebuild_orogen_models,
-                   type: :boolean, default: true,
+                   type: :boolean, default: false,
                    desc: "use this to disable rebuilding orogen models",
                    long_desc: <<~DESC
                        Enabled by default. Disabling it will allow to load older
@@ -561,16 +561,14 @@ module Syskit::Log
                 desc: "rebuild only these logs (accepted values are roby, pocolog)",
                 type: :array, default: %w[roby pocolog]
             )
-
             option :rebuild_orogen_models,
-                   type: :boolean, default: true,
+                   type: :boolean, default: false,
                    desc: "use this to disable rebuilding orogen models",
                    long_desc: <<~DESC
                        Enabled by default. Disabling it will allow to load older
                        logs for which syskit ds reports mismatching types, at the
                        cost of reducing the amount of information available.
                    DESC
-
             def index(*datasets)
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)

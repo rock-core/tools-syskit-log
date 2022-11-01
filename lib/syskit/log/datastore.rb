@@ -119,10 +119,8 @@ module Syskit::Log
 
         # Remove an existing dataset
         def delete(digest)
+            cache_path_of(digest).rmtree if cache_path_of(digest).exist?
             core_path_of(digest).rmtree
-            if cache_path_of(digest).exist?
-                cache_path_of(digest).rmtree
-            end
         end
 
         # The full path to a dataset
