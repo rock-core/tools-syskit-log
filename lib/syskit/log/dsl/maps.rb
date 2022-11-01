@@ -40,7 +40,7 @@ module Syskit
             #   (e.g. GSL::Vector) or scalars
             # @return [[(Float,#each)]] the latitude and longitude coordinates, either as
             #   vectors (one for each) or scalars, depending on the type of arguments
-            def nwu_to_latlon(x, y, reference_latitude:, local_origin: @local_origin)
+            def nwu_to_utm(x, y, local_origin: @local_origin)
                 if x.kind_of?(::Daru::Vector)
                     x = x.to_gsl
                     y = y.to_gsl
@@ -48,9 +48,27 @@ module Syskit
 
                 northing = x + local_origin.nwu_x
                 easting = 1_000_000 - y - local_origin.nwu_y
+                [easting, northing]
+            end
 
-                zone_letter = GeoUtm::UTMZones.calc_utm_default_letter(reference_latitude)
-                zone = "#{local_origin.utm_zone}#{zone_letter}"
+            # Convert Rock's NWU coordinates into latitude and longitude
+            #
+            # @param [Float,#each] easting the easting coordinates, either as vectors
+            #   (e.g. GSL::Vector) or scalars
+            # @param [Float,#each] northing the northing coordinates, either as vectors
+            #   (e.g. GSL::Vector) or scalars
+            # @return [[(Float,#each)]] the latitude and longitude coordinates, either as
+            #   vectors (one for each) or scalars, depending on the type of arguments
+            def nwu_to_latlon(x, y, reference_latitude: nil, local_origin: @local_origin)
+                easting, northing = nwu_to_utm(x, y, local_origin: local_origin)
+
+                zone = local_origin.utm_zone.to_s
+                if reference_latitude
+                    zone_letter =
+                        GeoUtm::UTMZones.calc_utm_default_letter(reference_latitude)
+                    zone += zone_letter
+                end
+
                 utm_to_latlon(easting, northing, zone)
             end
 
