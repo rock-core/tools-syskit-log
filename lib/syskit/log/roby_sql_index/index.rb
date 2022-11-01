@@ -249,9 +249,17 @@ module Syskit
                 end
 
                 def make_task_record(task)
+                    arguments = task.arguments.to_hash.transform_values do |v|
+                        if v.kind_of?(Typelib::Type)
+                            v.to_simple_value
+                        else
+                            v
+                        end
+                    end
+
                     arguments_json =
                         begin
-                            JSON.dump(task.arguments.to_hash)
+                            JSON.dump(arguments)
                         rescue StandardError
                             JSON.dump({})
                         end
