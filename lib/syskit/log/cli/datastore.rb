@@ -9,6 +9,7 @@ require "syskit/log/datastore/normalize"
 require "syskit/log/datastore/import"
 require "syskit/log/datastore/index_build"
 require "tty-progressbar"
+require "tty-prompt"
 require "pocolog/cli/null_reporter"
 require "pocolog/cli/tty_reporter"
 
@@ -69,7 +70,7 @@ module Syskit::Log
                     Syskit::Log::Datastore.create(datastore_path)
                 end
 
-                def show_dataset(pastel, store, dataset, long_digest: false)
+                def show_dataset_short(pastel, store, dataset, long_digest: false)
                     description = dataset.metadata_fetch_all(
                         "description", "<no description>"
                     )
@@ -78,6 +79,10 @@ module Syskit::Log
                     description.zip([digest]) do |a, b|
                         puts "#{pastel.bold(format % [b])} #{a}"
                     end
+                end
+
+                def show_dataset(pastel, store, dataset, long_digest: false)
+                    show_dataset_short(pastel, store, dataset, long_digest: long_digest)
                     metadata = dataset.metadata
                     metadata.each.sort_by(&:first).each do |k, v|
                         next if k == "description"
@@ -550,6 +555,40 @@ module Syskit::Log
                         Syskit::Log::Datastore::Import.save_import_info(p, dataset)
                         puts dataset.digest
                     end
+                end
+            end
+
+            desc "delete QUERY", "remove data related to the datasets matched by QUERY"
+            option :confirm,
+                   desc: "confirm which datasets will be deleted first",
+                   type: :boolean, default: true
+            def delete(*query)
+                store = open_store
+                datasets = resolve_datasets(store, *query).sort_by(&:timestamp)
+
+                if datasets.empty?
+                    puts "No datasets matching #{query.join(' ')}"
+                    return
+                end
+
+                pastel = create_pastel
+                prompt = TTY::Prompt.new
+                if options[:confirm]
+                    datasets.each do |dataset|
+                        show_dataset_short(pastel, store, dataset)
+                    end
+                    confirmed = prompt.ask(
+                        "This command will remove #{datasets.size} datasets, continue ?",
+                        convert: :bool
+                    )
+                    return unless confirmed
+                end
+
+                datasets.each do |dataset|
+                    print "Removing "
+                    show_dataset_short(pastel, store, dataset)
+
+                    store.delete(dataset.digest)
                 end
             end
 
