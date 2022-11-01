@@ -216,19 +216,32 @@ module Syskit::Log
                     dataset.each_pocolog_stream.map(&:duration_lg).max || 0
                 end
 
-                def import_dataset( # rubocop:disable Metrics/ParameterLists
-                    path, reporter, datastore, metadata,
-                    include:, merge: false
-                )
-                    return unless import_dataset?(datastore, path, reporter: reporter)
+                def raw_dataset?(path)
+                    return unless path.directory?
 
-                    paths =
-                        if merge
-                            path.glob("*").find_all(&:directory?).sort
-                        else
-                            [path]
+                    has_pocolog_files =
+                        Pathname.enum_for(:glob, path + "*.0.log").any? { true }
+                    has_roby_events =
+                        Pathname.enum_for(:glob, path + "*-events.log").any? { true }
+                    has_process_server_info_yml = (path + "info.yml").exist?
+
+                    has_pocolog_files &&
+                        (has_roby_events || has_process_server_info_yml)
+                end
+
+                def find_raw_datasets_recursively(root_path)
+                    paths = []
+                    root_path.find do |p|
+                        is_raw_dataset = raw_dataset?(p)
+                        if is_raw_dataset
+                            paths << p
+                            Find.prune
                         end
+                    end
+                    paths
+                end
 
+                def import_dataset(paths, reporter, datastore, metadata, include:)
                     datastore.in_incoming do |core_path, cache_path|
                         importer = Syskit::Log::Datastore::Import.new(datastore)
                         dataset = importer.normalize_dataset(
@@ -518,26 +531,25 @@ module Syskit::Log
                 include = options[:include].map(&:to_sym)
 
                 root_path = Pathname.new(root_path).realpath
-                if options[:auto]
-                    paths = []
-                    root_path.find do |p|
-                        is_raw_dataset =
-                            p.directory? &&
-                            Pathname.enum_for(:glob, p + "*-events.log").any? { true } &&
-                            Pathname.enum_for(:glob, p + "*.0.log").any? { true }
-                        if is_raw_dataset
-                            paths << p
-                            Find.prune
+                path_sets =
+                    if options[:auto]
+                        raw_datasets = find_raw_datasets_recursively(root_path)
+
+                        if options[:merge]
+                            [raw_datasets]
+                        else
+                            raw_datasets.map { |p| [p] }
                         end
+                    elsif options[:merge]
+                        [root_path.glob("*").find_all { |p| raw_dataset?(p) }]
+                    else
+                        [[root_path]]
                     end
-                else
-                    paths = [root_path]
-                end
 
                 reporter = create_reporter
                 datastore = create_store
 
-                if paths.empty?
+                if path_sets.empty?
                     puts "Nothing to import"
                     return
                 end
@@ -546,13 +558,30 @@ module Syskit::Log
                 metadata["description"] = description if description
                 metadata["tags"] = options[:tags]
 
-                paths.each do |p|
-                    dataset = import_dataset(p, reporter, datastore, metadata,
-                                             merge: options[:merge], include: include)
+                path_sets.each do |paths|
+                    paths = paths.sort_by { |p| p.basename.to_s }
+                    puts paths.inspect
+                    if paths.size == 1
+                        puts "Importing #{paths.first}"
+                    else
+                        print "Merging #{paths.size} datasets\n  "
+                        puts paths.join("\n  ")
+                    end
+
+                    already_imported = paths.any? do |p|
+                        !import_dataset?(datastore, p, reporter: reporter)
+                    end
+                    next if already_imported
+
+                    dataset = import_dataset(
+                        paths, reporter, datastore, metadata, include: include
+                    )
                     if dataset
                         parse_metadata_option(dataset, options[:metadata])
                         dataset.metadata_write_to_file
-                        Syskit::Log::Datastore::Import.save_import_info(p, dataset)
+                        paths.each do |p|
+                            Syskit::Log::Datastore::Import.save_import_info(p, dataset)
+                        end
                         puts dataset.digest
                     end
                 end
