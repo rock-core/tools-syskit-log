@@ -455,6 +455,18 @@ module Syskit::Log
                 end
             end
 
+            # Whether there is a given metadata entry
+            def metadata?(key)
+                metadata.key?(key)
+            end
+
+            # Return a metadata entry
+            #
+            # @return [Set,nil] the entry contents, or nil if there is no such entry
+            def metadata_get(key)
+                metadata[key]
+            end
+
             # Get a single metadata value
             #
             # @param [String] key
@@ -501,6 +513,13 @@ module Syskit::Log
                 raise NoValue, "no value found for key #{key}"
             end
 
+            # Path to the (optional) metadata file
+            #
+            # @return [Pathname]
+            def metadata_path
+                dataset_path + BASENAME_METADATA
+            end
+
             # Returns the dataset's metadata
             #
             # It is lazily loaded, i.e. loaded only the first time this method
@@ -508,8 +527,7 @@ module Syskit::Log
             def metadata
                 return @metadata if @metadata
 
-                path = (dataset_path + BASENAME_METADATA)
-                if path.exist?
+                if metadata_path.exist?
                     metadata_read_from_file
                 else
                     @metadata = {}
@@ -518,7 +536,7 @@ module Syskit::Log
 
             # Re-read the metadata from file, resetting the current metadata
             def metadata_read_from_file
-                loaded = YAML.safe_load((dataset_path + BASENAME_METADATA).read)
+                loaded = YAML.safe_load(metadata_path.read)
                 @metadata = loaded.inject({}) do |h, (k, v)|
                     h.merge!(k => v.to_set)
                 end
@@ -531,9 +549,7 @@ module Syskit::Log
                 dumped = metadata.inject({}) do |h, (k, v)|
                     h.merge!(k => v.to_a)
                 end
-                (dataset_path + BASENAME_METADATA).open("w") do |io|
-                    YAML.dump(dumped, io)
-                end
+                metadata_path.open("w") { |io| YAML.dump(dumped, io) }
             end
 
             def each_pocolog_path

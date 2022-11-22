@@ -77,7 +77,7 @@ module Syskit::Log
                     call_cli("import", "--min-duration=0",
                              "--store", datastore_path.to_s, logfile_pathname.to_s,
                              "some description", "--tags", "test", "tags",
-                             "--metadata", "key0=value0a", "key0=value0b", "key1=value1",
+                             "--metadata", "key0=value0a", "key0+value0b", "key1=value1",
                              silent: true)
 
                     dataset = Syskit::Log::Datastore.new(datastore_path)
@@ -479,7 +479,6 @@ a0fa <no description>
                     assert_equal [show_a0fa, show_a0ea].join, out
                 end
                 it "handles an exact timestamp in direct form" do
-                    puts a0ea_time.tv_sec
                     out, _err = capture_io do
                         call_cli("list", "--store", datastore_path.to_s,
                                  "timestamp=#{a0ea_time.tv_sec}", silent: false)
@@ -599,9 +598,15 @@ a0fa <no description>
                         assert_equal Set["true"], datastore.get("a0ea").metadata["debug"]
                         assert_equal Set["true"], datastore.get("a0fa").metadata["debug"]
                     end
-                    it "collects all set arguments with the same key" do
-                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test=a", "test=b", "test=c", silent: false)
-                        assert_equal Set["a", "b", "c"], datastore.get("a0ea").metadata["test"]
+                    it "adds an entry with +VALUE" do
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test=a", "test+b", "test+c", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test+d", silent: false)
+                        assert_equal Set["a", "b", "c", "d"], datastore.get("a0ea").metadata["test"]
+                    end
+                    it "removes an entry with -VALUE" do
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test=a", "test+b", "test+c", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s, "--set", "test-b", silent: false)
+                        assert_equal Set["a", "c"], datastore.get("a0ea").metadata["test"]
                     end
                     it "raises if the argument to set is not a key=value association" do
                         assert_raises(ArgumentError) do
@@ -824,6 +829,15 @@ a0fa <no description>
 
                 it "handles a full date and time in local time" do
                     time_s = "2021-02-15 15:32:06"
+                    time = Time.parse("#{time_s} -03:00") # we set TZ in setup
+                    assert_equal (time.tv_sec..time.tv_sec),
+                                 @ds.parse_approximate_timestamp(time_s)
+                end
+
+                # Regression: '09' is interpreted by Ruby's Integer as an octal
+                # number ... We need to provide the basis explicitly
+                it "handles months after the 8th properly" do
+                    time_s = "2021-09-15 15:32:06"
                     time = Time.parse("#{time_s} -03:00") # we set TZ in setup
                     assert_equal (time.tv_sec..time.tv_sec),
                                  @ds.parse_approximate_timestamp(time_s)

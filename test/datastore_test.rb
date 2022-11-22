@@ -249,6 +249,12 @@ module Syskit::Log
                 assert_equal [@ds_e.dataset_path],
                              datasets.map(&:dataset_path).to_a
             end
+
+            it "handles key: single_value" do
+                datasets = @datastore.find_all(a: "some")
+                assert_equal [@ds_e.dataset_path],
+                             datasets.map(&:dataset_path).to_a
+            end
         end
 
         describe "#find" do
