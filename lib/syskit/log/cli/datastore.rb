@@ -546,6 +546,7 @@ module Syskit::Log
                                              merge: options[:merge], include: include)
                     if dataset
                         parse_metadata_option(dataset, options[:metadata])
+                        dataset.metadata_write_to_file
                         Syskit::Log::Datastore::Import.save_import_info(p, dataset)
                         puts dataset.digest
                     end
