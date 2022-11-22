@@ -167,7 +167,7 @@ module Syskit::Log
                 #
                 # Parse a metadata option such as --set some=value some-other=value
                 def parse_metadata_option(dataset, option)
-                    option.each_with_object({}) do |arg, metadata|
+                    option.each do |arg|
                         if arg.start_with?("-")
                             dataset.metadata_delete(arg[1..-1])
                             next
@@ -180,7 +180,6 @@ module Syskit::Log
                         end
 
                         key, op, value = match.captures
-                        metadata[key] ||= Set.new
                         if op == "+"
                             dataset.metadata_add(key, value)
                         elsif op == "-"
