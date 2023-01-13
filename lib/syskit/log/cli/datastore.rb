@@ -639,6 +639,13 @@ module Syskit::Log
                        cost of reducing the amount of information available.
                    DESC
             def index(*datasets)
+                only_invalid_modes = options[:only] - %w[roby pocolog]
+                unless only_invalid_modes.empty?
+                    raise ArgumentError,
+                          "invalid modes #{only_invalid_modes} for --only. "\
+                          "Valid modes are 'pocolog' and 'roby'"
+                end
+
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
                 reporter = create_reporter
