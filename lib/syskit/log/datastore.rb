@@ -159,8 +159,12 @@ module Syskit::Log
             metadata = metadata.transform_keys(&:to_s)
             metadata = metadata.transform_values { |v| Array(v).to_set }
             each_dataset(**get_arguments).find_all do |ds|
-                metadata.all? do |key, values|
-                    (values - (ds.metadata[key] || Set.new)).empty?
+                metadata.all? do |match_key, match_values|
+                    match_values.all? do |match_v|
+                        (ds.metadata[match_key] || Set.new).any? do |actual_v|
+                            match_v === actual_v
+                        end
+                    end
                 end
             end
         end
