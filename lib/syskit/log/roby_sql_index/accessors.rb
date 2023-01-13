@@ -503,14 +503,25 @@ module Syskit
                         ev
                     end
 
+                    # Look for one of this task's events
+                    #
+                    # @param [String] name
+                    # @return [Event,nil]
                     def find_event_by_name(name)
                         model.find_event_by_name(name)&.bind(self)
                     end
 
+                    # Look for one of this task's ports
+                    #
+                    # @param [String] name
+                    # @return [Port,nil]
                     def find_port_by_name(name)
                         model.find_port_by_name(name)&.bind(self)
                     end
 
+                    # Enumerate this task's ports
+                    #
+                    # @yieldparam [Port] port
                     def each_port
                         return enum_for(__method__) unless block_given?
 
@@ -534,6 +545,11 @@ module Syskit
                     end
                 end
 
+                # A port of a given task instance
+                #
+                # Port objects can be used in the data processing DSL as data
+                # streams are. They are simply the port's data stream limited to
+                # the task's lifetime.
                 class Port
                     attr_reader :task
                     attr_reader :name
@@ -562,6 +578,10 @@ module Syskit
                 end
 
                 # An event model bound to a particular task instance
+                #
+                # Note that such an event object is an event source (in Roby parlance,
+                # an event generator). That is, it may have emitted zero, one or many
+                # times.
                 class Event
                     # The event name
                     attr_reader :name
@@ -577,14 +597,19 @@ module Syskit
                         @model = model
                     end
 
+                    # Enumerate the emissions of this event source
                     def each_emission(&block)
                         task.each_emission(name: name, &block)
                     end
 
+                    # Return the first emission of this event source
                     def first
                         task.first_emission(name: name)
                     end
 
+                    # Return the last emission of this event source
+                    #
+                    # @return [EventPropagation]
                     def last
                         task.last_emission(name: name)
                     end
