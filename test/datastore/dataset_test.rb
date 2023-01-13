@@ -91,6 +91,26 @@ module Syskit::Log
                 end
             end
 
+            describe ".valid_encoded_sha2?" do
+                attr_reader :sha2
+                before do
+                    @sha2 = Digest::SHA2.hexdigest("TEST")
+                end
+                it "returns false if the string is too short" do
+                    refute Dataset.valid_encoded_sha2?(sha2[0..-2])
+                end
+                it "raises if the string is too long" do
+                    refute Dataset.valid_encoded_sha2?(sha2 + " ")
+                end
+                it "raises if the string contains invalid characters for base64" do
+                    sha2[3, 1] = "_"
+                    refute Dataset.valid_encoded_sha2?(sha2)
+                end
+                it "returns true it is valid" do
+                    assert Dataset.valid_encoded_sha2?(sha2)
+                end
+            end
+
             describe ".validate_encoded_sha2" do
                 attr_reader :sha2
                 before do
