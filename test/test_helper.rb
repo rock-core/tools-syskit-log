@@ -19,12 +19,21 @@ module Syskit::Log
                 Roby.app.add_plugin("syskit-log", Syskit::Log::Plugin)
             end
 
+            @temp_paths = []
             super
         end
 
         def teardown
             Pocolog.logger.level = @pocolog_log_level if @pocolog_log_level
+            @temp_paths.each(&:rmtree)
             super
+        end
+
+        def make_tmppath
+            dir = Dir.mktmpdir
+            path = Pathname.new(dir)
+            @temp_paths << path
+            path
         end
 
         def logfile_pathname(*basename)

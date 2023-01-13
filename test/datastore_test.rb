@@ -200,6 +200,77 @@ module Syskit::Log
             end
         end
 
+        describe ".redirect?" do
+            before do
+                @file = Pathname.new(Tempfile.new)
+                @file.write ""
+            end
+
+            after do
+                @file.unlink
+            end
+
+            it "returns false if the path does not exist" do
+                refute Datastore.redirect?(Pathname.new("/some/path"))
+            end
+
+            it "returns false if the path is not a file" do
+                path = make_tmppath
+                flexmock(Datastore::Dataset).should_receive(:valid_encoded_digest?).never
+                assert_no_file_reading(path)
+                refute Datastore.redirect?(path)
+            end
+
+            it "returns false if the path is not a valid digest" do
+                mock_digest_validity(@file.basename, false)
+                assert_no_file_reading(@file)
+                refute Datastore.redirect?(@file)
+            end
+
+            it "returns false if the file content is not valid YAML" do
+                @file.write "{"
+                mock_digest_validity(@file.basename, true)
+                refute Datastore.redirect?(@file)
+            end
+
+            it "returns false if the file's YAML contains unsafe code" do
+                @file.write "--- !ruby/object {}\n"
+                mock_digest_validity(@file.basename, true)
+                refute Datastore.redirect?(@file)
+            end
+
+            it "returns false if the file's content does not have a 'to' field" do
+                @file.write "{}"
+                mock_digest_validity(@file.basename, true)
+                refute Datastore.redirect?(@file)
+            end
+
+            it "returns false if the file's to field is not a valid dataset digest" do
+                @file.write "to:\n  something"
+                mock_digest_validity(@file.basename, true)
+                mock_digest_validity("something", false)
+                refute Datastore.redirect?(@file)
+            end
+
+            it "returns true if the file's to field is a valid dataset digest" do
+                @file.write "to:\n  something"
+                mock_digest_validity(@file.basename, true)
+                mock_digest_validity("something", true)
+                assert Datastore.redirect?(@file)
+            end
+
+            def assert_no_file_reading(path)
+                flexmock(path).should_receive(:read).never
+            end
+
+            def mock_digest_validity(str, value)
+                flexmock(Datastore::Dataset)
+                    .should_receive(:valid_encoded_digest?).once
+                    .with(str.to_s)
+                    .and_return(value)
+            end
+        end
+
         describe "#find_dataset_from_short_digest" do
             before do
                 create_dataset("a0ea") {}
