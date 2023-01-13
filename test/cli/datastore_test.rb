@@ -1009,6 +1009,56 @@ a0fa <no description>
                     super(mode, "--store", @datastore_path.to_s, *args, silent: silent)
                 end
             end
+
+            describe "#pocolog" do
+                attr_reader :base_time
+                before do
+                    @base_time = Time.at(34200, 234)
+                    create_dataset "a0ea", metadata: Hash["description" => "first", "test" => ["2"], "array_test" => %w[a b]] do
+                        create_logfile("task0::port0.0.log") do
+                            create_logfile_stream "task0.port0", metadata: Hash["rock_stream_type" => "port", "rock_task_name" => "task0", "rock_task_object_name" => "port0", "rock_task_model" => "test::Task"]
+                            write_logfile_sample base_time, base_time, 0
+                            write_logfile_sample base_time + 1, base_time + 10, 1
+                        end
+                        create_logfile("task0::property0.0.log") do
+                            create_logfile_stream "task0.property", metadata: Hash["rock_stream_type" => "property", "rock_task_name" => "task0", "rock_task_object_name" => "property0", "rock_task_model" => "test::Task"]
+                            write_logfile_sample base_time, base_time + 1, 2
+                            write_logfile_sample base_time + 1, base_time + 9, 3
+                        end
+                    end
+                end
+
+                it "runs the pocolog tool on a stream from the dataset" do
+                    out = call_cli("pocolog", "a0ea", "task0::port0")
+                    expected = <<~OUT
+                        task0.port0
+                        0
+                        1
+                    OUT
+                    assert_equal expected.split("\n"), out.split("\n")[1..-1]
+                end
+
+                it "reuses the cache that already exists" do
+                    out = call_cli("pocolog", "a0ea", "task0::port0")
+
+                    cache_path =
+                        @datastore_path / "cache" / "a0ea" / "pocolog" / "task0::port0.0.idx"
+                    assert_match cache_path.to_s, out
+                end
+
+                def call_cli(mode, *args, silent: true)
+                    extra_args = %w[--colors=f --progress=f]
+                    extra_args << "--silent" if silent
+
+                    out = IO.popen(
+                        ["syskit", "ds", mode, "--store", @datastore_path.to_s,
+                         *extra_args, *args], &:read
+                    )
+                    return out if $CHILD_STATUS.success?
+
+                    flunk("#{mode} #{args} failed")
+                end
+            end
         end
     end
 end

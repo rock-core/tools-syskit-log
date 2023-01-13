@@ -25,7 +25,8 @@ module Syskit::Log
             class_option :store, type: :string
 
             stop_on_unknown_option! :roby_log
-            check_unknown_options! except: :roby_log
+            stop_on_unknown_option! :pocolog
+            check_unknown_options! except: %I[roby_log pocolog]
 
             def self.exit_on_failure?
                 true
@@ -846,6 +847,25 @@ module Syskit::Log
                 name_field_size = streams.map { |s| s.name.size }.max
                 streams = streams.map { |s| [s.name, s] }
                 show_task_objects(streams, name_field_size)
+            end
+
+            desc "pocolog DATASET DATASTREAM [roby-log arguments]",
+                 "execute pocolog on a stream file from a given dataset"
+            def pocolog(dataset, datastream, *args, **kw)
+                store = open_store
+                datasets = resolve_datasets(store, dataset)
+
+                if datasets.empty?
+                    raise ArgumentError, "no dataset matches #{dataset}"
+                elsif datasets.size > 1
+                    raise ArgumentError, "more than one dataset matches #{dataset}"
+                end
+
+                dataset = datasets.first
+                file = dataset.pocolog_path(datastream)
+                exec("pocolog", file.to_s,
+                     "--index-dir", (dataset.cache_path + "pocolog").to_s,
+                     "-s", datastream.gsub("::", "."), *args, **kw)
             end
 
             desc "roby-log MODE [options] DATASET [roby-log arguments]",
