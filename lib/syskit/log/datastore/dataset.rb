@@ -552,6 +552,16 @@ module Syskit::Log
                 metadata_path.open("w") { |io| YAML.dump(dumped, io) }
             end
 
+            def pocolog_path(name)
+                path = dataset_path + "pocolog" + "#{name}.0.log"
+                unless path.exist?
+                    raise ArgumentError,
+                          "no pocolog file for stream #{name} (expected #{path})"
+                end
+
+                path
+            end
+
             def each_pocolog_path
                 return enum_for(__method__) unless block_given?
 
