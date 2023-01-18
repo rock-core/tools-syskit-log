@@ -561,7 +561,6 @@ module Syskit::Log
 
                 path_sets.each do |paths|
                     paths = paths.sort_by { |p| p.basename.to_s }
-                    puts paths.inspect
                     if paths.size == 1
                         puts "Importing #{paths.first}"
                     else
