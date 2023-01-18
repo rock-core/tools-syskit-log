@@ -255,7 +255,7 @@ module Syskit::Log
                         dataset_duration = dataset_duration(dataset)
                         unless dataset_duration >= options[:min_duration]
                             reporter.info(
-                                "#{path} lasts only %.1fs, ignored" % [dataset_duration]
+                                "#{paths.join(', ')} lasts only %.1fs, ignored" % [dataset_duration]
                             )
                             break
                         end
@@ -266,7 +266,7 @@ module Syskit::Log
                             )
                         rescue Syskit::Log::Datastore::Import::DatasetAlreadyExists
                             reporter.info(
-                                "#{path} already seem to have been imported as "\
+                                "#{paths.join(', ')} already seem to have been imported as "\
                                 "#{dataset.compute_dataset_digest}. Give "\
                                 "--force to import again"
                             )
@@ -869,8 +869,9 @@ module Syskit::Log
 
                 dataset = datasets.first
                 file = dataset.pocolog_path(datastream)
-                exec("pocolog", file.to_s,
-                     "--index-dir", (dataset.cache_path + "pocolog").to_s,
+
+                exec("pocolog",
+                     "--index-dir", (dataset.cache_path + "pocolog").to_s, file.to_s,
                      "-s", datastream.gsub("::", "."), *args, **kw)
             end
 

@@ -1035,15 +1035,16 @@ a0fa <no description>
                         0
                         1
                     OUT
-                    assert_equal expected.split("\n"), out.split("\n")[1..-1]
+                    expected = expected.split("\n")
+                    assert_equal expected, out.split("\n")[-expected.size..-1], out
                 end
 
                 it "reuses the cache that already exists" do
-                    out = call_cli("pocolog", "a0ea", "task0::port0")
-
                     cache_path =
-                        @datastore_path / "cache" / "a0ea" / "pocolog" / "task0::port0.0.idx"
-                    assert_match cache_path.to_s, out
+                        @datastore_path / "core" / "a0ea" / "pocolog" / "task0::port0.0.idx"
+                    call_cli("pocolog", "a0ea", "task0::port0")
+
+                    refute cache_path.exist?
                 end
 
                 def call_cli(mode, *args, silent: true)
