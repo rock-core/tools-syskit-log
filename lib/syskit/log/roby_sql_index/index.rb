@@ -63,9 +63,29 @@ module Syskit
                     stream = Roby::DRoby::Logfile::Reader.open(path)
                     rebuilder = Roby::DRoby::PlanRebuilder.new
 
+                    cycles = []
+                    count = 0
                     while (data = stream.load_one_cycle)
-                        add_one_cycle(metadata_update, rebuilder, data)
-                        reporter.current = stream.tell
+                        cycles << data
+                        count += data.size
+
+                        if count > 10_000
+                            @event_propagations.transaction do
+                                cycles.each do |cycle_data|
+                                    add_one_cycle(metadata_update, rebuilder, cycle_data)
+                                end
+                            end
+                            cycles = []
+                            count = 0
+
+                            reporter.current = stream.tell
+                        end
+                    end
+
+                    @event_propagations.transaction do
+                        cycles.each do |cycle_data|
+                            add_one_cycle(metadata_update, rebuilder, cycle_data)
+                        end
                     end
                 ensure
                     stream&.close
@@ -102,11 +122,9 @@ module Syskit
                         rebuilder.process_one_event(m, sec, usec, args)
                     end
 
-                    @event_propagations.transaction do
-                        add_log_emitted_events(rebuilder.plan.emitted_events)
-                        add_log_propagated_events(rebuilder.plan.propagated_events)
-                        add_log_failed_emissions(rebuilder.plan.failed_emissions)
-                    end
+                    add_log_emitted_events(rebuilder.plan.emitted_events)
+                    add_log_propagated_events(rebuilder.plan.propagated_events)
+                    add_log_failed_emissions(rebuilder.plan.failed_emissions)
 
                     update_log_metadata(metadata, data)
                     rebuilder.clear_integrated
@@ -231,9 +249,17 @@ module Syskit
                 end
 
                 def make_task_record(task)
+                    arguments = task.arguments.to_hash.transform_values do |v|
+                        if v.kind_of?(Typelib::Type)
+                            v.to_simple_value
+                        else
+                            v
+                        end
+                    end
+
                     arguments_json =
                         begin
-                            JSON.dump(task.arguments.to_hash)
+                            JSON.dump(arguments)
                         rescue StandardError
                             JSON.dump({})
                         end

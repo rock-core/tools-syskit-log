@@ -9,6 +9,7 @@ require "syskit/log/datastore/normalize"
 require "syskit/log/datastore/import"
 require "syskit/log/datastore/index_build"
 require "tty-progressbar"
+require "tty-prompt"
 require "pocolog/cli/null_reporter"
 require "pocolog/cli/tty_reporter"
 
@@ -24,7 +25,8 @@ module Syskit::Log
             class_option :store, type: :string
 
             stop_on_unknown_option! :roby_log
-            check_unknown_options! except: :roby_log
+            stop_on_unknown_option! :pocolog
+            check_unknown_options! except: %I[roby_log pocolog]
 
             def self.exit_on_failure?
                 true
@@ -69,7 +71,7 @@ module Syskit::Log
                     Syskit::Log::Datastore.create(datastore_path)
                 end
 
-                def show_dataset(pastel, store, dataset, long_digest: false)
+                def show_dataset_short(pastel, store, dataset, long_digest: false)
                     description = dataset.metadata_fetch_all(
                         "description", "<no description>"
                     )
@@ -78,6 +80,10 @@ module Syskit::Log
                     description.zip([digest]) do |a, b|
                         puts "#{pastel.bold(format % [b])} #{a}"
                     end
+                end
+
+                def show_dataset(pastel, store, dataset, long_digest: false)
+                    show_dataset_short(pastel, store, dataset, long_digest: long_digest)
                     metadata = dataset.metadata
                     metadata.each.sort_by(&:first).each do |k, v|
                         next if k == "description"
@@ -211,19 +217,32 @@ module Syskit::Log
                     dataset.each_pocolog_stream.map(&:duration_lg).max || 0
                 end
 
-                def import_dataset( # rubocop:disable Metrics/ParameterLists
-                    path, reporter, datastore, metadata,
-                    include:, merge: false
-                )
-                    return unless import_dataset?(datastore, path, reporter: reporter)
+                def raw_dataset?(path)
+                    return unless path.directory?
 
-                    paths =
-                        if merge
-                            path.glob("*").find_all(&:directory?).sort
-                        else
-                            [path]
+                    has_pocolog_files =
+                        Pathname.enum_for(:glob, path + "*.0.log").any? { true }
+                    has_roby_events =
+                        Pathname.enum_for(:glob, path + "*-events.log").any? { true }
+                    has_process_server_info_yml = (path + "info.yml").exist?
+
+                    has_pocolog_files &&
+                        (has_roby_events || has_process_server_info_yml)
+                end
+
+                def find_raw_datasets_recursively(root_path)
+                    paths = []
+                    root_path.find do |p|
+                        is_raw_dataset = raw_dataset?(p)
+                        if is_raw_dataset
+                            paths << p
+                            Find.prune
                         end
+                    end
+                    paths
+                end
 
+                def import_dataset(paths, reporter, datastore, metadata, include:)
                     datastore.in_incoming do |core_path, cache_path|
                         importer = Syskit::Log::Datastore::Import.new(datastore)
                         dataset = importer.normalize_dataset(
@@ -236,7 +255,7 @@ module Syskit::Log
                         dataset_duration = dataset_duration(dataset)
                         unless dataset_duration >= options[:min_duration]
                             reporter.info(
-                                "#{path} lasts only %.1fs, ignored" % [dataset_duration]
+                                "#{paths.join(', ')} lasts only %.1fs, ignored" % [dataset_duration]
                             )
                             break
                         end
@@ -247,7 +266,7 @@ module Syskit::Log
                             )
                         rescue Syskit::Log::Datastore::Import::DatasetAlreadyExists
                             reporter.info(
-                                "#{path} already seem to have been imported as "\
+                                "#{paths.join(', ')} already seem to have been imported as "\
                                 "#{dataset.compute_dataset_digest}. Give "\
                                 "--force to import again"
                             )
@@ -491,7 +510,7 @@ module Syskit::Log
                                 "datasets directly under PATH",
                           type: :boolean, default: false
             option :rebuild_orogen_models,
-                   type: :boolean, default: true,
+                   type: :boolean, default: false,
                    desc: "use this to disable rebuilding orogen models",
                    long_desc: <<~DESC
                        Enabled by default. Disabling it will allow to load older
@@ -513,26 +532,25 @@ module Syskit::Log
                 include = options[:include].map(&:to_sym)
 
                 root_path = Pathname.new(root_path).realpath
-                if options[:auto]
-                    paths = []
-                    root_path.find do |p|
-                        is_raw_dataset =
-                            p.directory? &&
-                            Pathname.enum_for(:glob, p + "*-events.log").any? { true } &&
-                            Pathname.enum_for(:glob, p + "*.0.log").any? { true }
-                        if is_raw_dataset
-                            paths << p
-                            Find.prune
+                path_sets =
+                    if options[:auto]
+                        raw_datasets = find_raw_datasets_recursively(root_path)
+
+                        if options[:merge]
+                            [raw_datasets]
+                        else
+                            raw_datasets.map { |p| [p] }
                         end
+                    elsif options[:merge]
+                        [root_path.glob("*").find_all { |p| raw_dataset?(p) }]
+                    else
+                        [[root_path]]
                     end
-                else
-                    paths = [root_path]
-                end
 
                 reporter = create_reporter
                 datastore = create_store
 
-                if paths.empty?
+                if path_sets.empty?
                     puts "Nothing to import"
                     return
                 end
@@ -541,15 +559,65 @@ module Syskit::Log
                 metadata["description"] = description if description
                 metadata["tags"] = options[:tags]
 
-                paths.each do |p|
-                    dataset = import_dataset(p, reporter, datastore, metadata,
-                                             merge: options[:merge], include: include)
+                path_sets.each do |paths|
+                    paths = paths.sort_by { |p| p.basename.to_s }
+                    if paths.size == 1
+                        puts "Importing #{paths.first}"
+                    else
+                        print "Merging #{paths.size} datasets\n  "
+                        puts paths.join("\n  ")
+                    end
+
+                    already_imported = paths.any? do |p|
+                        !import_dataset?(datastore, p, reporter: reporter)
+                    end
+                    next if already_imported
+
+                    dataset = import_dataset(
+                        paths, reporter, datastore, metadata, include: include
+                    )
                     if dataset
                         parse_metadata_option(dataset, options[:metadata])
                         dataset.metadata_write_to_file
-                        Syskit::Log::Datastore::Import.save_import_info(p, dataset)
+                        paths.each do |p|
+                            Syskit::Log::Datastore::Import.save_import_info(p, dataset)
+                        end
                         puts dataset.digest
                     end
+                end
+            end
+
+            desc "delete QUERY", "remove data related to the datasets matched by QUERY"
+            option :confirm,
+                   desc: "confirm which datasets will be deleted first",
+                   type: :boolean, default: true
+            def delete(*query)
+                store = open_store
+                datasets = resolve_datasets(store, *query).sort_by(&:timestamp)
+
+                if datasets.empty?
+                    puts "No datasets matching #{query.join(' ')}"
+                    return
+                end
+
+                pastel = create_pastel
+                prompt = TTY::Prompt.new
+                if options[:confirm]
+                    datasets.each do |dataset|
+                        show_dataset_short(pastel, store, dataset)
+                    end
+                    confirmed = prompt.ask(
+                        "This command will remove #{datasets.size} datasets, continue ?",
+                        convert: :bool
+                    )
+                    return unless confirmed
+                end
+
+                datasets.each do |dataset|
+                    print "Removing "
+                    show_dataset_short(pastel, store, dataset)
+
+                    store.delete(dataset.digest)
                 end
             end
 
@@ -561,17 +629,22 @@ module Syskit::Log
                 desc: "rebuild only these logs (accepted values are roby, pocolog)",
                 type: :array, default: %w[roby pocolog]
             )
-
             option :rebuild_orogen_models,
-                   type: :boolean, default: true,
+                   type: :boolean, default: false,
                    desc: "use this to disable rebuilding orogen models",
                    long_desc: <<~DESC
                        Enabled by default. Disabling it will allow to load older
                        logs for which syskit ds reports mismatching types, at the
                        cost of reducing the amount of information available.
                    DESC
-
             def index(*datasets)
+                only_invalid_modes = options[:only] - %w[roby pocolog]
+                unless only_invalid_modes.empty?
+                    raise ArgumentError,
+                          "invalid modes #{only_invalid_modes} for --only. "\
+                          "Valid modes are 'pocolog' and 'roby'"
+                end
+
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
                 reporter = create_reporter
@@ -780,6 +853,26 @@ module Syskit::Log
                 name_field_size = streams.map { |s| s.name.size }.max
                 streams = streams.map { |s| [s.name, s] }
                 show_task_objects(streams, name_field_size)
+            end
+
+            desc "pocolog DATASET DATASTREAM [roby-log arguments]",
+                 "execute pocolog on a stream file from a given dataset"
+            def pocolog(dataset, datastream, *args, **kw)
+                store = open_store
+                datasets = resolve_datasets(store, dataset)
+
+                if datasets.empty?
+                    raise ArgumentError, "no dataset matches #{dataset}"
+                elsif datasets.size > 1
+                    raise ArgumentError, "more than one dataset matches #{dataset}"
+                end
+
+                dataset = datasets.first
+                file = dataset.pocolog_path(datastream)
+
+                exec("pocolog",
+                     "--index-dir", (dataset.cache_path + "pocolog").to_s, file.to_s,
+                     "-s", datastream.gsub("::", "."), *args, **kw)
             end
 
             desc "roby-log MODE [options] DATASET [roby-log arguments]",
