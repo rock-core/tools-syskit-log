@@ -682,14 +682,23 @@ module Syskit
                     end
 
                 color =
-                    if color
+                    if color.respond_to?(:to_hash)
+                        { color: color }
+                    elsif color
                         { color: { datum: color.to_s } }
                     else
                         {}
                     end
 
+                mark =
+                    if mark.respond_to?(:to_hash)
+                        mark
+                    else
+                        { type: mark, tooltip: true }
+                    end
+
                 Vega.lite
-                    .mark(type: mark)
+                    .mark(mark)
                     .encoding(
                         x: { field: x, type: "quantitative", scale: { zero: false } },
                         y: { field: y, type: "quantitative", scale: { zero: false } },
