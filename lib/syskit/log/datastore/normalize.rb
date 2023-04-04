@@ -85,46 +85,20 @@ module Syskit::Log
                 end
             end
 
-            DigestIO = Struct.new :wio, :digest do
+            # @api private
+            #
+            # An IO-looking object that computes the output's digest
+            class DigestIO < SimpleDelegator
+                attr_reader :digest
+
+                def initialize(wio, digest)
+                    super(wio)
+                    @digest = digest
+                end
+
                 def write(string)
-                    wio.write string
-                    digest.update string
-                end
-
-                def close
-                    wio.close
-                end
-
-                def flush
-                    wio.flush
-                end
-
-                def tell
-                    wio.tell
-                end
-
-                def closed?
-                    wio.closed?
-                end
-
-                def seek(pos)
-                    wio.seek(pos)
-                end
-
-                def read(count)
-                    wio.read(count)
-                end
-
-                def path
-                    wio.path
-                end
-
-                def size
-                    wio.size
-                end
-
-                def stat
-                    wio.stat
+                    super
+                    @digest.update string
                 end
             end
 
