@@ -4,8 +4,16 @@ require "digest/sha2"
 
 module Syskit::Log
     class Datastore
-        def self.normalize(paths, output_path: paths.first.dirname + "normalized", reporter: Pocolog::CLI::NullReporter.new, compute_sha256: false, index_dir: output_path)
-            Normalize.new.normalize(paths, output_path: output_path, reporter: reporter, compute_sha256: compute_sha256, index_dir: index_dir)
+        def self.normalize(
+            paths,
+            output_path: paths.first.dirname + "normalized",
+            reporter: Pocolog::CLI::NullReporter.new,
+            compute_sha256: false, index_dir: output_path
+        )
+            Normalize.new.normalize(
+                paths, output_path: output_path, reporter: reporter,
+                compute_sha256: compute_sha256, index_dir: index_dir
+            )
         end
 
         # Encapsulation of the operations necessary to normalize a dataset
@@ -14,10 +22,16 @@ module Syskit::Log
             extend Logger::Hierarchy
             class InvalidFollowupStream < RuntimeError; end
 
+            # Mapping of path for created output files to their {Output} object
+            #
+            # @return [{Pathname=>Output}]
             attr_reader :out_files
 
             ZERO_BYTE = [0].pack("v").freeze
 
+            # @api private
+            #
+            # Internal representation of the output of a normalization operation
             class Output
                 attr_reader :path, :stream_info, :digest, :stream_block_pos,
                             :index_map, :last_data_block_time, :tell
