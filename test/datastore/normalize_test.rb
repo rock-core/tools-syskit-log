@@ -50,10 +50,13 @@ module Syskit::Log
                 it "allows to specify the cache directory" do
                     logfile_pathname("normalized").mkdir
                     index_dir = logfile_pathname("cache")
-                    normalize.normalize([logfile_pathname("file0.0.log")], index_dir: index_dir)
-                    flexmock(Pocolog::Logfiles).new_instances
-                                               .should_receive(:rebuild_and_load_index)
-                                               .never
+                    normalize.normalize(
+                        [logfile_pathname("file0.0.log")], index_dir: index_dir
+                    )
+                    flexmock(Pocolog::Logfiles)
+                        .new_instances
+                        .should_receive(:rebuild_and_load_index)
+                        .never
                     normalized_dir = logfile_pathname("normalized")
                     open_logfile_stream (normalized_dir + "task0::port.0.log"), "task0.port", index_dir: index_dir
                     open_logfile_stream (normalized_dir + "task1::port.0.log"), "task1.port", index_dir: index_dir
@@ -102,12 +105,21 @@ module Syskit::Log
                 end
                 it "raises if a potential followup stream has an non-matching logical time range" do
                     create_logfile "file0.1.log" do
-                        create_logfile_stream "stream0", metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
+                        create_logfile_stream(
+                            "stream0",
+                            metadata: {
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port"
+                            }
+                        )
                         write_logfile_sample base_time + 3, base_time + 10, 3
                     end
                     capture_io do
                         assert_raises(Normalize::InvalidFollowupStream) do
-                            normalize.normalize([logfile_pathname("file0.0.log"), logfile_pathname("file0.1.log")])
+                            normalize.normalize(
+                                [logfile_pathname("file0.0.log"),
+                                 logfile_pathname("file0.1.log")]
+                            )
                         end
                     end
                 end
