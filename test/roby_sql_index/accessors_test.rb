@@ -202,14 +202,40 @@ module Syskit
                         assert_equal [@event_model], p.map(&:model).uniq
                     end
 
+                    it "returns nil if there is no matching first propagation" do
+                        p = @event_model.first_event_propagation(name: "does_not_exist")
+                        assert_nil p
+                    end
+
+                    it "returns nil if there is no matching last propagation" do
+                        p = @event_model.last_event_propagation(name: "does_not_exist")
+                        assert_nil p
+                    end
+
                     it "returns the first propagation of a given event model" do
                         p = @event_model.first_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
                         assert_equal "start", p.name
                         assert_equal(EVENT_PROPAGATION_CALL, p.kind)
                     end
 
                     it "returns the last propagation of a given event model" do
                         p = @event_model.last_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the first emission of a given event model" do
+                        p = @event_model.first_emission
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the last emission of a given event model" do
+                        p = @event_model.last_emission
+                        assert_kind_of Accessors::EventPropagation, p
                         assert_equal "start", p.name
                         assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
                     end
@@ -229,6 +255,34 @@ module Syskit
                         assert_equal 3, emissions.size
                         assert_equal %w[start failed stop], emissions.map(&:name)
                         assert_equal [@task, @task, @task], emissions.map(&:task)
+                    end
+
+                    it "returns the first event propagation" do
+                        p = @task.first_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_CALL, p.kind)
+                    end
+
+                    it "returns the last event propagation" do
+                        p = @task.last_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "stop", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the first event emission" do
+                        p = @task.first_emission
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the last event emission" do
+                        p = @task.last_emission
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "stop", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
                     end
 
                     it "gives access to a specific bound event" do
@@ -289,6 +343,12 @@ module Syskit
                         assert_equal @event_model, ev.model
                         assert_equal ev.model.task_model.each_task.first,
                                      ev.task
+                    end
+
+                    it "returns the first emission" do
+                    end
+
+                    it "returns the last emission" do
                     end
                 end
 

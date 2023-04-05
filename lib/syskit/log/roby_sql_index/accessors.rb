@@ -366,12 +366,32 @@ module Syskit
                         task_model.event_propagations_query.by_name(name)
                     end
 
-                    def first_event_propagation(**where)
-                        event_propagations_query.where(**where).order(:time).first
+                    # @api private
+                    #
+                    # Create an EventPropagation accessor from the DRY entity
+                    #
+                    # @return [EventPropagation]
+                    def event_propagation_from_entity(entity)
+                        task = @task_model.task_by_id(entity.task_id)
+                        EventPropagation.from_entity(@index, entity, task, self)
                     end
 
+                    # Return the first propagation matching a given query
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_event_propagation(**where)
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).first
+                        event_propagation_from_entity(entity) if entity
+                    end
+
+                    # Return the last propagation matching a given query
+                    #
+                    # @return [EventPropagation,nil]
                     def last_event_propagation(**where)
-                        event_propagations_query.where(**where).order(:time).last
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).last
+                        event_propagation_from_entity(entity) if entity
                     end
 
                     # Enumerate the event propagations coming from generators of
@@ -381,28 +401,31 @@ module Syskit
 
                         query = event_propagations_query.where(**where).order(:time)
                         query.each do |entity|
-                            task = @task_model.task_by_id(entity.task_id)
-                            yield EventPropagation.from_entity(
-                                @index, entity, task, self
-                            )
+                            yield event_propagation_from_entity(entity)
                         end
                     end
 
                     # List the matching event emissions
+                    #
+                    # @yieldparam [EventPropagation] propagation
                     def each_emission(**where, &block)
                         each_event_propagation(
                             kind: EVENT_PROPAGATION_EMIT, **where, &block
                         )
                     end
 
-                    # Get the first emission
-                    def first_emission
-                        first(kind: EVENT_PROPAGATION_EMIT, **where, &block)
+                    # Get the first emission matching the given query
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_emission(**where)
+                        first_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
                     end
 
-                    # Last emission
-                    def last_emission
-                        last(kind: EVENT_PROPAGATION_EMIT, **where, &block)
+                    # Get the last emission matching the given query
+                    #
+                    # @return [EventPropagation,nil]
+                    def last_emission(**where)
+                        last_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
                     end
 
                     def full_name
@@ -463,31 +486,66 @@ module Syskit
                         @model.event_propagations_query.from_task_id(id)
                     end
 
-                    def first_emission(**where)
-                        event_propagations_query
-                            .where(kind: EVENT_PROPAGATION_EMIT, **where)
-                            .order(:time).first
-                    end
-
-                    def last_emission(**where)
-                        event_propagations_query
-                            .where(kind: EVENT_PROPAGATION_EMIT, **where)
-                            .order(:time).last
+                    # @api private
+                    #
+                    # @return [EventPropagation]
+                    def event_propagation_from_entity(entity)
+                        event_m = model.event(entity.name)
+                        EventPropagation.from_entity(@index, entity, self, event_m)
                     end
 
                     # Enumerate event propagations from events of this task
+                    #
+                    # @yieldparam [EventPropagation] propagation
                     def each_event_propagation(**where)
                         return enum_for(__method__, **where) unless block_given?
 
                         query = event_propagations_query.where(**where).order(:time)
                         query.each do |entity|
-                            event_m = model.event(entity.name)
-                            yield EventPropagation.from_entity(
-                                @index, entity, self, event_m
-                            )
+                            yield event_propagation_from_entity(entity)
                         end
                     end
 
+                    # Return the first event propagation of one of this task's generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_event_propagation(**where)
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).first
+                        event_propagation_from_entity(entity) if entity
+                    end
+
+                    # Return the last event propagation of one of this task's generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def last_event_propagation(**where)
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).last
+                        event_propagation_from_entity(entity) if entity
+                    end
+
+                    # Get the first emission matching the given query
+                    #
+                    # The query is obviously scoped to the task's own event generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_emission(**where)
+                        first_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
+                    end
+
+                    # Get the last emission matching the given query
+                    #
+                    # The query is obviously scoped to the task's own event generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def last_emission(**where)
+                        last_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
+                    end
+
+                    # Enumerate this task's emissions
+                    #
+                    # @yieldparam [EventPropagation] propagation the emission (`kind` is
+                    #   always EVENT_PROPAGATION_EMIT)
                     def each_emission(**where, &block)
                         each_event_propagation(
                             kind: EVENT_PROPAGATION_EMIT, **where, &block
@@ -603,15 +661,27 @@ module Syskit
                     end
 
                     # Return the first emission of this event source
-                    def first
+                    #
+                    # @return [EventPropagation]
+                    def first_emission
                         task.first_emission(name: name)
                     end
 
                     # Return the last emission of this event source
                     #
                     # @return [EventPropagation]
-                    def last
+                    def last_emission
                         task.last_emission(name: name)
+                    end
+
+                    # @deprecated use {#first_emission} instead
+                    def first
+                        first_emission
+                    end
+
+                    # @deprecated use {#last_emission} instead
+                    def last
+                        last_emission
                     end
                 end
 
