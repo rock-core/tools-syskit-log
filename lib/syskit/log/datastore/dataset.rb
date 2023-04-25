@@ -181,12 +181,19 @@ module Syskit::Log
                 digest
             end
 
+            # Validate that the given digest is a valid dataset ID
+            #
+            # See {valid_encoded_digest?} to for a true/false check
+            #
+            # @param [String]
+            # @raise [InvalidDigest]
             def self.validate_encoded_digest(digest)
                 validate_encoded_sha2(digest)
             end
 
-            # Validate that the argument looks like a valid sha2 digest encoded
-            # with {DIGEST_ENCODING_METHOD}
+            # @api private
+            #
+            # Implementation of {.validate_encoded_digest} for SHA2 hashes
             def self.validate_encoded_sha2(sha2)
                 if sha2.length != ENCODED_DIGEST_LENGTH
                     raise InvalidDigest,
@@ -200,6 +207,21 @@ module Syskit::Log
                           "Expected characters in 0-9a-zA-Z+/"
                 end
                 sha2
+            end
+
+            # Checks if the given digest is a valid dataset ID
+            #
+            # @see validate_encoded_digest
+            def self.valid_encoded_digest?(digest)
+                valid_encoded_sha2?(digest)
+            end
+
+            # @api private
+            #
+            # Implementation of {.valid_encoded_digest?} for SHA2 hashes
+            def self.valid_encoded_sha2?(sha2)
+                sha2.length == ENCODED_DIGEST_LENGTH &&
+                    /^[0-9a-f]+$/.match?(sha2)
             end
 
             # Return the path to the file containing identity metadata

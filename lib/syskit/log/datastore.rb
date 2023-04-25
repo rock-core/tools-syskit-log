@@ -100,9 +100,13 @@ module Syskit::Log
         # Test whether the file at the given path is a redirect file
         def self.redirect?(path)
             return unless path.file?
+            return unless Dataset.valid_encoded_digest?(path.basename.to_s)
 
-            YAML.safe_load(path.read).key?("to")
-        rescue Psych::SyntaxError # rubocop:disable Lint/SuppressedException
+            return false unless (to = YAML.safe_load(path.read)["to"])
+            return false unless to.respond_to?(:to_str)
+
+            Dataset.valid_encoded_digest?(to)
+        rescue Psych::SyntaxError, Psych::DisallowedClass # rubocop:disable Lint/SuppressedException
         end
 
         # Enumerate the store's datasets
@@ -286,7 +290,6 @@ module Syskit::Log
                 FileUtils.mv cache_path_of(old_digest), cache_path_of(new_digest)
             end
 
-            puts "#{old_digest}: dataset identity changed to #{new_digest}"
             get(new_digest, validate: false, preload_metadata: false)
         end
     end
