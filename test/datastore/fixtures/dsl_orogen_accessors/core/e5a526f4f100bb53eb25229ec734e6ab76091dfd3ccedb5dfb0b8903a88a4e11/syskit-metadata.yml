@@ -1,0 +1,17 @@
+---
+roby:time:
+- 20230117-1609
+roby:cmdline:
+- "/home/doudou/dev/tidewise/wetpaint/tools/roby/bin/roby -p syskit scripts/orogen.rb
+  -c"
+roby:robot_name:
+- default
+roby:robot_type:
+- default
+roby:app_name:
+- roby_log_generation
+roby:app_dir:
+- "/home/doudou/dev/tidewise/wetpaint/tools/syskit-log/test/roby-log-generation"
+timestamp:
+- 1673971740
+tags: []

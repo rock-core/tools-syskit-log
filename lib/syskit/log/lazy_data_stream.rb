@@ -55,6 +55,15 @@ module Syskit::Log
             @interval_rt = interval_rt
             @interval_lg = interval_lg
             @size = size
+            @pocolog_stream = nil
+        end
+
+        def task_name
+            metadata["rock_task_name"]
+        end
+
+        def task_object_name
+            metadata["rock_task_object_name"]
         end
 
         # True if the size of this stream is zero
@@ -71,8 +80,10 @@ module Syskit::Log
         #
         # @return [Pocolog::DataStream]
         def syskit_eager_load
+            return @pocolog_stream if @pocolog_stream
+
             file = Pocolog::Logfiles.open(path, index_dir: index_dir)
-            file.streams.first
+            @pocolog_stream = file.streams.first
         end
 
         # Return an object that allows to enumerate this stream's samples

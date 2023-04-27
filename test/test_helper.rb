@@ -80,6 +80,21 @@ module Syskit::Log
             end
             path
         end
+
+        # Create a "ready to use" datastore based on the given data in fixtures/
+        #
+        # @return [(Datastore, Datastore::Dataset)]
+        def prepare_fixture_datastore(name)
+            src_path = Pathname.new(__dir__) / "datastore" / "fixtures" / name
+            dst_path = make_tmppath
+            FileUtils.cp_r src_path, dst_path
+
+            store = Datastore.new(dst_path / name)
+            set = store.each_dataset.first
+            Datastore::IndexBuild.rebuild(store, set)
+
+            [store, set]
+        end
     end
 end
 Minitest::Test.include Syskit::Log::Test

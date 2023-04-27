@@ -40,6 +40,14 @@ module Syskit
                         assert_equal expected, propagations
                     end
 
+                    it "enumerates its task models" do
+                        models = @root.each_task_model.to_a
+                        assert_equal(
+                            [@root.Namespace.M, @root.Namespace.M.Submodel],
+                            models.sort_by(&:name)
+                        )
+                    end
+
                     it "displays the list of models children of self in to_iruby" do
                         mime, body = @root.to_iruby
                         assert_equal "text/html", mime
@@ -182,6 +190,55 @@ module Syskit
                         assert_equal ev.model.task_model.each_task.first,
                                      ev.task
                     end
+
+                    it "enumerates the event propagations from this event model" do
+                        p = @event_model.each_event_propagation.to_a
+                        assert_equal %w[start start], p.map(&:name)
+
+                        call = EVENT_PROPAGATION_CALL
+                        emit = EVENT_PROPAGATION_EMIT
+                        assert_equal([call, emit], p.map(&:kind))
+
+                        assert_equal [@event_model], p.map(&:model).uniq
+                    end
+
+                    it "returns nil if there is no matching first propagation" do
+                        p = @event_model.first_event_propagation(name: "does_not_exist")
+                        assert_nil p
+                    end
+
+                    it "returns nil if there is no matching last propagation" do
+                        p = @event_model.last_event_propagation(name: "does_not_exist")
+                        assert_nil p
+                    end
+
+                    it "returns the first propagation of a given event model" do
+                        p = @event_model.first_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_CALL, p.kind)
+                    end
+
+                    it "returns the last propagation of a given event model" do
+                        p = @event_model.last_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the first emission of a given event model" do
+                        p = @event_model.first_emission
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the last emission of a given event model" do
+                        p = @event_model.last_emission
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
                 end
 
                 describe "a task" do
@@ -198,6 +255,34 @@ module Syskit
                         assert_equal 3, emissions.size
                         assert_equal %w[start failed stop], emissions.map(&:name)
                         assert_equal [@task, @task, @task], emissions.map(&:task)
+                    end
+
+                    it "returns the first event propagation" do
+                        p = @task.first_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_CALL, p.kind)
+                    end
+
+                    it "returns the last event propagation" do
+                        p = @task.last_event_propagation
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "stop", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the first event emission" do
+                        p = @task.first_emission
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "start", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
+                    end
+
+                    it "returns the last event emission" do
+                        p = @task.last_emission
+                        assert_kind_of Accessors::EventPropagation, p
+                        assert_equal "stop", p.name
+                        assert_equal(EVENT_PROPAGATION_EMIT, p.kind)
                     end
 
                     it "gives access to a specific bound event" do
@@ -259,6 +344,12 @@ module Syskit
                         assert_equal ev.model.task_model.each_task.first,
                                      ev.task
                     end
+
+                    it "returns the first emission" do
+                    end
+
+                    it "returns the last emission" do
+                    end
                 end
 
                 describe "the deployments" do
@@ -269,6 +360,45 @@ module Syskit
                         root = Accessors::Root.new(index)
                         task_model = root.Deployments.RubyTasks.T
                         assert_equal "Deployments.RubyTasks.T", task_model.name
+                    end
+                end
+
+                describe "the relationship with data streams" do
+                    before do
+                        @datastore, @dataset =
+                            prepare_fixture_datastore "dsl_orogen_accessors"
+                    end
+
+                    it "gives access to the port stream through the port model" do
+                        task_m = @dataset.roby.OroGen.orogen_syskit_tests.Echo.out_port
+                        samples = task_m.streams.echo_task.out_port.samples.to_a
+
+                        assert samples[0].last < 1000
+                        assert samples[-1].last > 1000
+                    end
+
+                    it "restricts the port streams for a given task instance" do
+                        task_m = @dataset.roby.OroGen.orogen_syskit_tests.Echo
+                        tasks = task_m.each_task.to_a
+                        assert_equal 2, tasks.size
+
+                        all_samples =
+                            task_m.out_port.streams.echo_task.out_port.samples.to_a
+                        samples0 = tasks.first.out_port.samples.to_a
+                        samples1 = tasks.last.out_port.samples.to_a
+                        assert samples0[0].last < 1000
+                        assert samples0[-1].last < 1000
+                        assert samples1[0].last > 1000
+                        assert samples1[-1].last > 1000
+                        assert_equal all_samples, (samples0 + samples1)
+                    end
+
+                    it "allows to get a port either form its model or from the task" do
+                        task_m = @dataset.roby.OroGen.orogen_syskit_tests.Echo
+                        port_from_model = task_m.out_port.each_port.first
+                        port_from_task = task_m.each_task.first.out_port
+
+                        assert_equal port_from_model, port_from_task
                     end
                 end
 

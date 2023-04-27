@@ -31,6 +31,13 @@ module Syskit::Log
                 rebuild_roby_index(force: force, reporter: reporter)
             end
 
+            # Rebuild this dataset's indexes
+            def self.rebuild(
+                datastore, dataset, force: false, reporter: Pocolog::CLI::NullReporter.new
+            )
+                new(datastore, dataset).rebuild(force: force, reporter: reporter)
+            end
+
             # Rebuild the dataset's pocolog indexes
             #
             # @param [Boolean] force if true, the indexes will all be rebuilt.

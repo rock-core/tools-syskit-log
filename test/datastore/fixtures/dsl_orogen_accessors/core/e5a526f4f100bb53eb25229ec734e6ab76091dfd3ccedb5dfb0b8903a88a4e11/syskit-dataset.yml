@@ -1,0 +1,22 @@
+---
+layout_version: 1
+sha2: e5a526f4f100bb53eb25229ec734e6ab76091dfd3ccedb5dfb0b8903a88a4e11
+identity:
+- path: pocolog/echo::state.0.log
+  sha2: c934b1c486b223700b8cbd97a02d8d37b77647ec87dd5ddab90500d6bf4cdb12
+  size: 890
+- path: pocolog/echo::out.0.log
+  sha2: 89f5ae9a37923ae0f36f07f2f3f4c9bf2d04c2c75bf8d416d05edf2a7606d056
+  size: 6661
+- path: pocolog/echo_Logger::overwrite_existing_files.0.log
+  sha2: e7fe532178f01bdeda17d132c94c7812304dc2b1dcf3de9d15ddca6288c74d2d
+  size: 881
+- path: pocolog/echo_Logger::auto_timestamp_files.0.log
+  sha2: f721f2290d6e259a30994c1af80513575caf40e38ff311d26fa7b0d5b488e943
+  size: 873
+- path: pocolog/echo_Logger::file.0.log
+  sha2: 04e7ec93ff2bc2abbd56e1babedee01b329834079609fd92eb5b2f5413a00bd0
+  size: 1764
+- path: roby-events.0.log
+  sha2: 5adb536a55e8ad5ab640c7f670bea9de99339363a4713708003d42360cecf3a6
+  size: 309440

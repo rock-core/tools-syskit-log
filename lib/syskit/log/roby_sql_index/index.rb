@@ -6,32 +6,36 @@ module Syskit
             # Access and creation API of the Roby SQL index
             class Index
                 # Opens an existing index file, or creates one
-                def self.open(path)
+                def self.open(path, dataset: nil)
                     raise ArgumentError, "#{path} does not exist" unless path.exist?
 
-                    rom = ROM.container(:sql, "sqlite://#{path}") do |config|
+                    uri = "sqlite://#{CGI.escape(path.to_s)}"
+                    rom = ROM.container(:sql, uri) do |config|
                         Definitions.configure(config)
                     end
-                    new(rom)
+                    new(rom, dataset: dataset)
                 end
 
                 # Create a new index file
-                def self.create(path)
+                def self.create(path, dataset: nil)
                     raise ArgumentError, "#{path} already exists" if path.exist?
 
-                    rom = ROM.container(:sql, "sqlite://#{path}") do |config|
+                    uri = "sqlite://#{CGI.escape(path.to_s)}"
+                    rom = ROM.container(:sql, uri) do |config|
                         Definitions.schema(config)
                         Definitions.configure(config)
                     end
-                    new(rom)
+                    new(rom, dataset: dataset)
                 end
 
-                def initialize(rom)
+                def initialize(rom, dataset: nil)
                     @rom = rom
                     @models = rom.relations[:models]
                     @tasks = rom.relations[:tasks]
                     @event_propagations = rom.relations[:event_propagations]
                     @metadata = rom.relations[:metadata]
+
+                    @dataset = dataset
                 end
 
                 def close
@@ -343,6 +347,11 @@ module Syskit
 
                     task_model = task_model_by_id(entity.model_id)
                     Accessors::Task.new(self, entity, task_model)
+                end
+
+                # (see Dataset#find_all_streams)
+                def find_all_streams(query)
+                    @dataset.streams.find_all_streams(query)
                 end
             end
         end

@@ -62,7 +62,14 @@ module Syskit::Log
         #
         # @param [Syskit::Models::TaskContext] model
         def task_model(model)
-            add_regex("rock_task_model", model.orogen_model.name)
+            task_orogen_model_name(model.orogen_model.name)
+        end
+
+        # Match the task model name
+        #
+        # @param [String] orogen_model_name
+        def task_orogen_model_name(orogen_model_name)
+            add_regex("rock_task_model", orogen_model_name)
         end
 
         # Match the type name

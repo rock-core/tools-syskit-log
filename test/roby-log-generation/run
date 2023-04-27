@@ -3,4 +3,4 @@
 name=$1
 unset ROBY_BASE_LOG_DIR
 roby run -p syskit scripts/$name.rb -c
-mv logs/current/default-events.log ../roby-logs/$name-events.log
+cp logs/current/default-events.log ../roby-logs/$name-events.log

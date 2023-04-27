@@ -40,6 +40,14 @@ module Syskit
                         @index.models.where { name.like(pattern) }
                     end
 
+                    def each_task_model
+                        return enum_for(__method__) unless block_given?
+
+                        model_query.pluck(:name, :id).each do |name, model_id|
+                            yield TaskModel.new(@index, name, model_id)
+                        end
+                    end
+
                     def event_propagation_query
                         @index.event_propagations
                     end
@@ -124,6 +132,10 @@ module Syskit
                         @tasks = {}
                     end
 
+                    def ==(other)
+                        other.kind_of?(TaskModel) && other.id == id
+                    end
+
                     def each_event
                         return enum_for(__method__) unless block_given?
 
@@ -149,6 +161,46 @@ module Syskit
                                 @index, entity, task, event_m
                             )
                         end
+                    end
+
+                    def orogen_model_name
+                        unless (m = /^OroGen\./.match(name))
+                            raise ArgumentError, "#{name} is not an orogen model"
+                        end
+
+                        m.post_match.gsub(".", "::")
+                    end
+
+                    def each_port_model
+                        return enum_for(__method__) unless block_given?
+
+                        streams = @index.find_all_streams(
+                            RockStreamMatcher
+                            .new.ports
+                            .task_orogen_model_name(orogen_model_name)
+                        )
+                        port_names = streams.map(&:task_object_name).uniq
+                        port_names.each do |name|
+                            streams = streams.find_all_streams(
+                                RockStreamMatcher.new.object_name(name)
+                            )
+                            yield PortModel.new(self, name, streams)
+                        end
+                    end
+
+                    def find_port_by_name(name)
+                        streams = @index.find_all_streams(
+                            RockStreamMatcher
+                            .new.ports
+                            .task_orogen_model_name(orogen_model_name)
+                            .object_name(name)
+                        )
+                        if streams.empty?
+                            raise ArgumentError,
+                                  "no port stream named #{name} in this dataset"
+                        end
+
+                        PortModel.new(self, name, Streams.new(streams))
                     end
 
                     def each_emission(**where, &block)
@@ -196,27 +248,28 @@ module Syskit
                         end
                     end
 
-                    def ==(other)
-                        other.kind_of?(TaskModel) && other.id == id
+                    def find_event_by_name(event_name)
+                        event_name = event_name.to_str
+                        return unless @index.event_with_name?(event_name)
+                        return unless event?(event_name)
+
+                        EventModel.new(@index, event_name, self)
+                    end
+
+                    def respond_to_missing?(m, include_private = true)
+                        MetaRuby::DSLs.has_through_method_missing?(
+                            self, m,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
                     end
 
                     def method_missing(m, *args, **kw, &block)
-                        m_to_s = m.to_s
-                        return super unless m_to_s.end_with?("_event")
-
-                        event_name = m_to_s[0..-7]
-                        unless @index.event_with_name?(event_name)
-                            msg = "no events named #{event_name} have been emitted"
-                            raise NoMethodError.new(msg, m)
-                        end
-
-                        unless event?(event_name)
-                            msg = "there are emitted events named #{event_name}, but "\
-                                  "not for a task of model #{@name}"
-                            raise NoMethodError.new(msg, m)
-                        end
-
-                        EventModel.new(@index, event_name, self)
+                        MetaRuby::DSLs.find_through_method_missing(
+                            self, m, args,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
                     end
 
                     # Return the task instance object with the given ID
@@ -254,6 +307,35 @@ module Syskit
                     end
                 end
 
+                # Representation of a port on a task model
+                #
+                # Use {Task#find_port} or {#each_port} to get ports of actual task
+                # instances
+                class PortModel
+                    attr_reader :task_model
+                    attr_reader :name
+                    attr_reader :streams
+
+                    def initialize(task_model, name, streams)
+                        @task_model = task_model
+                        @name = name
+                        @streams = streams
+                    end
+
+                    def bind(task)
+                        orocos_name = task.arguments[:orocos_name]
+                        task_stream =
+                            @streams.find_task_by_name(orocos_name).streams.first
+                        Port.new(task, @name, task_stream)
+                    end
+
+                    def each_port
+                        return enum_for(__method__) unless block_given?
+
+                        task_model.each_task { |task| yield bind(task) }
+                    end
+                end
+
                 # Represents an event generator model
                 class EventModel
                     # The event's name
@@ -267,6 +349,13 @@ module Syskit
                         @task_model = task_model
                     end
 
+                    # Returns the event generator model for the given task instance
+                    #
+                    # @return [Event]
+                    def bind(task)
+                        Event.new(@index, @name, task, self)
+                    end
+
                     def ==(other)
                         other.kind_of?(EventModel) &&
                             other.name == name &&
@@ -277,6 +366,34 @@ module Syskit
                         task_model.event_propagations_query.by_name(name)
                     end
 
+                    # @api private
+                    #
+                    # Create an EventPropagation accessor from the DRY entity
+                    #
+                    # @return [EventPropagation]
+                    def event_propagation_from_entity(entity)
+                        task = @task_model.task_by_id(entity.task_id)
+                        EventPropagation.from_entity(@index, entity, task, self)
+                    end
+
+                    # Return the first propagation matching a given query
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_event_propagation(**where)
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).first
+                        event_propagation_from_entity(entity) if entity
+                    end
+
+                    # Return the last propagation matching a given query
+                    #
+                    # @return [EventPropagation,nil]
+                    def last_event_propagation(**where)
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).last
+                        event_propagation_from_entity(entity) if entity
+                    end
+
                     # Enumerate the event propagations coming from generators of
                     # this model
                     def each_event_propagation(**where)
@@ -284,23 +401,31 @@ module Syskit
 
                         query = event_propagations_query.where(**where).order(:time)
                         query.each do |entity|
-                            task = @task_model.task_by_id(entity.task_id)
-                            yield EventPropagation.from_entity(
-                                @index, entity, task, self
-                            )
+                            yield event_propagation_from_entity(entity)
                         end
                     end
 
                     # List the matching event emissions
+                    #
+                    # @yieldparam [EventPropagation] propagation
                     def each_emission(**where, &block)
                         each_event_propagation(
                             kind: EVENT_PROPAGATION_EMIT, **where, &block
                         )
                     end
 
-                    # Get the first emission
-                    def first_emission
-                        each_emission.first
+                    # Get the first emission matching the given query
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_emission(**where)
+                        first_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
+                    end
+
+                    # Get the last emission matching the given query
+                    #
+                    # @return [EventPropagation,nil]
+                    def last_emission(**where)
+                        last_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
                     end
 
                     def full_name
@@ -323,6 +448,10 @@ module Syskit
 
                     def id
                         @obj.id
+                    end
+
+                    def ==(other)
+                        other.kind_of?(Task) && other.id == id
                     end
 
                     def arguments
@@ -353,26 +482,70 @@ module Syskit
                         [start_time, stop_time]
                     end
 
-                    def ==(other)
-                        other.kind_of?(Task) && other.id == id
-                    end
-
                     def event_propagations_query
                         @model.event_propagations_query.from_task_id(id)
                     end
 
+                    # @api private
+                    #
+                    # @return [EventPropagation]
+                    def event_propagation_from_entity(entity)
+                        event_m = model.event(entity.name)
+                        EventPropagation.from_entity(@index, entity, self, event_m)
+                    end
+
                     # Enumerate event propagations from events of this task
+                    #
+                    # @yieldparam [EventPropagation] propagation
                     def each_event_propagation(**where)
                         return enum_for(__method__, **where) unless block_given?
 
                         query = event_propagations_query.where(**where).order(:time)
                         query.each do |entity|
-                            yield EventPropagation.from_entity(
-                                @index, entity, self, model
-                            )
+                            yield event_propagation_from_entity(entity)
                         end
                     end
 
+                    # Return the first event propagation of one of this task's generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_event_propagation(**where)
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).first
+                        event_propagation_from_entity(entity) if entity
+                    end
+
+                    # Return the last event propagation of one of this task's generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def last_event_propagation(**where)
+                        entity = event_propagations_query
+                                 .where(**where).order(:time).last
+                        event_propagation_from_entity(entity) if entity
+                    end
+
+                    # Get the first emission matching the given query
+                    #
+                    # The query is obviously scoped to the task's own event generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def first_emission(**where)
+                        first_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
+                    end
+
+                    # Get the last emission matching the given query
+                    #
+                    # The query is obviously scoped to the task's own event generators
+                    #
+                    # @return [EventPropagation,nil]
+                    def last_emission(**where)
+                        last_event_propagation(kind: EVENT_PROPAGATION_EMIT, **where)
+                    end
+
+                    # Enumerate this task's emissions
+                    #
+                    # @yieldparam [EventPropagation] propagation the emission (`kind` is
+                    #   always EVENT_PROPAGATION_EMIT)
                     def each_emission(**where, &block)
                         each_event_propagation(
                             kind: EVENT_PROPAGATION_EMIT, **where, &block
@@ -380,28 +553,94 @@ module Syskit
                     end
 
                     def event(name)
-                        BoundEvent.new(@index, name, self, model.event(name))
+                        unless (ev = find_event_by_name(name))
+                            raise NoSuchEvent,
+                                  "cannot find an event '#{name}' on #{self}"
+                        end
+
+                        ev
+                    end
+
+                    # Look for one of this task's events
+                    #
+                    # @param [String] name
+                    # @return [Event,nil]
+                    def find_event_by_name(name)
+                        model.find_event_by_name(name)&.bind(self)
+                    end
+
+                    # Look for one of this task's ports
+                    #
+                    # @param [String] name
+                    # @return [Port,nil]
+                    def find_port_by_name(name)
+                        model.find_port_by_name(name)&.bind(self)
+                    end
+
+                    # Enumerate this task's ports
+                    #
+                    # @yieldparam [Port] port
+                    def each_port
+                        return enum_for(__method__) unless block_given?
+
+                        task_model.each_port_model { |p| p.bind(self) }
                     end
 
                     def respond_to_missing?(m, include_private = false)
-                        super || m.to_s.end_with?("_event")
+                        MetaRuby::DSLs.has_through_method_missing?(
+                            self, m,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
                     end
 
                     def method_missing(m, *args, **kw, &block)
-                        if m.to_s.end_with?("_event")
-                            unless args.empty? && kw.empty?
-                                raise ArgumentError, "wrong number of arguments"
-                            end
+                        MetaRuby::DSLs.find_through_method_missing(
+                            self, m, args,
+                            "_event" => "find_event_by_name",
+                            "_port" => "find_port_by_name"
+                        ) || super
+                    end
+                end
 
-                            event(m[0..-7])
-                        else
-                            super
-                        end
+                # A port of a given task instance
+                #
+                # Port objects can be used in the data processing DSL as data
+                # streams are. They are simply the port's data stream limited to
+                # the task's lifetime.
+                class Port
+                    attr_reader :task
+                    attr_reader :name
+
+                    def ==(other)
+                        other.task == task && other.name == name
+                    end
+
+                    def initialize(task, name, global_stream)
+                        @task = task
+                        @name = name
+                        @global_stream = global_stream
+                    end
+
+                    def stream
+                        s = @global_stream.syskit_eager_load
+                        start, stop = @task.interval_lg
+                        return unless start
+
+                        s.from_logical_time(start).to_logical_time(stop)
+                    end
+
+                    def samples
+                        stream.samples
                     end
                 end
 
                 # An event model bound to a particular task instance
-                class BoundEvent
+                #
+                # Note that such an event object is an event source (in Roby parlance,
+                # an event generator). That is, it may have emitted zero, one or many
+                # times.
+                class Event
                     # The event name
                     attr_reader :name
                     # The task it is bound to
@@ -416,12 +655,33 @@ module Syskit
                         @model = model
                     end
 
+                    # Enumerate the emissions of this event source
                     def each_emission(&block)
                         task.each_emission(name: name, &block)
                     end
 
+                    # Return the first emission of this event source
+                    #
+                    # @return [EventPropagation]
+                    def first_emission
+                        task.first_emission(name: name)
+                    end
+
+                    # Return the last emission of this event source
+                    #
+                    # @return [EventPropagation]
+                    def last_emission
+                        task.last_emission(name: name)
+                    end
+
+                    # @deprecated use {#first_emission} instead
                     def first
-                        each_emission.first
+                        first_emission
+                    end
+
+                    # @deprecated use {#last_emission} instead
+                    def last
+                        last_emission
                     end
                 end
 
