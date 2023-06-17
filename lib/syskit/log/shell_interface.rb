@@ -10,8 +10,13 @@ module Syskit::Log
         def initialize(app)
             super
             @replay_manager = app.plan.execution_engine.pocolog_replay_manager
-            Orocos.load_typekit "base"
-            @time_channel = Orocos::RubyTasks::TaskContext
+            if defined?(Runkit)
+                Runkit.load_typekit "base"
+                @time_channel = Runkit::RubyTasks::TaskContext
+            else
+                Orocos.load_typekit "base"
+                @time_channel = Orocos::RubyTasks::TaskContext
+            end
         end
 
         def time

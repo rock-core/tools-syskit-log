@@ -6,7 +6,13 @@ module Syskit::Log
     module Plugin
         def self.setup(app)
             Pocolog.logger = Syskit::Log.logger
-            manager = Orocos::RubyTasks::ProcessManager.new(app.default_loader)
+            manager =
+                if defined?(Runkit)
+                    Runkit::RubyTasks::ProcessManager.new(app.default_loader)
+                else
+                    Orocos::RubyTasks::ProcessManager.new(app.default_loader)
+                end
+
             Syskit.conf.register_process_server("pocolog", manager, app.log_dir)
         end
 

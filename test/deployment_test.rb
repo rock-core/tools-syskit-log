@@ -117,10 +117,18 @@ module Syskit::Log
             replay_manager.step
         end
 
+        def allow_blocking_calls(&block)
+            if defined?(Runkit)
+                Runkit.allow_blocking_calls(&block)
+            else
+                Orocos.allow_blocking_calls(&block)
+            end
+        end
+
         it "forwards the samples to an existing, running, deployed task" do
             plan.add(task = subject.task("task"))
             syskit_configure_and_start(task)
-            reader = Orocos.allow_blocking_calls { task.orocos_task.out.reader }
+            reader = allow_blocking_calls { task.orocos_task.out.reader }
             subject.process_sample(port_stream, Time.now, 1)
             sample = expect_execution.to { have_one_new_sample reader }
             assert_equal 1, sample
