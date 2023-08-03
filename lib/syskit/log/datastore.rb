@@ -241,7 +241,7 @@ module Syskit::Log
         #
         # The created dir is deleted if it still exists after the block
         # returned. This ensures that no incoming leftovers are kept if an
-        # opeartion fails
+        # operation fails
         def in_incoming(keep: false)
             incoming_dir = (datastore_path + "incoming")
             incoming_dir.mkpath
