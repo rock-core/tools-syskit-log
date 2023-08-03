@@ -36,7 +36,7 @@ module Syskit::Log
             # Internal representation of the output of a normalization operation
             class Output
                 attr_reader :path, :stream_info, :digest, :stream_block_pos,
-                            :index_map, :last_data_block_time, :tell
+                            :index_map, :last_data_block_time, :tell, :interval_rt
 
                 WRITE_BLOCK_SIZE = 1024**2
 
@@ -45,6 +45,7 @@ module Syskit::Log
                     @wio = wio
                     @stream_info = stream_info
                     @stream_block_pos = stream_block_pos
+                    @interval_rt = []
                     @digest = digest
                     @index_map = []
                     @tell = wio.tell
@@ -83,6 +84,8 @@ module Syskit::Log
                     write ZERO_BYTE
                     write raw_data[4..-1]
                     write raw_payload
+                    @interval_rt[0] ||= rt_time
+                    @interval_rt[1] = rt_time
                     @last_data_block_time = [rt_time, lg_time]
                 end
             end
@@ -187,13 +190,14 @@ module Syskit::Log
                         output.stream_block_pos, output.index_map
                     )
                     stream_info = Pocolog.create_index_from_raw_info(
-                        block_stream, [raw_stream_info]
+                        block_stream, [raw_stream_info], interval_rt: [output.interval_rt]
                     )
                     index_path = Pocolog::Logfiles.default_index_filename(
                         output.path, index_dir: index_dir
                     )
+                    index_path = Pathname.new(index_path)
                     indexes << index_path
-                    File.open(index_path, "w") do |io|
+                    index_path.open("w") do |io|
                         Pocolog::Format::Current
                             .write_index(io, block_stream.io, stream_info)
                     end
@@ -431,7 +435,7 @@ module Syskit::Log
                 out_file_path, stream_info, raw_header, raw_payload, initial_blocks,
                 compute_sha256: false
             )
-                wio = out_file_path.open("w+")
+                wio = out_file_path.open("w")
 
                 Pocolog::Format::Current.write_prologue(wio)
                 if compute_sha256
