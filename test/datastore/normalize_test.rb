@@ -37,6 +37,62 @@ module Syskit::Log
                     assert_equal [[base_time + 1, base_time + 10, 1]],
                                  stream.samples.to_a
                 end
+                it "deletes input files if delete_input is true" do
+                    logfile_pathname("normalized").mkdir
+                    input_path = logfile_pathname("file0.0.log")
+                    normalize.normalize([input_path], delete_input: true)
+                    normalized_dir = logfile_pathname("normalized")
+                    stream = open_logfile_stream(
+                        normalized_dir + "task0::port.0.log", "task0.port"
+                    )
+                    assert_equal [[base_time + 2, base_time + 20, 2]],
+                                 stream.samples.to_a
+                    stream = open_logfile_stream(
+                        normalized_dir + "task1::port.0.log", "task1.port"
+                    )
+                    assert_equal [[base_time + 1, base_time + 10, 1]],
+                                 stream.samples.to_a
+
+                    refute input_path.exist?
+                end
+                it "does not delete input files if delete_input is true "\
+                   "but the import failed" do
+                    logfile_pathname("normalized").mkdir
+                    input_path = logfile_pathname("file0.0.log")
+                    flexmock(normalize)
+                        .should_receive(:normalize_logfile_group)
+                        .and_raise(e = Class.new(RuntimeError))
+                    assert_raises(e) do
+                        normalize.normalize([input_path], delete_input: true)
+                    end
+                    normalized_dir = logfile_pathname("normalized")
+                    refute((normalized_dir + "task0::port.0.log").exist?)
+                    refute((normalized_dir + "task1::port.0.log").exist?)
+                    assert input_path.exist?
+                end
+                it "does delete unrelated input files if they have been already "\
+                   "processed" do
+                    logfile_pathname("normalized").mkdir
+                    create_logfile "file1.0.log" do
+                        create_logfile_stream "stream2", metadata: Hash["rock_task_name" => "task2", "rock_task_object_name" => "port"]
+                        write_logfile_sample base_time + 2, base_time + 20, 2
+                    end
+                    input0_path = logfile_pathname("file0.0.log")
+                    input1_path = logfile_pathname("file1.0.log")
+                    flexmock(normalize)
+                        .should_receive(:normalize_logfile_group)
+                        .once.pass_thru
+                    flexmock(normalize)
+                        .should_receive(:normalize_logfile_group)
+                        .once.and_raise(e = Class.new(RuntimeError))
+                    assert_raises(e) do
+                        normalize.normalize([input0_path, input1_path], delete_input: true)
+                    end
+                    assert(logfile_pathname("normalized", "task0::port.0.log").exist?)
+                    refute(logfile_pathname("normalized", "task2::port.0.log").exist?)
+                    refute input0_path.exist?
+                    assert input1_path.exist?
+                end
                 it "generates valid index files for the normalized streams" do
                     logfile_pathname("normalized").mkdir
                     normalize.normalize([logfile_pathname("file0.0.log")])
