@@ -8,12 +8,13 @@ module Syskit::Log
             paths,
             output_path: paths.first.dirname + "normalized",
             reporter: Pocolog::CLI::NullReporter.new,
-            compute_sha256: false, index_dir: output_path
+            compute_sha256: false, index_dir: output_path, delete_input: false
         )
             Normalize.new.normalize(
                 paths,
                 output_path: output_path, reporter: reporter,
-                compute_sha256: compute_sha256, index_dir: index_dir
+                compute_sha256: compute_sha256, index_dir: index_dir,
+                delete_input: delete_input
             )
         end
 
@@ -111,7 +112,7 @@ module Syskit::Log
                 paths,
                 output_path: paths.first.dirname + "normalized",
                 index_dir: output_path, reporter: Pocolog::CLI::NullReporter.new,
-                compute_sha256: false
+                compute_sha256: false, delete_input: false
             )
                 output_path.mkpath
                 index_dir.mkpath
@@ -120,11 +121,14 @@ module Syskit::Log
                 end
 
                 result = logfile_groups.values.map do |files|
-                    normalize_logfile_group(
+                    group_result = normalize_logfile_group(
                         files,
                         output_path: output_path, index_dir: index_dir,
                         reporter: reporter, compute_sha256: compute_sha256
                     )
+
+                    files.each(&:unlink) if delete_input
+                    group_result
                 end
 
                 if compute_sha256
