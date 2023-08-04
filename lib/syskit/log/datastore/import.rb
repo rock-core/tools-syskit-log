@@ -224,7 +224,7 @@ module Syskit::Log
                         output_dir_path, roby_event_log, roby_sql_index,
                         cache_path: cache_path, reporter: reporter
                     )
-                rescue RuntimeError => e
+                rescue TypeError, RuntimeError => e
                     reporter.error "Failed to create index from Roby log file"
                     reporter.error "The log file will still be part of the dataset. "\
                                     "You may attempt to re-create the cached version "\
