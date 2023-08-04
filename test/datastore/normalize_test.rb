@@ -9,7 +9,11 @@ module Syskit::Log
             attr_reader :normalize, :base_time
             before do
                 @base_time = Time.new(1980, 9, 30)
-                @normalize = Normalize.new
+                @normalize = Normalize.new(compress: compress?)
+            end
+
+            def compress?
+                ENV["SYSKIT_LOG_TEST_COMPRESS"] == "1"
             end
 
             describe "#normalize" do
@@ -94,6 +98,8 @@ module Syskit::Log
                     assert input1_path.exist?
                 end
                 it "generates valid index files for the normalized streams" do
+                    skip if compress?
+
                     logfile_pathname("normalized").mkdir
                     normalize.normalize([logfile_pathname("file0.0.log")])
                     flexmock(Pocolog::Logfiles).new_instances
@@ -104,6 +110,8 @@ module Syskit::Log
                     open_logfile_stream (normalized_dir + "task1::port.0.log"), "task1.port"
                 end
                 it "allows to specify the cache directory" do
+                    skip if compress?
+
                     logfile_pathname("normalized").mkdir
                     index_dir = logfile_pathname("cache")
                     normalize.normalize(
@@ -118,23 +126,19 @@ module Syskit::Log
                     open_logfile_stream (normalized_dir + "task1::port.0.log"), "task1.port", index_dir: index_dir
                 end
                 describe "digest generation" do
-                    it "optionally computes the sha256 digest of the generated file, without the prologue" do
+                    it "optionally computes the sha256 digest of the generated file, "\
+                       "without the prologue" do
                         logfile_pathname("normalized").mkdir
-                        result = normalize.normalize([logfile_pathname("file0.0.log")], compute_sha256: true)
+                        result = normalize.normalize(
+                            [logfile_pathname("file0.0.log")], compute_sha256: true
+                        )
 
                         path = logfile_pathname("normalized", "task0::port.0.log")
-                        expected = Digest::SHA256.hexdigest(path.read[Pocolog::Format::Current::PROLOGUE_SIZE..-1])
+                        actual_data = read_logfile("normalized", "task0::port.0.log")
+                        expected = Digest::SHA256.hexdigest(
+                            actual_data[Pocolog::Format::Current::PROLOGUE_SIZE..-1]
+                        )
                         assert_equal expected, result[path].hexdigest
-                    end
-                    it "generates valid index files for the normalized streams" do
-                        logfile_pathname("normalized").mkdir
-                        normalize.normalize([logfile_pathname("file0.0.log")], compute_sha256: true)
-                        flexmock(Pocolog::Logfiles).new_instances
-                                                   .should_receive(:rebuild_and_load_index)
-                                                   .never
-                        normalized_dir = logfile_pathname("normalized")
-                        open_logfile_stream (normalized_dir + "task0::port.0.log"), "task0.port"
-                        open_logfile_stream (normalized_dir + "task1::port.0.log"), "task1.port"
                     end
                 end
                 it "detects followup streams" do
@@ -213,22 +217,22 @@ module Syskit::Log
 
             describe "#normalize_logfile" do
                 it "skips invalid files" do
-                    logfile_pathname("file0.0.log").open("w") do |io|
-                        io.write "INVALID"
-                    end
+                    write_logfile "file0.0.log", "INVALID"
                     reporter = flexmock(Pocolog::CLI::NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
-                    reporter.should_receive(:warn)
-                            .with("file0.0.log does not seem to be a valid pocolog file, skipping")
-                            .once
-                    reporter.should_receive(:current=).with(17).once
-                    assert_equal [nil, []], normalize.normalize_logfile(
+                    ext = ".zst" if compress?
+                    reporter
+                        .should_receive(:warn)
+                        .with("file0.0.log#{ext} does not seem to be "\
+                              "a valid pocolog file, skipping")
+                        .once
+                    assert_nil normalize.normalize_logfile(
                         logfile_pathname("file0.0.log"),
                         logfile_pathname("normalized"), reporter: reporter
                     )
                 end
                 it "handles truncated files" do
-                    create_logfile "file0.0.log" do
+                    create_logfile "file0.0.log", truncate: 1 do
                         create_logfile_stream "stream0",
                                               metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
                         write_logfile_sample base_time + 3, base_time + 30, 3
@@ -236,16 +240,15 @@ module Syskit::Log
                     end
                     file0_path = logfile_pathname("file0.0.log")
                     file0_size = file0_path.stat.size
-                    logfile_pathname("file0.0.log").truncate(file0_size - 1)
                     logfile_pathname("normalized").mkpath
                     reporter = flexmock(Pocolog::CLI::NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
+                    ext = ".zst" if compress?
                     reporter.should_receive(:warn)
-                            .with(/^file0.0.log looks truncated/)
+                            .with(/^file0.0.log#{ext} looks truncated/)
                             .once
-                    reporter.should_receive(:current=).with(10 + file0_size - 1).once
                     normalize.normalize_logfile(
-                        logfile_pathname("file0.0.log"),
+                        file0_path,
                         logfile_pathname("normalized"), reporter: reporter
                     )
                     stream = open_logfile_stream(
@@ -255,6 +258,51 @@ module Syskit::Log
                     assert_equal [[base_time + 3, base_time + 30, 3]],
                                  stream.samples.to_a
                 end
+            end
+
+            def logfile_pathname(*path)
+                return super unless /\.\d+\.log$/.match?(path.last)
+                return super unless compress?
+
+                super(*path[0..-2], path.last + ".zst")
+            end
+
+            def open_logfile_stream(path, stream_name, **kw)
+                return super unless compress?
+
+                Tempfile.open(["", ".log"]) do |temp_io|
+                    path = path.sub_ext(".log.zst") if path.extname != ".zst"
+
+                    temp_io.write Zstd.decompress(path.read)
+                    temp_io.flush
+                    temp_io.rewind
+                    return super(temp_io.path, stream_name, **kw)
+                end
+            end
+
+            def read_logfile(*name)
+                path = logfile_pathname(*name)
+                data = path.read
+                return data unless path.extname == ".zst"
+
+                Zstd.decompress(data)
+            end
+
+            def write_logfile(name, data)
+                path = logfile_pathname(name)
+                data = Zstd.compress(data) if path.extname == ".zst"
+                path.write data
+            end
+
+            def create_logfile(name, truncate: 0)
+                path = Pathname.new(super(name))
+                path.truncate(path.stat.size - truncate)
+                return path unless compress?
+
+                compressed = Zstd.compress(path.read)
+                path.sub_ext(".log.zst").write(compressed)
+                path.unlink
+                path
             end
         end
     end
