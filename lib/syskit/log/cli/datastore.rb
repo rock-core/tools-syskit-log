@@ -243,14 +243,16 @@ module Syskit::Log
                 end
 
                 def import_dataset(
-                    paths, reporter, datastore, metadata, include:, delete_input: false
+                    paths, reporter, datastore, metadata,
+                    include:, delete_input: false, compress: false
                 )
                     datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
                         importer = Syskit::Log::Datastore::Import.new(datastore)
                         dataset = importer.normalize_dataset(
                             paths, core_path,
                             cache_path: cache_path, reporter: reporter,
-                            include: include, delete_input: delete_input
+                            include: include, delete_input: delete_input,
+                            compress: compress
                         )
                         metadata.each { |k, v| dataset.metadata_set(k, *v) }
                         dataset.metadata_write_to_file
@@ -515,6 +517,9 @@ module Syskit::Log
             method_option :delete_input,
                           desc: "delete files once they are successfully imported",
                           type: :boolean, default: false
+            method_option :compress,
+                          desc: "compress the resulting dataset",
+                          type: :boolean, default: false
             option :rebuild_orogen_models,
                    type: :boolean, default: false,
                    desc: "use this to disable rebuilding orogen models",
@@ -581,7 +586,8 @@ module Syskit::Log
 
                     dataset = import_dataset(
                         paths, reporter, datastore, metadata,
-                        include: include, delete_input: options[:delete_input]
+                        include: include, delete_input: options[:delete_input],
+                        compress: options[:compress]
                     )
                     if dataset
                         parse_metadata_option(dataset, options[:metadata])

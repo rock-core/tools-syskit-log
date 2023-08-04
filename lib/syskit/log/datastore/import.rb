@@ -165,7 +165,8 @@ module Syskit::Log
             def normalize_dataset(
                 dir_paths, output_dir_path,
                 cache_path: output_dir_path, reporter: CLI::NullReporter.new,
-                include: IMPORT_DEFAULT_STEPS, delete_input: false
+                include: IMPORT_DEFAULT_STEPS, delete_input: false,
+                compress: false
             )
                 pocolog_files, text_files, roby_event_logs, ignored_entries =
                     dir_paths.map { |dir| prepare_import(dir) }
@@ -176,7 +177,7 @@ module Syskit::Log
                     normalize_pocolog_files(
                         output_dir_path, pocolog_files,
                         cache_path: cache_path, reporter: reporter,
-                        delete_input: delete_input
+                        delete_input: delete_input, compress: compress
                     )
                 end
 
@@ -254,7 +255,7 @@ module Syskit::Log
             def normalize_pocolog_files(
                 output_dir, files,
                 reporter: CLI::NullReporter.new, cache_path: output_dir,
-                delete_input: false
+                delete_input: false, compress: false
             )
                 return {} if files.empty?
 
@@ -270,7 +271,8 @@ module Syskit::Log
                 Syskit::Log::Datastore.normalize(
                     files,
                     output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
-                    reporter: reporter, compute_sha256: true, delete_input: delete_input
+                    reporter: reporter, compute_sha256: true, delete_input: delete_input,
+                    compress: compress
                 )
             ensure
                 reporter&.finish

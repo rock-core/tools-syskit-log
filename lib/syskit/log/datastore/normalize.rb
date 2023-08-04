@@ -8,9 +8,10 @@ module Syskit::Log
             paths,
             output_path: paths.first.dirname + "normalized",
             reporter: Pocolog::CLI::NullReporter.new,
-            compute_sha256: false, index_dir: output_path, delete_input: false
+            compute_sha256: false, index_dir: output_path, delete_input: false,
+            compress: false
         )
-            Normalize.new.normalize(
+            Normalize.new(compress: compress).normalize(
                 paths,
                 output_path: output_path, reporter: reporter,
                 compute_sha256: compute_sha256, index_dir: index_dir,
@@ -107,8 +108,13 @@ module Syskit::Log
                 end
             end
 
-            def initialize
+            def initialize(compress: false)
                 @out_files = {}
+                @compress = compress
+            end
+
+            def compress?
+                @compress
             end
 
             def normalize(
@@ -120,7 +126,7 @@ module Syskit::Log
                 output_path.mkpath
                 index_dir.mkpath
                 logfile_groups = paths.group_by do
-                    /\.\d+\.log$/.match(_1.basename.to_s).pre_match
+                    /\.\d+\.log(?:\.zst)?$/.match(_1.basename.to_s).pre_match
                 end
 
                 result = logfile_groups.values.map do |files|
@@ -159,7 +165,9 @@ module Syskit::Log
                     raise
                 end
 
-                write_pending_pocolog_indexes(index_dir)
+                # When compressed, we don't have a "plain" logfile to use with the
+                # index ... it makes little sense to write the index
+                write_pending_pocolog_indexes(index_dir) unless compress?
 
                 if compute_sha256
                     result = {}
@@ -192,10 +200,7 @@ module Syskit::Log
                     stream_info = Pocolog.create_index_from_raw_info(
                         block_stream, [raw_stream_info], interval_rt: [output.interval_rt]
                     )
-                    index_path = Pocolog::Logfiles.default_index_filename(
-                        output.path, index_dir: index_dir
-                    )
-                    index_path = Pathname.new(index_path)
+                    index_path = default_index_pathname(output.path, index_dir: index_dir)
                     indexes << index_path
                     index_path.open("w") do |io|
                         Pocolog::Format::Current
@@ -205,6 +210,14 @@ module Syskit::Log
             rescue Exception # rubocop:disable Lint/RescueException
                 indexes.map { _1.unlink if _1.exist? }
                 raise
+            end
+
+            def default_index_pathname(logfile_path, index_dir:)
+                logfile_path = logfile_path.sub_ext("") if logfile_path.extname == ".zst"
+                path = Pocolog::Logfiles.default_index_filename(
+                    logfile_path, index_dir: index_dir
+                )
+                Pathname.new(path)
             end
 
             NormalizationState =
@@ -246,7 +259,7 @@ module Syskit::Log
             )
                 state = NormalizationState.new([], +"", [])
 
-                in_io = logfile_path.open
+                in_io = open_in_stream(logfile_path)
                 in_block_stream =
                     normalize_logfile_init(logfile_path, in_io, reporter: reporter)
                 return unless in_block_stream
@@ -401,7 +414,8 @@ module Syskit::Log
                 compute_sha256: false
             )
                 basename = Streams.normalized_filename(stream_info.metadata)
-                out_file_path = output_path + "#{basename}.0.log"
+                ext = ".zst" if compress?
+                out_file_path = output_path + "#{basename}.0.log#{ext}"
 
                 # Check if that's already known to us (multi-part
                 # logfile)
@@ -435,7 +449,7 @@ module Syskit::Log
                 out_file_path, stream_info, raw_header, raw_payload, initial_blocks,
                 compute_sha256: false
             )
-                wio = out_file_path.open("w")
+                wio = open_out_stream(out_file_path)
 
                 Pocolog::Format::Current.write_prologue(wio)
                 if compute_sha256
@@ -454,6 +468,20 @@ module Syskit::Log
                 wio&.close
                 out_file_path&.unlink
                 raise
+            end
+
+            def open_in_stream(path)
+                io = path.open
+                return io unless path.extname == ".zst"
+
+                ZstdIO.new(io)
+            end
+
+            def open_out_stream(path)
+                io = path.open("w")
+                return io unless path.extname == ".zst"
+
+                ZstdIO.new(io, read: false, write: true)
             end
         end
     end
