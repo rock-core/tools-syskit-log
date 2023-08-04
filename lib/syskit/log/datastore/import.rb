@@ -185,7 +185,7 @@ module Syskit::Log
                     reporter.info "Copying the Roby event logs"
                     normalize_roby_logs(
                         roby_event_logs, output_dir_path,
-                        cache_path: cache_path, reporter: reporter
+                        reporter: reporter
                     )
                 elsif include.include?(:roby_no_index)
                     roby_event_logs.each do |log|
