@@ -247,10 +247,12 @@ module Syskit::Log
                     include:, delete_input: false, compress: false
                 )
                     datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
-                        importer = Syskit::Log::Datastore::Import.new(datastore)
+                        importer =
+                            Syskit::Log::Datastore::Import
+                            .new(datastore, reporter: reporter)
                         dataset = importer.normalize_dataset(
                             paths, core_path,
-                            cache_path: cache_path, reporter: reporter,
+                            cache_path: cache_path,
                             include: include, delete_input: delete_input,
                             compress: compress
                         )
@@ -267,7 +269,7 @@ module Syskit::Log
 
                         begin
                             importer.validate_dataset_import(
-                                dataset, force: options[:force], reporter: reporter
+                                dataset, force: options[:force]
                             )
                         rescue Syskit::Log::Datastore::Import::DatasetAlreadyExists
                             reporter.info(
