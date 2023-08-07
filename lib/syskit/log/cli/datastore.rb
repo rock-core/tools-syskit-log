@@ -33,6 +33,8 @@ module Syskit::Log
             end
 
             no_commands do
+                attr_reader :reporter
+
                 def create_reporter(
                     format = "",
                     progress: options[:progress],
@@ -41,9 +43,9 @@ module Syskit::Log
                     **options
                 )
                     if silent
-                        Pocolog::CLI::NullReporter.new
+                        @reporter = Pocolog::CLI::NullReporter.new
                     else
-                        Pocolog::CLI::TTYReporter.new(
+                        @reporter = Pocolog::CLI::TTYReporter.new(
                             format, progress: progress, colors: colors, **options
                         )
                     end
@@ -198,7 +200,7 @@ module Syskit::Log
                     end
                 end
 
-                def import_dataset?(datastore, path, reporter:)
+                def import_dataset?(datastore, path)
                     last_import_digest, last_import_time =
                         Syskit::Log::Datastore::Import.find_import_info(path)
                     already_imported =
@@ -243,51 +245,60 @@ module Syskit::Log
                 end
 
                 def import_dataset(
-                    paths, reporter, datastore, metadata,
+                    paths, datastore,
                     include:, delete_input: false, compress: false
                 )
                     datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
-                        importer =
-                            Syskit::Log::Datastore::Import
-                            .new(datastore, reporter: reporter)
-                        dataset = importer.normalize_dataset(
-                            paths, core_path,
-                            cache_path: cache_path,
-                            include: include, delete_input: delete_input,
-                            compress: compress
+                        importer = Syskit::Log::Datastore::Import.new(
+                            core_path,
+                            cache_path: cache_path, reporter: reporter, compress: compress
                         )
-                        metadata.each { |k, v| dataset.metadata_set(k, *v) }
-                        dataset.metadata_write_to_file
-                        dataset_duration = dataset_duration(dataset)
-                        unless dataset_duration >= options[:min_duration]
-                            reporter.info(
-                                format("#{paths.join(', ')} lasts only %<seconds>.1fs, "\
-                                       "ignored", seconds: dataset_duration)
-                            )
-                            break
-                        end
+                        dataset = importer.normalize_dataset(
+                            paths, include: include, delete_input: delete_input
+                        )
+                        break unless validate_dataset_duration(paths, dataset)
+                        break unless validate_dataset_import(datastore, paths, dataset)
 
-                        begin
-                            importer.validate_dataset_import(
-                                dataset, force: options[:force]
-                            )
-                        rescue Syskit::Log::Datastore::Import::DatasetAlreadyExists
-                            reporter.info(
-                                "#{paths.join(', ')} already seem to have been imported as "\
-                                "#{dataset.compute_dataset_digest}. Give "\
-                                "--force to import again"
-                            )
-                            break
-                        end
+                        dataset = Syskit::Log::Datastore::Import.move_dataset_to_store(
+                            dataset, datastore
+                        )
+                        save_import_info(paths, dataset)
 
-                        dataset = importer.move_dataset_to_store(dataset)
-                        t = Time.now
-                        paths.each do |p|
-                            Syskit::Log::Datastore::Import.save_import_info(
-                                p, dataset, time: t
-                            )
-                        end
                         dataset
+                    end
+                end
+
+                def validate_dataset_duration(paths, dataset)
+                    dataset_duration = dataset_duration(dataset)
+                    return true if dataset_duration >= options[:min_duration]
+
+                    reporter.info(
+                        format("#{paths.join(', ')} lasts only %<seconds>.1fs, "\
+                               "ignored", seconds: dataset_duration)
+                    )
+                    false
+                end
+
+                def validate_dataset_import(datastore, paths, dataset)
+                    Syskit::Log::Datastore::Import.validate_dataset_import(
+                        datastore, dataset, force: options[:force], reporter: @reporter
+                    )
+                    true
+                rescue Syskit::Log::Datastore::Import::DatasetAlreadyExists
+                    reporter.info(
+                        "#{paths.join(', ')} already seem to have been imported as "\
+                        "#{dataset.compute_dataset_digest}. Give "\
+                        "--force to import again"
+                    )
+                    false
+                end
+
+                def save_import_info(paths, dataset)
+                    t = Time.now
+                    paths.each do |p|
+                        Syskit::Log::Datastore::Import.save_import_info(
+                            p, dataset, time: t
+                        )
                     end
                 end
 
@@ -454,9 +465,9 @@ module Syskit::Log
                     empty + matches
                 end
 
-                def index_dataset( # rubocop:disable Metrics/ParameterLists
+                def index_dataset(
                     store, dataset,
-                    reporter:, roby: true, pocolog: true, rebuild_orogen_models: true
+                    roby: true, pocolog: true, rebuild_orogen_models: true
                 )
                     index_build = Syskit::Log::Datastore::IndexBuild.new(store, dataset)
                     if pocolog
@@ -488,13 +499,15 @@ module Syskit::Log
                 bytes_total = paths.inject(0) do |total, logfile_path|
                     total + logfile_path.size
                 end
-                reporter = create_reporter(
+                create_reporter(
                     "|:bar| :current_byte/:total_byte :eta (:byte_rate/s)",
                     total: bytes_total
                 )
 
                 begin
-                    Syskit::Log::Datastore.normalize(paths, output_path: output_path, reporter: reporter)
+                    Syskit::Log::Datastore.normalize(
+                        paths, output_path: output_path, reporter: reporter
+                    )
                 ensure reporter.finish
                 end
             end
@@ -560,17 +573,13 @@ module Syskit::Log
                         [[root_path]]
                     end
 
-                reporter = create_reporter
                 datastore = create_store
+                create_reporter
 
                 if path_sets.empty?
                     puts "Nothing to import"
                     return
                 end
-
-                metadata = {}
-                metadata["description"] = description if description
-                metadata["tags"] = options[:tags]
 
                 path_sets.each do |paths|
                     paths = paths.sort_by { |p| p.basename.to_s }
@@ -582,18 +591,22 @@ module Syskit::Log
                     end
 
                     already_imported = paths.any? do |p|
-                        !import_dataset?(datastore, p, reporter: reporter)
+                        !import_dataset?(datastore, p)
                     end
                     next if already_imported
 
                     dataset = import_dataset(
-                        paths, reporter, datastore, metadata,
+                        paths, datastore,
                         include: include, delete_input: options[:delete_input],
                         compress: options[:compress]
                     )
+
                     if dataset
+                        dataset.metadata_set("description", description) if description
+                        dataset.metadata_set("tags", *options[:tags])
                         parse_metadata_option(dataset, options[:metadata])
                         dataset.metadata_write_to_file
+
                         paths.each do |p|
                             Syskit::Log::Datastore::Import.save_import_info(p, dataset)
                         end
@@ -660,17 +673,16 @@ module Syskit::Log
                           "Valid modes are 'pocolog' and 'roby'"
                 end
 
+                create_reporter
                 store = open_store
                 datasets = resolve_datasets(store, *datasets)
-                reporter = create_reporter
                 datasets.each do |dataset|
                     reporter.title "Processing #{dataset.compute_dataset_digest}"
                     index_dataset(
                         store, dataset,
                         pocolog: options[:only].include?("pocolog"),
                         roby: options[:only].include?("roby"),
-                        rebuild_orogen_models: options[:rebuild_orogen_models],
-                        reporter: reporter
+                        rebuild_orogen_models: options[:rebuild_orogen_models]
                     )
                 end
             end

@@ -1,34 +1,23 @@
 # frozen_string_literal: true
 
 require "pocolog/cli/tty_reporter"
+
 require "roby/droby/plan_rebuilder"
 require "syskit/log/datastore/normalize"
 
 module Syskit::Log
     class Datastore
-        def self.import(
-            datastore, dataset_path,
-            silent: false, force: false,
-            reporter: Pocolog::CLI::NullReporter.new
-        )
-            Import.new(datastore, reporter: reporter)
-                  .import(dataset_path, silent: silent, force: force)
-        end
-
-        # Import dataset(s) in a datastore
+        # Importation of a raw dataset into a datastore
         class Import
             class DatasetAlreadyExists < RuntimeError; end
 
             BASENAME_IMPORT_TAG = ".syskit-pocolog-import"
 
-            attr_reader :datastore
-
             def initialize(
-                datastore, output_path,
+                output_path,
                 cache_path: output_path, compress: false,
                 reporter: Pocolog::CLI::NullReporter.new
             )
-                @datastore = datastore
                 @reporter = reporter
 
                 @output_path = output_path
@@ -65,26 +54,6 @@ module Syskit::Log
             # {#normalize_dataset}
             IMPORT_DEFAULT_STEPS = %I[pocolog roby text ignored].freeze
 
-            # Import a dataset into the store
-            #
-            # @param [Pathname] dir_path the input directory
-            # @return [Pathname] the directory of the imported dataset in the store
-            def import(
-                in_dataset_paths,
-                force: false,
-                include: IMPORT_DEFAULT_STEPS, delete_input: false
-            )
-                datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
-                    dataset = normalize_dataset(
-                        in_dataset_paths, core_path,
-                        cache_path: cache_path, include: include,
-                        delete_input: delete_input
-                    )
-                    validate_dataset_import(dataset, force: force)
-                    move_dataset_to_store(dataset)
-                end
-            end
-
             # Find if a directory has already been imported
             #
             # @param [Pathname] path
@@ -115,11 +84,17 @@ module Syskit::Log
             #   the store
             # @return [Dataset] the dataset at its final place
             def self.move_dataset_to_store(dataset, datastore)
+                if dataset.dataset_path == dataset.cache_path
+                    raise ArgumentError,
+                          "cannot move a dataset that has identical cache and data paths"
+                end
+
                 dataset_digest = dataset.digest
                 final_core_dir = datastore.core_path_of(dataset_digest)
                 FileUtils.mv dataset.dataset_path, final_core_dir
-                final_cache_dir = datastore.cache_path_of(dataset_digest)
-                if final_core_dir != final_cache_dir
+
+                if dataset.cache_path.exist?
+                    final_cache_dir = datastore.cache_path_of(dataset_digest)
                     FileUtils.mv dataset.cache_path, final_cache_dir
                 end
 
@@ -131,12 +106,15 @@ module Syskit::Log
             # @api private
             #
             # Verifies that the given data should be imported
-            def validate_dataset_import(dataset, force: false)
+            def self.validate_dataset_import(
+                datastore, dataset,
+                force: false, reporter: Pocolog::CLI::NullReporter.new
+            )
                 return unless datastore.has?(dataset.digest)
 
                 if force
                     datastore.delete(dataset.digest)
-                    @reporter.warn "Replacing existing dataset #{dataset.digest} "\
+                    reporter.warn "Replacing existing dataset #{dataset.digest} "\
                                   "with new one"
                     return
                 end
@@ -254,7 +232,7 @@ module Syskit::Log
                     files,
                     output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
                     compute_sha256: true, delete_input: delete_input,
-                    compress: @compress
+                    compress: @compress, reporter: @reporter
                 )
             ensure
                 @reporter.finish
@@ -310,6 +288,7 @@ module Syskit::Log
                 index_path, index_io = create_roby_event_log_index(
                     out_path, event_log_path
                 )
+
                 @reporter.reset_progressbar(
                     "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
                 )
