@@ -1,34 +1,23 @@
 # frozen_string_literal: true
 
 require "pocolog/cli/tty_reporter"
+
 require "roby/droby/plan_rebuilder"
 require "syskit/log/datastore/normalize"
 
 module Syskit::Log
     class Datastore
-        def self.import(
-            datastore, dataset_path,
-            silent: false, force: false,
-            reporter: Pocolog::CLI::NullReporter.new
-        )
-            Import.new(datastore, reporter: reporter)
-                  .import(dataset_path, silent: silent, force: force)
-        end
-
-        # Import dataset(s) in a datastore
+        # Importation of a raw dataset into a datastore
         class Import
             class DatasetAlreadyExists < RuntimeError; end
 
             BASENAME_IMPORT_TAG = ".syskit-pocolog-import"
 
-            attr_reader :datastore
-
             def initialize(
-                datastore, output_path,
+                output_path,
                 cache_path: output_path, compress: false,
                 reporter: Pocolog::CLI::NullReporter.new
             )
-                @datastore = datastore
                 @reporter = reporter
 
                 @output_path = output_path
@@ -64,26 +53,6 @@ module Syskit::Log
             # Default steps for the "include" argument to {#import} and
             # {#normalize_dataset}
             IMPORT_DEFAULT_STEPS = %I[pocolog roby text ignored].freeze
-
-            # Import a dataset into the store
-            #
-            # @param [Pathname] dir_path the input directory
-            # @return [Pathname] the directory of the imported dataset in the store
-            def import(
-                in_dataset_paths,
-                force: false,
-                include: IMPORT_DEFAULT_STEPS, delete_input: false
-            )
-                datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
-                    dataset = normalize_dataset(
-                        in_dataset_paths, core_path,
-                        cache_path: cache_path, include: include,
-                        delete_input: delete_input
-                    )
-                    validate_dataset_import(dataset, force: force)
-                    move_dataset_to_store(dataset)
-                end
-            end
 
             # Find if a directory has already been imported
             #
@@ -131,7 +100,7 @@ module Syskit::Log
             # @api private
             #
             # Verifies that the given data should be imported
-            def validate_dataset_import(dataset, force: false)
+            def self.validate_dataset_import(datastore, dataset, force: false)
                 return unless datastore.has?(dataset.digest)
 
                 if force

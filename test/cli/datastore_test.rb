@@ -64,7 +64,7 @@ module Syskit::Log
                         true
                     end
                     flexmock(datastore_m::Import)
-                        .new_instances.should_receive(:move_dataset_to_store)
+                        .should_receive(:move_dataset_to_store)
                         .with(expected_dataset)
                         .once.pass_thru
 
@@ -120,7 +120,7 @@ module Syskit::Log
                         end
 
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .with(expected_dataset)
                             .once.pass_thru
 
@@ -144,7 +144,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .never
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
                         out, = capture_io do
                             call_cli("import", "--auto", "--min-duration=0",
@@ -168,7 +168,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             . once.pass_thru
                         capture_io do
                             call_cli("import", "--auto", "--min-duration=0", "--force",
@@ -192,7 +192,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
                         out, = capture_io do
                             call_cli("import", "--auto", "--min-duration=0",
@@ -220,7 +220,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .once.pass_thru
                         out, = capture_io do
                             call_cli("import", "--auto", "--force", "--min-duration=0",
@@ -238,7 +238,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
 
                         call_cli("import", "--auto", "--min-duration=1",
@@ -260,7 +260,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
 
                         out, = capture_io do
