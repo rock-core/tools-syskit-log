@@ -255,7 +255,8 @@ module Syskit::Log
                         dataset_duration = dataset_duration(dataset)
                         unless dataset_duration >= options[:min_duration]
                             reporter.info(
-                                "#{paths.join(', ')} lasts only %.1fs, ignored" % [dataset_duration]
+                                format("#{paths.join(', ')} lasts only %<seconds>.1fs, "\
+                                       "ignored", seconds: dataset_duration)
                             )
                             break
                         end
