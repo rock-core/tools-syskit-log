@@ -86,46 +86,20 @@ module Syskit::Log
                 end
             end
 
-            DigestIO = Struct.new :wio, :digest do
+            # @api private
+            #
+            # An IO-looking object that computes the output's digest
+            class DigestIO < SimpleDelegator
+                attr_reader :digest
+
+                def initialize(wio, digest)
+                    super(wio)
+                    @digest = digest
+                end
+
                 def write(string)
-                    wio.write string
-                    digest.update string
-                end
-
-                def close
-                    wio.close
-                end
-
-                def flush
-                    wio.flush
-                end
-
-                def tell
-                    wio.tell
-                end
-
-                def closed?
-                    wio.closed?
-                end
-
-                def seek(pos)
-                    wio.seek(pos)
-                end
-
-                def read(count)
-                    wio.read(count)
-                end
-
-                def path
-                    wio.path
-                end
-
-                def size
-                    wio.size
-                end
-
-                def stat
-                    wio.stat
+                    super
+                    @digest.update string
                 end
             end
 
@@ -140,61 +114,89 @@ module Syskit::Log
                 compute_sha256: false
             )
                 output_path.mkpath
-                paths.each do |logfile_path|
-                    e, out_io = normalize_logfile(
-                        logfile_path, output_path,
-                        reporter: reporter, compute_sha256: compute_sha256
-                    )
-
-                    if e
-                        normalize_cleanup_after_error(
-                            reporter, logfile_path, out_io, index_dir
-                        )
-                        raise e
-                    end
+                index_dir.mkpath
+                logfile_groups = paths.group_by do
+                    /\.\d+\.log$/.match(_1.basename.to_s).pre_match
                 end
 
-                # Now write the indexes
-                index_dir.mkpath
-                out_files.each_value do |output|
-                    block_stream = output.create_block_stream
-                    raw_stream_info = Pocolog::IndexBuilderStreamInfo.new(output.stream_block_pos, output.index_map)
-                    stream_info = Pocolog.create_index_from_raw_info(block_stream, [raw_stream_info])
-                    index_path = Pocolog::Logfiles.default_index_filename(output.path, index_dir: index_dir)
-                    File.open(index_path, "w") do |io|
-                        Pocolog::Format::Current.write_index(io, block_stream.io, stream_info)
-                    end
+                result = logfile_groups.values.map do |files|
+                    normalize_logfile_group(
+                        files,
+                        output_path: output_path, index_dir: index_dir,
+                        reporter: reporter, compute_sha256: compute_sha256
+                    )
                 end
 
                 if compute_sha256
+                    result.inject { |a, b| a.merge(b) }
+                else
+                    result.flatten
+                end
+            end
+
+            def normalize_logfile_group(
+                files,
+                output_path:,
+                index_dir:, reporter: Pocolog::CLI::NullReporter.new,
+                compute_sha256: false
+            )
+                files.each do |logfile_path|
+                    normalize_logfile(
+                        logfile_path, output_path,
+                        reporter: reporter, compute_sha256: compute_sha256
+                    )
+                rescue Exception # rubocop:disable Lint/RescueException
+                    reporter.warn(
+                        "normalize: exception caught while processing #{logfile_path}"
+                    )
+                    raise
+                end
+
+                write_pending_pocolog_indexes(index_dir)
+
+                if compute_sha256
                     result = {}
-                    out_files.each_value.map { |output| result[output.path] = output.digest }
+                    out_files.each_value.map do |output|
+                        result[output.path] = output.digest
+                    end
                     result
                 else
                     out_files.each_value.map(&:path)
                 end
+            rescue Exception # rubocop:disable Lint/RescueException
+                reporter.warn(
+                    "normalize: deleting #{out_files.size} output files and their indexes"
+                )
+                out_files.each_value { _1.path.unlink }
+                raise
             ensure
                 out_files.each_value(&:close)
+                out_files.clear
             end
 
-            def normalize_cleanup_after_error(reporter, logfile_path, out_io, index_dir)
-                reporter.warn(
-                    "normalize: exception caught while processing "\
-                    "#{logfile_path}, deleting #{out_io.size} output files: "\
-                    "#{out_io.map(&:path).sort.join(', ')}"
-                )
-                out_io.each do |output|
-                    out_files.delete(output.path)
-                    output.close
-
-                    Pathname.new(output.path).unlink
-                    index_path = Pathname.new(
-                        Pocolog::Logfiles.default_index_filename(
-                            output.path, index_dir: index_dir
-                        )
+            def write_pending_pocolog_indexes(index_dir)
+                indexes = []
+                # Now write the indexes
+                out_files.each_value do |output|
+                    block_stream = output.create_block_stream
+                    raw_stream_info = Pocolog::IndexBuilderStreamInfo.new(
+                        output.stream_block_pos, output.index_map
                     )
-                    index_path.unlink if index_path.exist?
+                    stream_info = Pocolog.create_index_from_raw_info(
+                        block_stream, [raw_stream_info]
+                    )
+                    index_path = Pocolog::Logfiles.default_index_filename(
+                        output.path, index_dir: index_dir
+                    )
+                    indexes << index_path
+                    File.open(index_path, "w") do |io|
+                        Pocolog::Format::Current
+                            .write_index(io, block_stream.io, stream_info)
+                    end
                 end
+            rescue Exception # rubocop:disable Lint/RescueException
+                indexes.map { _1.unlink if _1.exist? }
+                raise
             end
 
             NormalizationState =
@@ -239,22 +241,18 @@ module Syskit::Log
                 in_io = logfile_path.open
                 in_block_stream =
                     normalize_logfile_init(logfile_path, in_io, reporter: reporter)
-                return nil, [] unless in_block_stream
+                return unless in_block_stream
 
                 reporter_offset = reporter.current
                 normalize_logfile_process_block_stream(
                     output_path, state, in_block_stream,
                     reporter: reporter, compute_sha256: compute_sha256
                 )
-                [nil, state.out_io_streams]
             rescue Pocolog::InvalidBlockFound => e
                 reporter.warn "#{logfile_path.basename} looks truncated or contains "\
                               "garbage (#{e.message}), stopping processing but keeping "\
                               "the samples processed so far"
                 reporter.current = in_io.size + reporter_offset
-                [nil, state.out_io_streams]
-            rescue StandardError => e
-                [e, (state.out_io_streams || [])]
             ensure
                 state.out_io_streams.each(&:flush)
                 in_block_stream&.close
