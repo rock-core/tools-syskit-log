@@ -33,16 +33,25 @@ module Syskit::Log
             # import
             def prepare_import(dir_path)
                 pocolog_files = Syskit::Log.logfiles_in_dir(dir_path)
-                text_files    = Pathname.glob(dir_path + "*.txt")
-                roby_files    = Pathname.glob(dir_path + "*-events.log")
+                text_files =
+                    Pathname.glob(dir_path + "*.txt").to_a +
+                    Pathname.glob(dir_path + "*.txt.zst").to_a
+                roby_files =
+                    Pathname.glob(dir_path + "*-events.log").to_a +
+                    Pathname.glob(dir_path + "*-events.log.zst").to_a
                 if roby_files.size > 1
-                    raise ArgumentError, "more than one Roby event log found"
+                    raise ArgumentError,
+                          "more than one Roby event log found (#{roby_files})"
                 end
 
                 ignored = pocolog_files.map do |p|
+                    p = p.sub_ext("") if p.extname == ".zst"
                     Pathname.new(Pocolog::Logfiles.default_index_filename(p.to_s))
                 end
-                ignored.concat(roby_files.map { |p| p.sub_ext(".idx") })
+                ignored += roby_files.map do |p|
+                    p = p.sub_ext("") if p.extname == ".zst"
+                    p.sub_ext(".idx")
+                end
 
                 all_files = Pathname.enum_for(:glob, dir_path + "*").to_a
                 remaining = (all_files - pocolog_files -
@@ -282,12 +291,13 @@ module Syskit::Log
             #   which essential Roby information is stored
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest
-            def copy_roby_event_log(event_log_path, roby_sql_index)
+            def copy_roby_event_log(event_log_path, roby_sql_index) # rubocop:disable Metrics/CyclomaticComplexity
                 in_reader, out_path, out_io, in_stat =
                     prepare_roby_event_log_copy(event_log_path)
-                index_path, index_io = create_roby_event_log_index(
-                    out_path, event_log_path
-                )
+                unless compress?
+                    index_path, index_io =
+                        create_roby_event_log_index(out_path, event_log_path)
+                end
 
                 @reporter.reset_progressbar(
                     "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
@@ -333,16 +343,20 @@ module Syskit::Log
 
                 Roby::DRoby::Logfile.write_entry(out_io, chunk)
 
-                Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
+                if index_io
+                    Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
+                end
                 roby_sql_index.add_one_cycle(metadata_update, rebuilder, cycle)
                 true
             rescue Roby::DRoby::Logfile::TruncatedFileError => e
                 @reporter.warn e.message
                 @reporter.warn "truncating Roby log file"
-                index_io.rewind
-                Roby::DRoby::Logfile::Index.write_header(
-                    index_io, pos, in_stat.mtime
-                )
+                if index_io
+                    index_io.rewind
+                    Roby::DRoby::Logfile::Index.write_header(
+                        index_io, pos, in_stat.mtime
+                    )
+                end
                 false
             end
 
@@ -382,8 +396,8 @@ module Syskit::Log
                 FileUtils.touch out_path.to_s, mtime: in_stat.mtime
                 { out_path => out_io.digest }
             ensure
-                in_reader.close
-                out_io.close unless out_io.closed?
+                in_reader&.close
+                out_io&.close unless out_io&.closed?
             end
 
             # @api private
@@ -392,11 +406,15 @@ module Syskit::Log
             #
             # Helper to both {#copy_roby_event_log} and {#copy_roby_event_log_no_index}
             def prepare_roby_event_log_copy(event_log_path)
+                ext = ".zst" if compress?
+
                 i = 0
-                i += 1 while (target_path = @output_path + "roby-events.#{i}.log").file?
+                while (target_path = @output_path + "roby-events.#{i}.log#{ext}").file?
+                    i += 1
+                end
 
                 in_stat = event_log_path.stat
-                in_io = event_log_path.open
+                in_io = Normalize.open_in_stream(event_log_path)
                 reader = Roby::DRoby::Logfile::Reader.new(in_io)
 
                 end_of_header = in_io.tell
@@ -404,7 +422,7 @@ module Syskit::Log
                 prologue = in_io.read(end_of_header)
                 in_io.seek(end_of_header)
 
-                out_io = target_path.open("w")
+                out_io = Normalize.open_out_stream(target_path)
                 digest = Digest::SHA256.new
                 out_io = Normalize::DigestIO.new(out_io, digest)
                 out_io.write(prologue)
@@ -416,7 +434,14 @@ module Syskit::Log
             #
             # Create the index file to be filled by {#copy_roby_event_log}
             def create_roby_event_log_index(out_path, in_stat)
-                index_path = @cache_path + out_path.basename.sub_ext(".idx")
+                basename =
+                    if out_path.extname == ".zst"
+                        out_path.basename.sub_ext("").sub_ext(".idx")
+                    else
+                        out_path.basename.sub_ext(".idx")
+                    end
+
+                index_path = @cache_path + basename
                 index_io = index_path.open("w")
                 Roby::DRoby::Logfile::Index.write_header(
                     index_io, in_stat.size, in_stat.mtime

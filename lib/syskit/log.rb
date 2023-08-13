@@ -53,12 +53,17 @@ module Syskit
         def self.logfiles_in_dir(dir_path)
             real_path = Pathname.new(dir_path).realpath
 
-            paths = Pathname.enum_for(:glob, real_path + "*.*.log").map do |path|
+            paths = logfiles_glob(real_path).map do |path|
                 basename = path.basename
-                m = /(.*)\.(\d+)\.log$/.match(basename.to_s)
+                m = /(.*)\.(\d+)\.log(?:\.zst)?$/.match(basename.to_s)
                 [m[1], Integer(m[2]), path] if m
             end
             paths.compact.sort.map { |_, _, path| path }
+        end
+
+        def self.logfiles_glob(path)
+            Pathname.enum_for(:glob, path + "*.*.log") +
+                Pathname.enum_for(:glob, path + "*.*.log.zst")
         end
     end
 end

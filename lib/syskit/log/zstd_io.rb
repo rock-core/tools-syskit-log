@@ -12,14 +12,29 @@ module Syskit
 
             def initialize(io, read: true, write: false)
                 @io = io
-                @tell = 0
-                @buffer = +""
-                @zstd_in = Zstd::StreamingDecompress.new if read
-                @zstd_out = Zstd::StreamingCompress.new if write
+                @mode_read = read
+                @mode_write = write
+                rewind
             end
 
             def path
                 @io.path
+            end
+
+            def rewind
+                @io.rewind
+                @tell = 0
+                @buffer = +""
+                @zstd_in = Zstd::StreamingDecompress.new if @mode_read
+                @zstd_out = Zstd::StreamingCompress.new if @mode_write
+            end
+
+            def eof?
+                @io.eof? && @buffer.empty?
+            end
+
+            def closed?
+                @io.closed?
             end
 
             attr_reader :tell

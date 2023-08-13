@@ -259,7 +259,7 @@ module Syskit::Log
             )
                 state = NormalizationState.new([], +"", [])
 
-                in_io = open_in_stream(logfile_path)
+                in_io = self.class.open_in_stream(logfile_path)
                 in_block_stream =
                     normalize_logfile_init(logfile_path, in_io, reporter: reporter)
                 return unless in_block_stream
@@ -449,7 +449,7 @@ module Syskit::Log
                 out_file_path, stream_info, raw_header, raw_payload, initial_blocks,
                 compute_sha256: false
             )
-                wio = open_out_stream(out_file_path)
+                wio = self.class.open_out_stream(out_file_path)
 
                 Pocolog::Format::Current.write_prologue(wio)
                 if compute_sha256
@@ -470,14 +470,14 @@ module Syskit::Log
                 raise
             end
 
-            def open_in_stream(path)
+            def self.open_in_stream(path)
                 io = path.open
                 return io unless path.extname == ".zst"
 
                 ZstdIO.new(io)
             end
 
-            def open_out_stream(path)
+            def self.open_out_stream(path)
                 io = path.open("w")
                 return io unless path.extname == ".zst"
 

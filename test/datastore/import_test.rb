@@ -20,7 +20,17 @@ module Syskit::Log
                 @cache_path = @root_path + "cache-out"
                 @output_path.mkpath
                 @cache_path.mkpath
-                @import = Import.new(@output_path, cache_path: @cache_path)
+                @import = Import.new(
+                    @output_path, compress: compress?, cache_path: @cache_path
+                )
+            end
+
+            def compress?
+                ENV["SYSKIT_LOG_TEST_COMPRESS"] == "1"
+            end
+
+            def file_ext
+                ".zst" if compress?
             end
 
             after do
@@ -56,18 +66,20 @@ module Syskit::Log
                 it "ignores pocolog's index files" do
                     FileUtils.touch(path = logfile_pathname("file0.1.log"))
                     FileUtils.touch(logfile_pathname("file0.1.idx"))
+                    FileUtils.touch(logfile_pathname("file0.1.idx"))
                     assert_equal [[path], [], [], []],
                                  import.prepare_import(logfile_pathname)
                 end
                 it "ignores Roby index files" do
                     path = create_roby_logfile("test2-events.log")
-                    FileUtils.touch path.sub_ext(".idx")
+                    FileUtils.touch logfile_pathname("test2-events.idx")
                     assert_equal [[], [], [path], []],
                                  import.prepare_import(logfile_pathname)
                 end
                 it "lists unrecognized files" do
                     FileUtils.touch(path = logfile_pathname("not_matching"))
-                    assert_equal [[], [], [], [path]], import.prepare_import(logfile_pathname)
+                    assert_equal [[], [], [], [path]],
+                                 import.prepare_import(logfile_pathname)
                 end
                 it "lists unrecognized directories" do
                     (path = logfile_pathname("not_matching")).mkpath
@@ -114,7 +126,9 @@ module Syskit::Log
                         .with([logfile_pathname("test.0.log")], expected_normalize_args)
                         .once.pass_thru
                     dataset = import.normalize_dataset([logfile_pathname])
-                    assert (dataset.dataset_path + "pocolog" + "task0::port.0.log").exist?
+                    expected_file =
+                        dataset.dataset_path + "pocolog" + "task0::port.0.log#{file_ext}"
+                    assert expected_file.exist?
                 end
 
                 it "copies the text files" do
@@ -125,7 +139,7 @@ module Syskit::Log
                 it "copies the roby log files into roby-events.N.log" do
                     import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
                     assert logfile_pathname("test-events.log").exist?
-                    assert (import_dir + "roby-events.0.log").exist?
+                    assert (import_dir + "roby-events.0.log#{file_ext}").exist?
                 end
                 it "copies the unrecognized files" do
                     import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
@@ -168,70 +182,65 @@ module Syskit::Log
                                  Dataset.new(imported.dataset_path).metadata)
                 end
                 it "rebuilds a valid Roby index" do
-                    FileUtils.cp roby_log_path("model_registration"),
-                                 logfile_pathname + "test-events.log"
+                    skip if compress?
+
+                    copy_in_file(roby_log_path("model_registration"), "test-events.log")
 
                     mtime = Time.now - 10
-                    FileUtils.touch logfile_pathname + "test-events.log",
-                                    mtime: mtime
-                    imported = nil
-                    capture_io do
-                        imported = import.normalize_dataset([logfile_pathname])
-                    end
+                    FileUtils.touch logfile_pathname("test-events.log"), mtime: mtime
+                    imported = import.normalize_dataset([logfile_pathname])
 
-                    log_path = imported.dataset_path + "roby-events.0.log"
+                    log_path = imported.dataset_path + "roby-events.0.log#{file_ext}"
                     assert_equal mtime, log_path.stat.mtime
                     index_path = imported.cache_path + "roby-events.0.idx"
 
                     assert (imported.cache_path + "roby.sql").exist?
-                    assert (imported.cache_path + "roby-events.0.idx").exist?
+                    assert index_path.exist?
 
                     index = Roby::DRoby::Logfile::Index.read(index_path)
                     assert index.valid_for?(log_path)
                 end
                 it "skips the roby index if it fails to load" do
-                    FileUtils.cp roby_log_path("model_registration"),
-                                 logfile_pathname + "test-events.log"
+                    copy_in_file(roby_log_path("model_registration"), "test-events.log")
 
                     mtime = Time.now - 10
-                    FileUtils.touch logfile_pathname + "test-events.log",
+                    FileUtils.touch logfile_pathname("test-events.log"),
                                     mtime: mtime
                     flexmock(RobySQLIndex::Index)
                         .new_instances
                         .should_receive(:add_one_cycle).and_raise(RuntimeError)
-                    imported = nil
-                    capture_io do
-                        imported = import.normalize_dataset([logfile_pathname])
-                    end
+                    imported = import.normalize_dataset([logfile_pathname])
 
-                    log_path = imported.dataset_path + "roby-events.0.log"
+                    log_path = imported.dataset_path + "roby-events.0.log#{file_ext}"
                     assert_equal mtime, log_path.stat.mtime
 
                     refute (imported.cache_path + "roby.sql").exist?
                     refute (imported.cache_path + "roby-events.0.idx").exist?
                 end
                 it "handles truncated Roby logs" do
-                    in_log_path = logfile_pathname + "test-events.log"
-                    FileUtils.cp roby_log_path("model_registration"), in_log_path
-                    File.truncate(in_log_path, in_log_path.stat.size - 1)
-
-                    mtime = Time.now - 10
-                    FileUtils.touch logfile_pathname + "test-events.log",
-                                    mtime: mtime
-                    imported = nil
-                    capture_io do
-                        imported = import.normalize_dataset([logfile_pathname])
+                    Tempfile.open do |io|
+                        data = roby_log_path("model_registration").read
+                        io.write data[0..-2]
+                        io.flush
+                        copy_in_file(Pathname.new(io.path), "test-events.log")
                     end
 
-                    log_path = imported.dataset_path + "roby-events.0.log"
+                    mtime = Time.now - 10
+                    FileUtils.touch logfile_pathname("test-events.log"),
+                                    mtime: mtime
+                    imported = import.normalize_dataset([logfile_pathname])
+
+                    log_path = imported.dataset_path + "roby-events.0.log#{file_ext}"
                     assert_equal mtime, log_path.stat.mtime
                     index_path = imported.cache_path + "roby-events.0.idx"
 
                     assert (imported.cache_path + "roby.sql").exist?
-                    assert (imported.cache_path + "roby-events.0.idx").exist?
 
-                    index = Roby::DRoby::Logfile::Index.read(index_path)
-                    assert index.valid_for?(log_path)
+                    unless compress?
+                        assert (imported.cache_path + "roby-events.0.idx").exist?
+                        index = Roby::DRoby::Logfile::Index.read(index_path)
+                        assert index.valid_for?(log_path)
+                    end
                 end
             end
 
@@ -283,6 +292,71 @@ module Syskit::Log
                     assert_equal digest, dataset.digest
                     assert_equal t, time
                 end
+            end
+
+            def logfile_pathname(*path)
+                return super unless /-events\.log$|\.\d+\.log$/.match?(path.last)
+                return super unless compress?
+
+                super(*path[0..-2], path.last + ".zst")
+            end
+
+            def open_logfile_stream(path, stream_name, **kw)
+                return super unless compress?
+
+                Tempfile.open(["", ".log"]) do |temp_io|
+                    path = path.sub_ext(".log.zst") if path.extname != ".zst"
+
+                    temp_io.write Zstd.decompress(path.read)
+                    temp_io.flush
+                    temp_io.rewind
+                    return super(temp_io.path, stream_name, **kw)
+                end
+            end
+
+            def read_logfile(*name)
+                path = logfile_pathname(*name)
+                data = path.read
+                return data unless path.extname == ".zst"
+
+                Zstd.decompress(data)
+            end
+
+            def write_logfile(name, data)
+                path = logfile_pathname(name)
+                data = Zstd.compress(data) if path.extname == ".zst"
+                path.write data
+            end
+
+            def create_logfile(name, truncate: 0)
+                path = Pathname.new(super(name))
+                path.truncate(path.stat.size - truncate)
+                return path unless compress?
+
+                compressed = Zstd.compress(path.read)
+                compressed_path = path.sub_ext(".log.zst")
+                compressed_path.write(compressed)
+                path.unlink
+                compressed_path
+            end
+
+            def create_roby_logfile(name)
+                path = Pathname.new(super(name))
+                return path unless compress?
+
+                compressed = Zstd.compress(path.read)
+                compressed_path = path.sub_ext(".log.zst")
+                compressed_path.write(compressed)
+                path.unlink
+                compressed_path
+            end
+
+            def copy_in_file(in_path, name)
+                out_path = logfile_pathname(name)
+                data = in_path.read
+                data = Zstd.compress(data) if compress?
+
+                out_path.write(data)
             end
         end
     end
