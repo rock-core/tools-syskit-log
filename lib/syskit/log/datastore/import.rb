@@ -162,7 +162,7 @@ module Syskit::Log
             # @param [Pathname] dir_path the input directory
             # @param [Pathname] output_dir_path the output directory
             # @return [Dataset] the resulting dataset
-            def normalize_dataset(
+            def normalize_dataset( # rubocop:disable Metrics/ParameterLists
                 dir_paths, output_dir_path,
                 cache_path: output_dir_path, reporter: CLI::NullReporter.new,
                 include: IMPORT_DEFAULT_STEPS, delete_input: false,
@@ -252,7 +252,7 @@ module Syskit::Log
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest. The pathnames are
             #   relative to output_dir
-            def normalize_pocolog_files(
+            def normalize_pocolog_files( # rubocop:disable Metrics/ParameterLists
                 output_dir, files,
                 reporter: CLI::NullReporter.new, cache_path: output_dir,
                 delete_input: false, compress: false

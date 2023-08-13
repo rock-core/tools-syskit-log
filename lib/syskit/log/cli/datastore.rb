@@ -242,7 +242,7 @@ module Syskit::Log
                     paths
                 end
 
-                def import_dataset(
+                def import_dataset( # rubocop:disable Metrics/ParameterLists
                     paths, reporter, datastore, metadata,
                     include:, delete_input: false, compress: false
                 )
