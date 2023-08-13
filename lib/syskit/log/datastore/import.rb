@@ -283,7 +283,7 @@ module Syskit::Log
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest
             def copy_roby_event_log(event_log_path, roby_sql_index)
-                in_reader, out_path, out_io, digest, in_stat =
+                in_reader, out_path, out_io, in_stat =
                     prepare_roby_event_log_copy(event_log_path)
                 index_path, index_io = create_roby_event_log_index(
                     out_path, event_log_path
@@ -300,14 +300,14 @@ module Syskit::Log
                     valid = copy_roby_event_log_one_cycle(
                         in_reader, out_io, index_io,
                         rebuilder, roby_sql_index, in_stat,
-                        metadata_update, digest
+                        metadata_update
                     )
                     break unless valid
                 end
 
                 out_io.close
                 FileUtils.touch out_path.to_s, mtime: in_stat.mtime
-                Hash[out_path => digest]
+                { out_path => out_io.digest }
             rescue StandardError
                 out_path&.unlink
                 index_path&.unlink
@@ -324,7 +324,7 @@ module Syskit::Log
             def copy_roby_event_log_one_cycle( # rubocop:disable Metrics/ParameterLists
                 in_reader, out_io, index_io,
                 rebuilder, roby_sql_index, in_stat,
-                metadata_update, digest
+                metadata_update
             )
                 pos = in_reader.tell
                 @reporter.current = pos
@@ -332,7 +332,6 @@ module Syskit::Log
                 cycle = in_reader.decode_one_chunk(chunk)
 
                 Roby::DRoby::Logfile.write_entry(out_io, chunk)
-                digest.update(chunk)
 
                 Roby::DRoby::Logfile::Index.write_one_cycle(index_io, pos, cycle)
                 roby_sql_index.add_one_cycle(metadata_update, rebuilder, cycle)
@@ -359,7 +358,7 @@ module Syskit::Log
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest
             def copy_roby_event_log_no_index(event_log_path)
-                in_reader, out_path, out_io, digest, in_stat =
+                in_reader, out_path, out_io, in_stat =
                     prepare_roby_event_log_copy(event_log_path)
                 @reporter.reset_progressbar(
                     "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
@@ -372,7 +371,6 @@ module Syskit::Log
                         chunk = in_reader.read_one_chunk
 
                         Roby::DRoby::Logfile.write_entry(out_io, chunk)
-                        digest.update(chunk)
                     rescue Roby::DRoby::Logfile::TruncatedFileError => e
                         @reporter.warn e.message
                         @reporter.warn "truncating Roby log file"
@@ -382,7 +380,7 @@ module Syskit::Log
 
                 out_io.close
                 FileUtils.touch out_path.to_s, mtime: in_stat.mtime
-                Hash[out_path => digest]
+                { out_path => out_io.digest }
             ensure
                 in_reader.close
                 out_io.close unless out_io.closed?
@@ -397,8 +395,6 @@ module Syskit::Log
                 i = 0
                 i += 1 while (target_path = @output_path + "roby-events.#{i}.log").file?
 
-                digest = Digest::SHA256.new
-
                 in_stat = event_log_path.stat
                 in_io = event_log_path.open
                 reader = Roby::DRoby::Logfile::Reader.new(in_io)
@@ -409,10 +405,11 @@ module Syskit::Log
                 in_io.seek(end_of_header)
 
                 out_io = target_path.open("w")
+                digest = Digest::SHA256.new
+                out_io = Normalize::DigestIO.new(out_io, digest)
                 out_io.write(prologue)
-                digest.update(prologue)
 
-                [reader, target_path, out_io, digest, in_stat]
+                [reader, target_path, out_io, in_stat]
             end
 
             # @api private
