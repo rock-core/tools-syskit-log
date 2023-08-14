@@ -38,10 +38,6 @@ module Syskit::Log
             path
         end
 
-        def logfile_pathname(*basename)
-            Pathname.new(logfile_path(*basename))
-        end
-
         def create_datastore(path)
             @datastore = Datastore.create(path)
         end
@@ -71,16 +67,12 @@ module Syskit::Log
             end
         end
 
-        def roby_log_path(name)
-            Pathname(__dir__) + "roby-logs" + "#{name}-events.log"
+        def compress?
+            ENV["SYSKIT_LOG_TEST_COMPRESS"] == "1"
         end
 
-        def create_roby_logfile(name)
-            path = Pathname(logfile_path(name))
-            path.open "w" do |io|
-                Roby::DRoby::Logfile.write_header(io)
-            end
-            path
+        def roby_log_path(name)
+            Pathname(__dir__) + "roby-logs" + "#{name}-events.log"
         end
 
         # Create a "ready to use" datastore based on the given data in fixtures/
@@ -98,6 +90,75 @@ module Syskit::Log
             [store, set]
         end
 
+        def logfile_pathname(*path)
+            raw = Pathname.new(logfile_path(*path))
+            return raw unless /-events\.log$|\.\d+\.log$/.match?(path.last)
+            return raw unless compress?
+
+            Pathname.new(logfile_path(*path[0..-2], path.last + ".zst"))
+        end
+
+        def open_logfile(path, index_dir: nil, **kw)
+            path = logfile_pathname(*path)
+            index_dir ||= path.dirname
+            return super(path, index_dir: index_dir.to_s, **kw) unless compress?
+
+            decompressed = Syskit::Log.decompressed(path, Pathname(index_dir))
+            super(decompressed, index_dir: index_dir.to_s, **kw)
+        end
+
+        def open_logfile_stream(path, stream_name, **kw)
+            open_logfile(path, **kw).stream(stream_name)
+        end
+
+        def read_logfile(*name)
+            path = logfile_pathname(*name)
+            data = path.read
+            return data unless path.extname == ".zst"
+
+            Zstd.decompress(data)
+        end
+
+        def write_logfile(name, data)
+            path = logfile_pathname(name)
+            data = Zstd.compress(data) if path.extname == ".zst"
+            path.write data
+        end
+
+        def create_logfile(name, truncate: 0)
+            path = Pathname.new(super(name))
+            path.truncate(path.stat.size - truncate)
+            return path unless compress?
+
+            compressed = Zstd.compress(path.read)
+            compressed_path = path.sub_ext(".log.zst")
+            compressed_path.write(compressed)
+            path.unlink
+            compressed_path
+        end
+
+        def create_roby_logfile(name)
+            path = Pathname(logfile_path(name))
+            path.open "w" do |io|
+                Roby::DRoby::Logfile.write_header(io)
+            end
+            return path unless compress?
+
+            compressed = Zstd.compress(path.read)
+            compressed_path = path.sub_ext(".log.zst")
+            compressed_path.write(compressed)
+            path.unlink
+            compressed_path
+        end
+
+        def copy_in_file(in_path, name)
+            out_path = logfile_pathname(name)
+            data = in_path.read
+            data = Zstd.compress(data) if compress?
+
+            out_path.write(data)
+        end
+
         def import_logfiles(path = logfile_pathname)
             root_path = make_tmppath
             datastore_path = root_path + "datastore"
@@ -106,6 +167,7 @@ module Syskit::Log
 
             import = Datastore::Import.new(
                 root_path + "import-core",
+                compress: compress?,
                 cache_path: root_path + "import-cache"
             )
             dataset = import.normalize_dataset([path])

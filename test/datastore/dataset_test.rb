@@ -9,8 +9,13 @@ module Syskit::Log
             attr_reader :root_path, :dataset, :dataset_path, :cache_path, :store
             attr_reader :roby_digest, :pocolog_digest
 
-            def dataset_pathname(*names)
-                dataset_path + File.join(*names)
+            def dataset_pathname(*names, compress: compress?)
+                path = dataset_path.join(*names[0..-2])
+                if compress
+                    path.join(names[-1] + ".zst")
+                else
+                    path.join(names[-1])
+                end
             end
 
             before do
@@ -31,7 +36,7 @@ module Syskit::Log
                 FileUtils.touch dataset_pathname("text", "test.txt")
                 dataset_pathname("roby-events.0.log").open("w") { |io| io.write "ROBY" }
                 FileUtils.touch dataset_pathname("ignored", "not_recognized_file")
-                dataset_pathname("ignored", "not_recognized_dir").mkpath
+                dataset_pathname("ignored", "not_recognized_dir", compress: false).mkpath
                 FileUtils.touch dataset_pathname("ignored", "not_recognized_dir", "test")
             end
             after do
@@ -557,10 +562,11 @@ module Syskit::Log
             describe "#each_pocolog_stream" do
                 it "expects the pocolog cache files in the dataset's cache directory" do
                     cache_path.mkpath
-                    open_logfile logfile_path("task0::port.0.log"), index_dir: (cache_path + "pocolog").to_s
-                    flexmock(Pocolog::Logfiles).new_instances
-                                               .should_receive(:rebuild_and_load_index)
-                                               .never
+                    open_logfile "task0::port.0.log", index_dir: (cache_path + "pocolog").to_s
+                    flexmock(Pocolog::Logfiles)
+                        .new_instances
+                        .should_receive(:rebuild_and_load_index)
+                        .never
                     streams = dataset.each_pocolog_stream.to_a
                     assert_equal ["test"], streams.map(&:name)
                 end
@@ -585,8 +591,10 @@ module Syskit::Log
                         write_logfile_sample base_time + 100, base_time + 300, 3
                     end
                     cache_path.mkpath
-                    open_logfile logfile_path("task0::port.0.log"), index_dir: (cache_path + "pocolog").to_s
-                    open_logfile logfile_path("task0::other.0.log"), index_dir: (cache_path + "pocolog").to_s
+                    open_logfile "task0::port.0.log",
+                                 index_dir: (cache_path + "pocolog").to_s
+                    open_logfile "task0::other.0.log",
+                                 index_dir: (cache_path + "pocolog").to_s
                 end
 
                 it "loads stream information and returns LazyDataStream objects" do

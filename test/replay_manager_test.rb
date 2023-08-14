@@ -23,6 +23,11 @@ module Syskit::Log
 
             plan = Roby::ExecutablePlan.new
             @subject = ReplayManager.new(plan.execution_engine)
+
+            @streams = load_logfiles_as_stream.find_task_by_name("task")
+            @port_stream = streams.find_port_by_name("out")
+            @deployment_m = Syskit::Log::Deployment
+                            .for_streams(streams, model: task_m, name: "task")
         end
 
         def self.common_behavior # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
@@ -149,8 +154,7 @@ module Syskit::Log
                         stream0.write Time.at(0), Time.at(2), 2
                     end
 
-                    streams = Streams.from_dir(logfile_pathname)
-                                     .find_task_by_name("task")
+                    streams = load_logfiles_as_stream.find_task_by_name("task")
                     task_m = Syskit::TaskContext.new_submodel do
                         output_port "out", double_t
                     end
@@ -234,25 +238,21 @@ module Syskit::Log
         end
 
         describe "from_dir" do
-            before do
-                @streams = Streams.from_dir(logfile_pathname)
-                                  .find_task_by_name("task")
-                @port_stream = streams.find_port_by_name("out")
-                @deployment_m = Syskit::Log::Deployment
-                                .for_streams(streams, model: task_m, name: "task")
+            def compress?
+                false
+            end
+
+            def load_logfiles_as_stream
+                Streams.from_dir(logfile_pathname)
             end
 
             common_behavior
         end
 
         describe "from_dataset" do
-            before do
+            def load_logfiles_as_stream
                 _, dataset = import_logfiles
-                @streams = Streams.from_dataset(dataset)
-                                  .find_task_by_name("task")
-                @port_stream = streams.find_port_by_name("out")
-                @deployment_m = Syskit::Log::Deployment
-                                .for_streams(streams, model: task_m, name: "task")
+                Streams.from_dataset(dataset).find_task_by_name("task")
             end
 
             common_behavior

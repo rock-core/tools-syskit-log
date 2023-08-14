@@ -35,6 +35,10 @@ module Syskit
                 ENV["TZ"] = "America/Sao_Paulo"
             end
 
+            def compress?
+                false
+            end
+
             after do
                 ENV["TZ"] = @tz
             end

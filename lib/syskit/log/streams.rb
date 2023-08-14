@@ -21,7 +21,7 @@ module Syskit::Log
             streams
         end
 
-        # Load the set of streams available from a file
+        # Load the set of streams available from a dataset
         def self.from_dataset(dataset)
             streams = new
             streams.add_dataset(dataset)

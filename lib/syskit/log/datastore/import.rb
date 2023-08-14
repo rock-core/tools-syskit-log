@@ -237,11 +237,12 @@ module Syskit::Log
                     total: bytes_total
                 )
 
-                Syskit::Log::Datastore.normalize(
+                entries = Syskit::Log::Datastore.normalize(
                     files,
                     output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
                     delete_input: delete_input, compress: @compress, reporter: @reporter
                 )
+                entries.each { |e| e.path = identity_path(e.path) }
             ensure
                 @reporter.finish
             end
@@ -299,7 +300,7 @@ module Syskit::Log
                 end
 
                 @reporter.reset_progressbar(
-                    "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
+                    "#{event_log_path.basename} [:bar]", total: in_stat.size
                 )
 
                 rebuilder = Roby::DRoby::PlanRebuilder.new
@@ -315,7 +316,7 @@ module Syskit::Log
                 end
 
                 entry = Dataset::IdentityEntry.new(
-                    out_path, out_io.tell, out_io.string_digest
+                    identity_path(out_path), out_io.tell, out_io.string_digest
                 )
                 out_io.close
                 FileUtils.touch out_path.to_s, mtime: in_stat.mtime
@@ -395,7 +396,7 @@ module Syskit::Log
                 end
 
                 entry = Dataset::IdentityEntry.new(
-                    out_path, out_io.tell, out_io.string_digest
+                    identity_path(out_path), out_io.tell, out_io.string_digest
                 )
                 out_io.close
                 FileUtils.touch out_path.to_s, mtime: in_stat.mtime
@@ -403,6 +404,10 @@ module Syskit::Log
             ensure
                 in_reader&.close
                 out_io&.close unless out_io&.closed?
+            end
+
+            def identity_path(file_path)
+                file_path.dirname + file_path.basename(".zst")
             end
 
             # @api private

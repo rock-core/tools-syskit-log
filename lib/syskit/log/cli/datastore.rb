@@ -223,10 +223,14 @@ module Syskit::Log
                     return unless path.directory?
 
                     has_pocolog_files =
-                        Pathname.enum_for(:glob, path + "*.0.log").any? { true }
+                        Pathname.enum_for(:glob, path + "*.0.log").any? { true } ||
+                        Pathname.enum_for(:glob, path + "*.0.log.zst").any? { true }
                     has_roby_events =
-                        Pathname.enum_for(:glob, path + "*-events.log").any? { true }
-                    has_process_server_info_yml = (path + "info.yml").exist?
+                        Pathname.enum_for(:glob, path + "*-events.log").any? { true } ||
+                        Pathname.enum_for(:glob, path + "*-events.log.zst").any? { true }
+                    has_process_server_info_yml =
+                        (path + "info.yml").exist? ||
+                        (path + "info.yml.zst").exist?
 
                     has_pocolog_files &&
                         (has_roby_events || has_process_server_info_yml)
