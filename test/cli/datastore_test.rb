@@ -278,17 +278,19 @@ module Syskit::Log
                 it "normalizes the logfiles in the input directory into the directory provided as 'out'" do
                     create_logfile("test.0.log") {}
                     out_path = root_path + "normalized"
-                    flexmock(Syskit::Log::Datastore).should_receive(:normalize)
-                                                    .with([logfile_pathname("test.0.log")], hsh(output_path: out_path))
-                                                    .once.pass_thru
+                    flexmock(Syskit::Log::Datastore)
+                        .should_receive(:normalize)
+                        .with([logfile_pathname("test.0.log")], hsh(output_path: out_path))
+                        .once.pass_thru
                     call_cli("normalize", logfile_pathname.to_s, "--out=#{out_path}", silent: true)
                 end
                 it "reports progress without --silent" do
                     create_logfile("test.0.log") {}
                     out_path = root_path + "normalized"
-                    flexmock(Syskit::Log::Datastore).should_receive(:normalize)
-                                                    .with([logfile_pathname("test.0.log")], hsh(output_path: out_path))
-                                                    .once.pass_thru
+                    flexmock(Syskit::Log::Datastore)
+                        .should_receive(:normalize)
+                        .with([logfile_pathname("test.0.log")], hsh(output_path: out_path))
+                        .once.pass_thru
                     capture_io do
                         call_cli("normalize", logfile_pathname.to_s, "--out=#{out_path}", silent: false)
                     end
@@ -617,37 +619,45 @@ a0fa <no description>
 
                 describe "--get" do
                     it "lists all metadata on all datasets if no query is given" do
-                        call_cli("metadata", "--store", datastore_path.to_s, "a0ea", "--set", "test=a,b", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s, "a0ea",
+                                 "--set", "test=a,b", silent: false)
                         out, _err = capture_io do
-                            call_cli("metadata", "--store", datastore_path.to_s, "--get", silent: false)
+                            call_cli("metadata", "--store", datastore_path.to_s,
+                                     "--get", silent: false)
                         end
                         assert_equal "a0ea test=a,b timestamp=12345\na0fa test=b timestamp=12346\n", out
                     end
                     it "displays the short digest by default" do
-                        flexmock(Syskit::Log::Datastore).new_instances.should_receive(:short_digest)
-                                                        .and_return { |dataset| dataset.digest[0, 3] }
+                        flexmock(Syskit::Log::Datastore)
+                            .new_instances.should_receive(:short_digest)
+                            .and_return { |dataset| dataset.digest[0, 3] }
                         out, _err = capture_io do
-                            call_cli("metadata", "--store", datastore_path.to_s, "--get", silent: false)
+                            call_cli("metadata", "--store", datastore_path.to_s,
+                                     "--get", silent: false)
                         end
                         assert_equal "a0e test=a timestamp=12345\na0f test=b timestamp=12346\n", out
                     end
                     it "displays the long digest if --long-digest is given" do
                         flexmock(datastore).should_receive(:short_digest).never
                         out, _err = capture_io do
-                            call_cli("metadata", "--store", datastore_path.to_s, "--get", "--long-digest", silent: false)
+                            call_cli("metadata", "--store", datastore_path.to_s,
+                                     "--get", "--long-digest", silent: false)
                         end
                         assert_equal "a0ea test=a timestamp=12345\na0fa test=b timestamp=12346\n", out
                     end
                     it "lists the requested metadata of the matching datasets" do
-                        call_cli("metadata", "--store", datastore_path.to_s, "a0ea", "--set", "test=a,b", "debug=true", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s, "a0ea",
+                                 "--set", "test=a,b", "debug=true", silent: false)
                         out, _err = capture_io do
-                            call_cli("metadata", "--store", datastore_path.to_s, "a0ea", "--get", "test", silent: false)
+                            call_cli("metadata", "--store", datastore_path.to_s,
+                                     "a0ea", "--get", "test", silent: false)
                         end
                         assert_equal "a0ea test=a,b\n", out
                     end
                     it "replaces requested metadata that are unset by <unset>" do
                         out, _err = capture_io do
-                            call_cli("metadata", "--store", datastore_path.to_s, "a0ea", "--get", "debug", silent: false)
+                            call_cli("metadata", "--store", datastore_path.to_s,
+                                     "a0ea", "--get", "debug", silent: false)
                         end
                         assert_equal "a0ea debug=<unset>\n", out
                     end
@@ -655,13 +665,15 @@ a0fa <no description>
 
                 it "raises if both --get and --set are provided" do
                     assert_raises(ArgumentError) do
-                        call_cli("metadata", "--store", datastore_path.to_s, "a0ea", "--get", "debug", "--set", "test=10", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s, "a0ea",
+                                 "--get", "debug", "--set", "test=10", silent: false)
                     end
                 end
 
                 it "raises if neither --get nor --set are provided" do
                     assert_raises(ArgumentError) do
-                        call_cli("metadata", "--store", datastore_path.to_s, "a0ea", silent: false)
+                        call_cli("metadata", "--store", datastore_path.to_s,
+                                 "a0ea", silent: false)
                     end
                 end
             end

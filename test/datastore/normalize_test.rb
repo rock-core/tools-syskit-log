@@ -181,6 +181,7 @@ module Syskit::Log
                     file0_path = logfile_pathname("file0.0.log")
                     file0_size = file0_path.stat.size
                     logfile_pathname("file0.0.log").truncate(file0_size - 1)
+
                     logfile_pathname("normalized").mkpath
                     reporter = flexmock(Pocolog::CLI::NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
