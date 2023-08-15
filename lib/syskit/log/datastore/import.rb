@@ -53,12 +53,13 @@ module Syskit::Log
             def import(
                 in_dataset_paths,
                 force: false, reporter: Pocolog::CLI::NullReporter.new,
-                include: IMPORT_DEFAULT_STEPS
+                include: IMPORT_DEFAULT_STEPS, delete_input: false
             )
-                datastore.in_incoming do |core_path, cache_path|
+                datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
                     dataset = normalize_dataset(
                         in_dataset_paths, core_path,
-                        cache_path: cache_path, reporter: reporter, include: include
+                        cache_path: cache_path, reporter: reporter, include: include,
+                        delete_input: delete_input
                     )
                     validate_dataset_import(
                         dataset, force: force, reporter: reporter
@@ -161,10 +162,11 @@ module Syskit::Log
             # @param [Pathname] dir_path the input directory
             # @param [Pathname] output_dir_path the output directory
             # @return [Dataset] the resulting dataset
-            def normalize_dataset(
+            def normalize_dataset( # rubocop:disable Metrics/ParameterLists
                 dir_paths, output_dir_path,
                 cache_path: output_dir_path, reporter: CLI::NullReporter.new,
-                include: IMPORT_DEFAULT_STEPS
+                include: IMPORT_DEFAULT_STEPS, delete_input: false,
+                compress: false
             )
                 pocolog_files, text_files, roby_event_logs, ignored_entries =
                     dir_paths.map { |dir| prepare_import(dir) }
@@ -174,8 +176,8 @@ module Syskit::Log
                     reporter.info "Normalizing pocolog log files"
                     normalize_pocolog_files(
                         output_dir_path, pocolog_files,
-                        cache_path: cache_path,
-                        reporter: reporter
+                        cache_path: cache_path, reporter: reporter,
+                        delete_input: delete_input, compress: compress
                     )
                 end
 
@@ -250,9 +252,10 @@ module Syskit::Log
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest. The pathnames are
             #   relative to output_dir
-            def normalize_pocolog_files(
+            def normalize_pocolog_files( # rubocop:disable Metrics/ParameterLists
                 output_dir, files,
-                reporter: CLI::NullReporter.new, cache_path: output_dir
+                reporter: CLI::NullReporter.new, cache_path: output_dir,
+                delete_input: false, compress: false
             )
                 return {} if files.empty?
 
@@ -268,7 +271,8 @@ module Syskit::Log
                 Syskit::Log::Datastore.normalize(
                     files,
                     output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
-                    reporter: reporter, compute_sha256: true
+                    reporter: reporter, compute_sha256: true, delete_input: delete_input,
+                    compress: compress
                 )
             ensure
                 reporter&.finish
