@@ -59,22 +59,18 @@ module Syskit::Log
                         index_path = Pocolog::Logfiles.default_index_filename(
                             logfile_path, index_dir: pocolog_index_dir
                         )
+                        index_path = Pathname(index_path)
 
-                        stat = logfile_path.stat
-                        begin
-                            File.open(index_path) do |index_io|
-                                Pocolog::Format::Current.read_index_stream_info(
-                                    index_io, expected_file_size: stat.size
-                                )
-                            end
+                        if index_path.exist?
                             reporter.log "  up-to-date: #{logfile_name}"
-                        rescue Errno::ENOENT, Pocolog::InvalidIndex
-                            reporter.log "  rebuilding: #{logfile_name}"
-                            logfile_path.open do |logfile_io|
-                                Pocolog::Format::Current.rebuild_index_file(
-                                    logfile_io, index_path
-                                )
-                            end
+                            next
+                        end
+
+                        reporter.log "  rebuilding: #{logfile_name}"
+                        logfile_path.open do |logfile_io|
+                            Pocolog::Format::Current.rebuild_index_file(
+                                logfile_io, index_path.to_s
+                            )
                         end
                     end
                 end

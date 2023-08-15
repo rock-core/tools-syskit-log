@@ -57,18 +57,6 @@ module Syskit::Log
                         (dataset.cache_path + "pocolog" + "task::port.0.idx").read
                     )
                 end
-                it "rebuilds the index if the file is not valid" do
-                    pocolog_index_dir = (dataset.cache_path + "pocolog")
-                    open_logfile("task::port.0.log", index_dir: pocolog_index_dir).close
-                    flexmock(Pocolog::Format::Current)
-                        .should_receive(:read_index_stream_info).once
-                        .and_raise(Pocolog::InvalidIndex)
-                    flexmock(Pocolog::Format::Current)
-                        .should_receive(:rebuild_index_file)
-                        .once.pass_thru
-
-                    index_build.rebuild_pocolog_indexes
-                end
                 it "forces index rebuilding if 'force' is true" do
                     pocolog_index_dir = (dataset.cache_path + "pocolog")
                     open_logfile("task::port.0.log", index_dir: pocolog_index_dir).close
