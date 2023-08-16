@@ -419,6 +419,7 @@ a0ea first
   array_test:
   - a
   - b
+  digest: a0ea
   test: 2
   timestamp: #{@a0ea_time.tv_sec}
                     EOF
@@ -427,6 +428,7 @@ a0fa <no description>
   array_test:
   - c
   - d
+  digest: a0fa
   test: 1
   timestamp: #{@a0fa_time.tv_sec}
                     EOF
@@ -625,7 +627,8 @@ a0fa <no description>
                             call_cli("metadata", "--store", datastore_path.to_s,
                                      "--get", silent: false)
                         end
-                        assert_equal "a0ea test=a,b timestamp=12345\na0fa test=b timestamp=12346\n", out
+                        assert_equal "a0ea digest=a0ea test=a,b timestamp=12345\n"\
+                                     "a0fa digest=a0fa test=b timestamp=12346\n", out
                     end
                     it "displays the short digest by default" do
                         flexmock(Syskit::Log::Datastore)
@@ -635,7 +638,8 @@ a0fa <no description>
                             call_cli("metadata", "--store", datastore_path.to_s,
                                      "--get", silent: false)
                         end
-                        assert_equal "a0e test=a timestamp=12345\na0f test=b timestamp=12346\n", out
+                        assert_equal "a0e digest=a0ea test=a timestamp=12345\n"\
+                                     "a0f digest=a0fa test=b timestamp=12346\n", out
                     end
                     it "displays the long digest if --long-digest is given" do
                         flexmock(datastore).should_receive(:short_digest).never
@@ -643,7 +647,8 @@ a0fa <no description>
                             call_cli("metadata", "--store", datastore_path.to_s,
                                      "--get", "--long-digest", silent: false)
                         end
-                        assert_equal "a0ea test=a timestamp=12345\na0fa test=b timestamp=12346\n", out
+                        assert_equal "a0ea digest=a0ea test=a timestamp=12345\n"\
+                                     "a0fa digest=a0fa test=b timestamp=12346\n", out
                     end
                     it "lists the requested metadata of the matching datasets" do
                         call_cli("metadata", "--store", datastore_path.to_s, "a0ea",

@@ -171,7 +171,8 @@ module Syskit::Log
                     end
                     dataset = import.import([logfile_pathname])
                     assert_equal({ "roby:app_name" => Set["test"],
-                                   "timestamp" => Set[0] }, dataset.metadata)
+                                   "timestamp" => Set[0],
+                                   "digest" => Set[dataset.digest] }, dataset.metadata)
                     assert_equal({ "roby:app_name" => Set["test"],
                                    "timestamp" => Set[0] },
                                  Dataset.new(dataset.dataset_path).metadata)
@@ -186,8 +187,10 @@ module Syskit::Log
                         imported = import.import([logfile_pathname])
                     end
                     assert_match(/failed to load Roby metadata/, err)
-                    assert_equal({ "timestamp" => Set[0] }, imported.metadata)
-                    assert_equal({ "timestamp" => Set[0] }, Dataset.new(imported.dataset_path).metadata)
+                    assert_equal({ "timestamp" => Set[0], "digest" => Set[imported.digest] },
+                                 imported.metadata)
+                    assert_equal({ "timestamp" => Set[0] },
+                                 Dataset.new(imported.dataset_path).metadata)
                 end
                 it "rebuilds a valid Roby index" do
                     FileUtils.cp roby_log_path("model_registration"),

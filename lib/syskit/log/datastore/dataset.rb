@@ -563,6 +563,8 @@ module Syskit::Log
                 @metadata = loaded.inject({}) do |h, (k, v)|
                     h.merge!(k => v.to_set)
                 end
+                @metadata.merge!("digest" => Set[digest]) if digest
+                @metadata
             end
 
             # Write this dataset's metadata to disk
