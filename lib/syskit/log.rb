@@ -44,6 +44,8 @@ require "syskit/log/roby_sql_index/accessors"
 
 module Syskit
     module Log # rubocop:disable Style/Documentation
+        NullReporter = Pocolog::CLI::NullReporter
+
         # Returns the paths of the pocolog log files in a given directory
         #
         # The returned paths are sorted in 'pocolog' order, i.e. multi-IO files are
@@ -101,7 +103,7 @@ module Syskit
         #   existing file.
         # @return [Pathname] the path to the decompressed file
         def self.decompressed(
-            in_path, cache_path, force: false, reporter: Pocolog::CLI::NullReporter.new
+            in_path, cache_path, force: false, reporter: NullReporter.new
         )
             return in_path unless in_path.extname == ".zst"
 
@@ -113,9 +115,7 @@ module Syskit
         end
 
         # Decompress a zst-compressed file in a given output
-        def self.decompress(
-            in_path, out_path, reporter: Pocolog::CLI::NullReporter.new
-        )
+        def self.decompress(in_path, out_path, reporter: NullReporter.new)
             out_path.dirname.mkpath
 
             reporter.current = 0

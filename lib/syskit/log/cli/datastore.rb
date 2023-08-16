@@ -43,7 +43,7 @@ module Syskit::Log
                     **options
                 )
                     if silent
-                        @reporter = Pocolog::CLI::NullReporter.new
+                        @reporter = NullReporter.new
                     else
                         @reporter = Pocolog::CLI::TTYReporter.new(
                             format, progress: progress, colors: colors, **options

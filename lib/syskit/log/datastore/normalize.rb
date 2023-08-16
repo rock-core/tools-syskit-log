@@ -6,8 +6,7 @@ module Syskit::Log
     class Datastore
         def self.normalize(
             paths,
-            output_path: paths.first.dirname + "normalized",
-            reporter: Pocolog::CLI::NullReporter.new,
+            output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
             compute_sha256: false, index_dir: output_path, delete_input: false,
             compress: false
         )
@@ -103,7 +102,7 @@ module Syskit::Log
             def normalize(
                 paths,
                 output_path: paths.first.dirname + "normalized",
-                index_dir: output_path, reporter: Pocolog::CLI::NullReporter.new,
+                index_dir: output_path, reporter: NullReporter.new,
                 compute_sha256: false, delete_input: false
             )
                 output_path.mkpath
@@ -132,8 +131,7 @@ module Syskit::Log
 
             def normalize_logfile_group(
                 files,
-                output_path:,
-                index_dir:, reporter: Pocolog::CLI::NullReporter.new,
+                output_path:, index_dir:, reporter: NullReporter.new,
                 compute_sha256: false
             )
                 files.each do |logfile_path|
@@ -238,7 +236,7 @@ module Syskit::Log
             #   have been touched by the call.
             def normalize_logfile(
                 logfile_path, output_path,
-                reporter: Pocolog::CLI::NullReporter.new, compute_sha256: false
+                reporter: NullReporter.new, compute_sha256: false
             )
                 state = NormalizationState.new([], +"", [])
 

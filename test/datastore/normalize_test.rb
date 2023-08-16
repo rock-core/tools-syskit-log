@@ -218,7 +218,7 @@ module Syskit::Log
             describe "#normalize_logfile" do
                 it "skips invalid files" do
                     write_logfile "file0.0.log", "INVALID"
-                    reporter = flexmock(Pocolog::CLI::NullReporter.new)
+                    reporter = flexmock(NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
                     ext = ".zst" if compress?
                     reporter
@@ -240,7 +240,7 @@ module Syskit::Log
                     end
                     file0_path = logfile_pathname("file0.0.log")
                     logfile_pathname("normalized").mkpath
-                    reporter = flexmock(Pocolog::CLI::NullReporter.new)
+                    reporter = flexmock(NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
                     ext = ".zst" if compress?
                     reporter.should_receive(:warn)

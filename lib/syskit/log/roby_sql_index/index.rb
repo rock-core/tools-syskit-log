@@ -58,7 +58,7 @@ module Syskit
                 attr_reader :event_propagations
 
                 # Add information from a raw Roby log
-                def add_roby_log(path, reporter: Pocolog::CLI::NullReporter.new)
+                def add_roby_log(path, reporter: NullReporter.new)
                     metadata_update = start_roby_log_import(path.basename.to_s)
 
                     size = path.stat.size

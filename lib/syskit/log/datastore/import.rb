@@ -15,8 +15,7 @@ module Syskit::Log
 
             def initialize(
                 output_path,
-                cache_path: output_path, compress: false,
-                reporter: Pocolog::CLI::NullReporter.new
+                cache_path: output_path, compress: false, reporter: NullReporter.new
             )
                 @reporter = reporter
 
@@ -116,8 +115,7 @@ module Syskit::Log
             #
             # Verifies that the given data should be imported
             def self.validate_dataset_import(
-                datastore, dataset,
-                force: false, reporter: Pocolog::CLI::NullReporter.new
+                datastore, dataset, force: false, reporter: NullReporter.new
             )
                 return unless datastore.has?(dataset.digest)
 
