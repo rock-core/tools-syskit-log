@@ -625,7 +625,7 @@ module Syskit::Log
                         index_path.open do |index_io|
                             stream_info =
                                 Pocolog::Format::Current
-                                .read_minimal_stream_info(index_io, file_io)
+                                .read_minimal_info(index_io, file_io)
                             stream_block, index_stream_info = stream_info.first
 
                             interval_rt = index_stream_info.interval_rt.map do |t|
