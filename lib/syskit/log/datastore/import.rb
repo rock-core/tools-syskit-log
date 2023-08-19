@@ -238,8 +238,7 @@ module Syskit::Log
                 Syskit::Log::Datastore.normalize(
                     files,
                     output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
-                    compute_sha256: true, delete_input: delete_input,
-                    compress: @compress, reporter: @reporter
+                    delete_input: delete_input, compress: @compress, reporter: @reporter
                 )
             ensure
                 @reporter.finish

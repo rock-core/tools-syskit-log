@@ -129,9 +129,7 @@ module Syskit::Log
                     it "optionally computes the sha256 digest of the generated file, "\
                        "without the prologue" do
                         logfile_pathname("normalized").mkdir
-                        result = normalize.normalize(
-                            [logfile_pathname("file0.0.log")], compute_sha256: true
-                        )
+                        result = normalize.normalize([logfile_pathname("file0.0.log")])
 
                         path = logfile_pathname("normalized", "task0::port.0.log")
                         actual_data = read_logfile("normalized", "task0::port.0.log")
