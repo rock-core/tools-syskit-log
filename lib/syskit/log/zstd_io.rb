@@ -73,10 +73,18 @@ module Syskit
             end
 
             # Seek in the IO. Can only seek forward
-            def seek(pos)
-                raise ArgumentError, "cannot seek backwards" if pos < @tell
+            def seek(pos, mode = IO::SEEK_SET)
+                if mode == IO::SEEK_SET
+                    raise ArgumentError, "cannot seek backwards" if pos < @tell
 
-                read(pos - @tell)
+                    read(pos - @tell)
+                elsif mode == IO::SEEK_CUR
+                    raise ArgumentError, "cannot seek backwards" if pos < 0
+
+                    read(pos)
+                else
+                    raise ArgumentError, "seek mode #{mode} not supported"
+                end
             end
 
             def flush

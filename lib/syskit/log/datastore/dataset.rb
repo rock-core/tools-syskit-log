@@ -157,14 +157,15 @@ module Syskit::Log
             # @param [Pathname] path
             # @return [IdentityEntry]
             def compute_file_identity(path)
-                sha2 = path.open do |io|
+                Syskit::Log.open_in_stream(path) do |io|
                     # Pocolog files do not hash their prologue
                     if path.dirname.basename.to_s == "pocolog"
                         io.seek(Pocolog::Format::Current::PROLOGUE_SIZE)
                     end
-                    compute_file_sha2(io)
+                    sha2 = compute_file_sha2(io)
+
+                    IdentityEntry.new(path, io.tell, sha2)
                 end
-                IdentityEntry.new(path, path.size, sha2)
             end
 
             def self.validate_encoded_short_digest(digest)
@@ -235,7 +236,7 @@ module Syskit::Log
             # It does sanity checks on the loaded data, but does not compare it
             # against the actual data on disk
             #
-            # @return [Hash<Pathname,(String,Integer)>]
+            # @return [Array<IdentityEntry>]
             def read_dataset_identity_from_metadata_file(
                 metadata_path = identity_metadata_path
             )
@@ -376,31 +377,14 @@ module Syskit::Log
                     self.class.validate_encoded_sha2(entry.sha2)
                 end
 
-                important_files = each_important_file.inject({}) do |h, path|
-                    h.merge!(path => path.size)
-                end
-
+                important_files = each_important_file.to_set
                 dataset_identity.each do |entry|
-                    unless (actual_size = important_files.delete(entry.path))
-                        if entry.path.exist?
-                            raise InvalidIdentityMetadata,
-                                  "file #{entry.path} is listed in the identity "\
-                                  "metadata, but is not part of the important files. "\
-                                  "Try `syskit ds repair`"
-                        else
-                            raise InvalidIdentityMetadata,
-                                  "file #{entry.path} is listed in the identity "\
-                                  "metadata, but is not present on disk. Try "\
-                                  "`syskit ds repair`"
-                        end
-                    end
+                    next if important_files.delete?(entry.path)
 
-                    if actual_size != entry.size
-                        raise InvalidIdentityMetadata,
-                              "file #{entry.size} is listed in the identity metadata "\
-                              "with a size of #{entry.size} bytes, but the file "\
-                              "present on disk has a size of #{actual_size}"
-                    end
+                    raise InvalidIdentityMetadata,
+                          "file #{entry.path} is listed in the identity "\
+                          "metadata, but is not present on disk. Try "\
+                          "`syskit ds repair`"
                 end
 
                 return if important_files.empty?
@@ -408,7 +392,7 @@ module Syskit::Log
                 raise InvalidIdentityMetadata,
                       "#{important_files.size} important files are present on disk "\
                       "but are not listed in the identity metadata: "\
-                      "#{important_files.keys.sort.join(', ')}"
+                      "#{important_files.to_a.sort.join(', ')}"
             end
 
             # Write the dataset's static metadata

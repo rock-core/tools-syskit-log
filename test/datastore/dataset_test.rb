@@ -300,6 +300,21 @@ module Syskit::Log
                 it "computes the same hash with the same input" do
                     assert_equal dataset.compute_dataset_digest, dataset.compute_dataset_digest
                 end
+                it "is not sensitive to an entry being compressed or not" do
+                    entries = dataset.compute_dataset_identity_from_files
+                    digest = dataset.compute_dataset_digest(entries)
+
+                    path = entries[0].path
+                    if compress?
+                        Syskit::Log.decompress(path, path.sub_ext(""))
+                    else
+                        Syskit::Log.compress(path, path.dirname + "#{path.basename}.zst")
+                    end
+                    path.unlink
+
+                    new_entries = dataset.compute_dataset_identity_from_files
+                    assert_equal digest, dataset.compute_dataset_digest(new_entries)
+                end
                 it "changes if the size of one of the files change" do
                     entries = dataset.compute_dataset_identity_from_files
                     entries[0].size += 10
@@ -354,12 +369,6 @@ module Syskit::Log
                 end
                 it "raises if a new Roby log file is added on disk" do
                     FileUtils.touch dataset_pathname("roby-events.1.log")
-                    assert_raises(Dataset::InvalidIdentityMetadata) do
-                        dataset.weak_validate_identity_metadata
-                    end
-                end
-                it "raises if a file size mismatches" do
-                    dataset_pathname("roby-events.0.log").open("a") { |io| io.write("10") }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.weak_validate_identity_metadata
                     end
