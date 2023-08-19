@@ -216,7 +216,7 @@ module Syskit::Log
                 end
 
                 def dataset_duration(dataset)
-                    dataset.each_pocolog_stream.map(&:duration_lg).max || 0
+                    dataset.each_pocolog_lazy_stream.map(&:duration_lg).max || 0
                 end
 
                 def raw_dataset?(path)
