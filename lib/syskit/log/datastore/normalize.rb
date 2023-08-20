@@ -431,7 +431,7 @@ module Syskit::Log
                 out_files[out_file_path] = output
             rescue Exception # rubocop:disable Lint/RescueException
                 wio&.close
-                out_file_path&.unlink
+                out_file_path&.unlink if out_file_path&.exist?
                 raise
             end
         end
