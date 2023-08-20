@@ -61,7 +61,7 @@ module Syskit
                 ret = @buffer[0, count]
                 @tell += ret.size
                 @buffer = @buffer[ret.size..-1] || +""
-                ret
+                ret if !ret.empty? || data
             end
 
             # Write this data in the compressed stream
