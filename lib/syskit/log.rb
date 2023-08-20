@@ -90,5 +90,120 @@ module Syskit
                 zstd.flush
             end
         end
+
+        # Returns the decompressed version of a given file
+        #
+        # @param [Pathname] in_path the file
+        # @param [Pathname] cache_path the path in which the decompressed versions
+        #   should be cached
+        # @param [Boolean] force if true, decompress the file even if there is
+        #   already a decompressed version in cache_path. Otherwise, return the
+        #   existing file.
+        # @return [Pathname] the path to the decompressed file
+        def self.decompressed(
+            in_path, cache_path, force: false, reporter: Pocolog::CLI::NullReporter.new
+        )
+            return in_path unless in_path.extname == ".zst"
+
+            out_path = decompressed_path(in_path, cache_path)
+            return out_path if !force && out_path.exist?
+
+            out_path.unlink if out_path.exist?
+            decompress(in_path, out_path, reporter: reporter)
+        end
+
+        # Decompress a zst-compressed file in a given output
+        def self.decompress(
+            in_path, out_path, reporter: Pocolog::CLI::NullReporter.new
+        )
+            out_path.dirname.mkpath
+
+            reporter.current = 0
+            Tempfile.open("", out_path.dirname.to_s) do |temp_io|
+                in_path.open do |compressed_io|
+                    decompress_io(compressed_io, temp_io, reporter: reporter)
+                end
+                temp_io.close
+                File.rename(temp_io.path, out_path.to_s)
+            end
+
+            out_path
+        end
+
+        def self.decompress_io(compressed_io, out_io, reporter: NullReporter.new)
+            zstd_io = ZstdIO.new(compressed_io)
+            while (data = zstd_io.read(1024**2))
+                out_io.write data
+                reporter.current = compressed_io.tell * 100 / compressed_io.size
+            end
+        end
+
+        def self.read_single_lazy_data_stream(logfile_path, minimal_index_path, index_dir)
+            open_in_stream(logfile_path) do |file_io|
+                minimal_index_path.open do |index_io|
+                    read_single_lazy_data_stream_from_io(
+                        file_io, index_io, logfile_path, index_dir
+                    )
+                end
+            end
+        end
+
+        def self.read_single_lazy_data_stream_from_io(
+            file_io, index_io, logfile_path, index_dir
+        )
+            stream_info = Pocolog::Format::Current.read_minimal_info(
+                index_io, file_io, validate: false
+            )
+            stream_block, index_stream_info = stream_info.first
+
+            interval_rt = index_stream_info.interval_rt.map do |t|
+                Pocolog::StreamIndex.time_from_internal(t, 0)
+            end
+            interval_lg = index_stream_info.interval_lg.map do |t|
+                Pocolog::StreamIndex.time_from_internal(t, 0)
+            end
+
+            LazyDataStream.new(
+                logfile_path,
+                index_dir,
+                stream_block.name,
+                stream_block.type,
+                stream_block.metadata,
+                interval_rt,
+                interval_lg,
+                index_stream_info.stream_size
+            )
+        end
+
+        # Generate an index file that contains only stream definition for lazy loading
+        #
+        # These index files are very small and can therefore be saved along with the
+        # core data, making getting a new dataset a lot more agile
+        def self.generate_pocolog_minimal_index(logfile_path, index_path)
+            logfile_io = open_in_stream(logfile_path)
+            block_stream = Pocolog::BlockStream.new(logfile_io)
+            block_stream.read_prologue
+            stream_info = Pocolog.file_index_builder(block_stream)
+            index_path.open("w") do |index_io|
+                Pocolog::Format::Current.write_index_header(index_io, 0, Time.now, 1)
+                Pocolog::Format::Current.write_index_stream_info(
+                    index_io, stream_info
+                )
+            end
+        end
+
+        def self.decompressed_path(file_path, cache_path)
+            return file_path unless file_path.extname == ".zst"
+
+            cache_path + file_path.basename(".zst")
+        end
+
+        def self.index_path(logfile_path, cache_path)
+            logfile_path = decompressed_path(logfile_path, cache_path)
+            index_path = Pocolog::Logfiles.default_index_filename(
+                logfile_path.to_s, index_dir: cache_path.to_s
+            )
+            Pathname(index_path)
+        end
     end
 end
