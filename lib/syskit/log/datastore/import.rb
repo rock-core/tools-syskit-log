@@ -414,7 +414,7 @@ module Syskit::Log
                 end
 
                 in_stat = event_log_path.stat
-                in_io = Normalize.open_in_stream(event_log_path)
+                in_io = Syskit::Log.open_in_stream(event_log_path)
                 reader = Roby::DRoby::Logfile::Reader.new(in_io)
 
                 end_of_header = in_io.tell
@@ -422,7 +422,7 @@ module Syskit::Log
                 prologue = in_io.read(end_of_header)
                 in_io.seek(end_of_header)
 
-                out_io = Normalize.open_out_stream(target_path)
+                out_io = Syskit::Log.open_out_stream(target_path)
                 digest = Digest::SHA256.new
                 out_io = DigestIO.new(out_io, digest)
                 out_io.write(prologue)
