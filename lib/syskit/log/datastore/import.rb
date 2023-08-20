@@ -197,8 +197,11 @@ module Syskit::Log
             # @api private
             #
             # Copy roby logs to the output path while generating a SQL index
+            #
+            # @return [Array<Dataset::IdentityEntry>]
             def normalize_roby_logs(roby_event_logs)
-                roby_sql_index = RobySQLIndex::Index.create(@cache_path + "roby.sql")
+                sql_path = @output_path + "roby.sql"
+                roby_sql_index = RobySQLIndex::Index.create(sql_path)
                 roby_event_logs.map do |roby_event_log|
                     copy_roby_event_log(roby_event_log, roby_sql_index)
                 rescue TypeError, RuntimeError => e
@@ -210,7 +213,7 @@ module Syskit::Log
                         @reporter.error line
                     end
                     roby_sql_index.close
-                    FileUtils.rm_f @cache_path + "roby.sql"
+                    sql_path.unlink
 
                     copy_roby_event_log_no_index(roby_event_log)
                 end
@@ -289,7 +292,7 @@ module Syskit::Log
             # @param [Array<Pathname>] paths the input roby log files
             # @param [Log::RobySQLIndex::Index] roby_sql_index the database in
             #   which essential Roby information is stored
-            # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
+            # @return [Dataset::IdentityEntry] a hash of the log file's
             #   pathname to the file's SHA256 digest
             def copy_roby_event_log(event_log_path, roby_sql_index) # rubocop:disable Metrics/CyclomaticComplexity
                 in_reader, out_path, out_io, in_stat =
