@@ -614,16 +614,11 @@ module Syskit::Log
             # Load lazy data stream information from disk
             def read_lazy_data_streams
                 each_pocolog_path.map do |logfile_path|
-                    raw_logfile_path =
-                        logfile_path.dirname + logfile_path.basename(".zst")
-
-                    index_path = Pocolog::Logfiles.default_index_filename(
-                        raw_logfile_path.to_s, index_dir: logfile_path.dirname.to_s
-                    )
-                    index_path = Pathname.new(index_path)
+                    index_path = Syskit::Log.minimal_index_path(logfile_path)
                     unless index_path.exist?
+                        logfile_io = Syskit::Log.open_in_stream(logfile_path)
                         Syskit::Log.generate_pocolog_minimal_index(
-                            logfile_path, index_path
+                            logfile_io, index_path
                         )
                     end
 

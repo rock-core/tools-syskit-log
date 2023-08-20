@@ -731,6 +731,32 @@ module Syskit::Log
                 end
             end
 
+            desc "compression ID", "compress or decompress the given dataset"
+            option "add", type: :boolean, default: false
+            option "remove", type: :boolean, default: false
+            def compression(*query)
+                store = open_store
+                create_reporter
+
+                if options[:add] && options[:remove]
+                    raise ArgumentError, "choose either --add or --remove, not both"
+                elsif !options[:add] && !options[:remove]
+                    raise ArgumentError, "choose either --add or --remove"
+                end
+
+                require "syskit/log/datastore/compression"
+
+                resolve_datasets(store, *query).each do |ds|
+                    if options[:add]
+                        Syskit::Log::Datastore::Compression
+                            .compress_dataset(ds, reporter: reporter)
+                    elsif options[:remove]
+                        Syskit::Log::Datastore::Compression
+                            .decompress_dataset(ds, reporter: reporter)
+                    end
+                end
+            end
+
             desc "list [QUERY]", "list datasets and their information"
             method_option :digest, desc: "only show the digest and no other information (for scripting)",
                                    type: :boolean, default: false
