@@ -136,7 +136,8 @@ module Syskit::Log
                         expected = Digest::SHA256.hexdigest(
                             actual_data[Pocolog::Format::Current::PROLOGUE_SIZE..-1]
                         )
-                        assert_equal expected, result[path].hexdigest
+                        entry = result.find { |e| e.path == path }
+                        assert_equal expected, entry.sha2
                     end
                 end
                 it "detects followup streams" do

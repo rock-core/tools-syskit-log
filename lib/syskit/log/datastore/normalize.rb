@@ -4,6 +4,7 @@ require "digest/sha2"
 
 module Syskit::Log
     class Datastore
+        # @return [Array<Dataset::IdentityEntry>]
         def self.normalize(
             paths,
             output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
@@ -87,6 +88,10 @@ module Syskit::Log
                     @interval_rt[1] = rt_time
                     @last_data_block_time = [rt_time, lg_time]
                 end
+
+                def string_digest
+                    Dataset.string_digest(@digest)
+                end
             end
 
             def initialize(compress: false)
@@ -98,6 +103,7 @@ module Syskit::Log
                 @compress
             end
 
+            # @return [Array<Dataset::IdentityEntry>]
             def normalize(
                 paths,
                 output_path: paths.first.dirname + "normalized",
@@ -120,7 +126,7 @@ module Syskit::Log
                     group_result
                 end
 
-                result.inject { |a, b| a.merge(b) }
+                result.flatten
             end
 
             def normalize_logfile_group(
@@ -139,11 +145,11 @@ module Syskit::Log
                 # index ... it makes little sense to write the index
                 write_pending_pocolog_indexes(index_dir) unless compress?
 
-                result = {}
                 out_files.each_value.map do |output|
-                    result[output.path] = output.digest
+                    Dataset::IdentityEntry.new(
+                        output.path, output.tell, output.string_digest
+                    )
                 end
-                result
             rescue Exception # rubocop:disable Lint/RescueException
                 reporter.warn(
                     "normalize: deleting #{out_files.size} output files and their indexes"
