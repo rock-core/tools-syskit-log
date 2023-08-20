@@ -149,6 +149,36 @@ module Syskit
             end
         end
 
+        # Compress a file in a given output using Zstd
+        def self.compress(
+            in_path, out_path, compute_digest: false, reporter: NullReporter.new
+        )
+            reporter.reset_progressbar "[:bar]", total: 1.0
+            reporter.current = 0
+            atomic_write(out_path) do |out_io|
+                in_path.open do |in_io|
+                    compress_io(
+                        in_io, out_io, reporter: reporter, compute_digest: compute_digest
+                    )
+                end
+            end
+        end
+
+        def self.compress_io(
+            in_io, out_io, compute_digest: false, reporter: NullReporter.new
+        )
+            buffer = +""
+            compressed_io = ZstdIO.new(out_io, read: false, write: true)
+            compressed_io = DigestIO.new(compressed_io) if compute_digest
+            while (data = in_io.read(1024**2, buffer))
+                compressed_io.write data
+                reporter.current = Float(in_io.tell) / in_io.size
+            end
+            compressed_io.string_digest if compute_digest
+        ensure
+            compressed_io&.close
+        end
+
         def self.read_single_lazy_data_stream(logfile_path, minimal_index_path, index_dir)
             open_in_stream(logfile_path) do |file_io|
                 minimal_index_path.open do |index_io|

@@ -70,4 +70,27 @@ module Syskit::Log
             assert_equal "else\n", (@root + "out").read
         end
     end
+
+    describe ".compress" do
+        before do
+            @root = make_tmppath
+        end
+
+        it "compresses the input path into the output path" do
+            in_path = @root + "in"
+            out_path = @root + "out"
+            in_path.write("something\n")
+            Syskit::Log.compress(in_path, out_path)
+            assert_equal "something\n", Zstd.decompress(out_path.read)
+        end
+
+        it "optionally computes the data digest on-the-fly" do
+            in_path = @root + "in"
+            out_path = @root + "out"
+            in_path.write("something\n")
+            digest = Syskit::Log.compress(in_path, out_path, compute_digest: true)
+            assert_equal "something\n", Zstd.decompress(out_path.read)
+            assert_equal Digest::SHA256.hexdigest("something\n"), digest
+        end
+    end
 end
