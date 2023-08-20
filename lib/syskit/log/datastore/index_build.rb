@@ -52,24 +52,24 @@ module Syskit::Log
                 end
 
                 dataset.each_pocolog_path do |logfile_path|
-                    logfile_name = logfile_path.relative_path_from(dataset.dataset_path)
-                    begin
-                        index_path = Pocolog::Logfiles.default_index_filename(
-                            logfile_path, index_dir: pocolog_index_dir
+                    decompressed_path = Syskit::Log.decompressed_path(
+                        logfile_path, dataset.cache_path + "pocolog"
+                    )
+                    next unless decompressed_path.exist?
+
+                    index_path = Syskit::Log.index_path(
+                        decompressed_path, dataset.cache_path + "pocolog"
+                    )
+                    if index_path.exist?
+                        reporter.log "  up-to-date: #{decompressed_path.basename}"
+                        next
+                    end
+
+                    reporter.log "  rebuilding: #{decompressed_path.basename}"
+                    decompressed_path.open do |logfile_io|
+                        Pocolog::Format::Current.rebuild_index_file(
+                            logfile_io, index_path.to_s
                         )
-                        index_path = Pathname(index_path)
-
-                        if index_path.exist?
-                            reporter.log "  up-to-date: #{logfile_name}"
-                            next
-                        end
-
-                        reporter.log "  rebuilding: #{logfile_name}"
-                        logfile_path.open do |logfile_io|
-                            Pocolog::Format::Current.rebuild_index_file(
-                                logfile_io, index_path.to_s
-                            )
-                        end
                     end
                 end
             end
