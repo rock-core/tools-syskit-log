@@ -91,23 +91,6 @@ module Syskit::Log
                 end
             end
 
-            # @api private
-            #
-            # An IO-looking object that computes the output's digest
-            class DigestIO < SimpleDelegator
-                attr_reader :digest
-
-                def initialize(wio, digest)
-                    super(wio)
-                    @digest = digest
-                end
-
-                def write(string)
-                    super
-                    @digest.update string
-                end
-            end
-
             def initialize(compress: false)
                 @out_files = {}
                 @compress = compress

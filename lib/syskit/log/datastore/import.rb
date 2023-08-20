@@ -424,7 +424,7 @@ module Syskit::Log
 
                 out_io = Normalize.open_out_stream(target_path)
                 digest = Digest::SHA256.new
-                out_io = Normalize::DigestIO.new(out_io, digest)
+                out_io = DigestIO.new(out_io, digest)
                 out_io.write(prologue)
 
                 [reader, target_path, out_io, in_stat]
