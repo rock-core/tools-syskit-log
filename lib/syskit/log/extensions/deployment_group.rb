@@ -17,8 +17,9 @@ module Syskit::Log
                     streams, name: name, model: model, allow_missing: allow_missing
                 )
 
-                configured_deployment = Syskit::Models::ConfiguredDeployment
-                                        .new(on, deployment_model, Hash[name => name], name, {})
+                configured_deployment =
+                    Syskit::Models::ConfiguredDeployment
+                    .new(on, deployment_model, Hash[name => name], name)
                 register_configured_deployment(configured_deployment)
                 configured_deployment
             end
