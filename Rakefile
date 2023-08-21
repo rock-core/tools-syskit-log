@@ -3,13 +3,20 @@
 require "bundler/gem_tasks"
 require "rake/testtask"
 
-Rake::TestTask.new("test:lib") do |t|
+Rake::TestTask.new("test:lib:uncompressed") do |t|
     t.libs << "test"
     t.libs << "lib"
     t.test_files = FileList["test/**/*_test.rb"]
     t.warning = false
 end
-task "test" => "test:lib"
+Rake::TestTask.new("test:lib:compressed") do |t|
+    t.libs << "test"
+    t.libs << "lib"
+    t.test_files = FileList["test/**/*_test.rb", "test/test_compressed.rb"]
+    t.warning = false
+end
+task "test" => "test:lib:compressed"
+task "test" => "test:lib:uncompressed"
 
 task :default
 
