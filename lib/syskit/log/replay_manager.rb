@@ -15,12 +15,6 @@ module Syskit::Log
         # @return [Pocolog::StreamAligner]
         attr_reader :stream_aligner
 
-        # The set of streams aligned so far, with how many deployment tasks are
-        # referring to them (for cleanup)
-        #
-        # @return [Hash<Pocolog::DataStream,Set<Deployment>>]
-        attr_reader :stream_to_deployment
-
         # The current logical time
         attr_reader :time
 
@@ -43,11 +37,19 @@ module Syskit::Log
         # base_real_time == {#base_logical_time}
         attr_reader :base_logical_time
 
+        DispatchInfo = Struct.new :deployments, :syskit_stream do
+            def in_use?
+                !deployments.empty?
+            end
+        end
+
         def initialize(execution_engine)
             @execution_engine = execution_engine
             @handler_id = nil
             @stream_aligner = Pocolog::StreamAligner.new(false)
-            @stream_to_deployment = Hash.new { |h, k| h[k] = Set.new }
+
+            @stream_syskit_to_pocolog = {}
+            @dispatch_info = {}
         end
 
         # Time of the first sample in the aligner
@@ -60,6 +62,22 @@ module Syskit::Log
             stream_aligner.interval_lg[1]
         end
 
+        # Return the deployment tasks that are "interested by" a given stream
+        #
+        # @param [Pocolog::DataStream,Syskit::Log::LazyDataStream] stream
+        # @return [Array<Syskit::Log::Deployment>]
+        def find_deployments_of_stream(stream)
+            if (match = @stream_syskit_to_pocolog[stream])
+                stream = match
+            end
+
+            if (match = @dispatch_info[stream])
+                match.deployments
+            else
+                []
+            end
+        end
+
         # Register a deployment task
         #
         # @param [Deployment] deployment_task the task to register
@@ -67,9 +85,10 @@ module Syskit::Log
         def register(deployment_task)
             new_streams = []
             deployment_task.model.each_stream_mapping do |s, _|
-                set = (stream_to_deployment[s] << deployment_task)
-                new_streams << s if set.size == 1
+                pocolog, new = update_dispatch_info_for_stream(deployment_task, s)
+                new_streams << pocolog if new
             end
+
             if stream_aligner.add_streams(*new_streams)
                 _, @time = stream_aligner.step_back
             else
@@ -79,15 +98,44 @@ module Syskit::Log
             reset_replay_base_times
         end
 
+        # @api private
+        #
+        # Update dispatching for a stream that is being used by a task
+        #
+        # This updates the internal datastructure that associates the stream
+        # with the actual pocolog stream (if it is a lazy-loaded stream) and the
+        # task
+        #
+        # @return [Boolean] true if the stream is new (never seen before), and false
+        #   otherwise
+        def update_dispatch_info_for_stream(deployment_task, stream)
+            if (pocolog = @stream_syskit_to_pocolog[stream])
+                @dispatch_info[pocolog].deployments << deployment_task
+                return [pocolog, false]
+            end
+
+            pocolog =
+                if stream.respond_to?(:syskit_eager_load)
+                    stream.syskit_eager_load
+                else
+                    stream
+                end
+
+            @stream_syskit_to_pocolog[stream] = pocolog
+            @dispatch_info[pocolog] = DispatchInfo.new([deployment_task], stream)
+            [pocolog, true]
+        end
+
         # Deregisters a deployment task
         def deregister(deployment_task)
             removed_streams = []
             deployment_task.model.each_stream_mapping do |s, _|
-                set = stream_to_deployment[s]
-                set.delete(deployment_task)
-                if set.empty?
-                    stream_to_deployment.delete(s)
-                    removed_streams << s
+                pocolog = @stream_syskit_to_pocolog[s]
+                @dispatch_info[pocolog].deployments.delete(deployment_task)
+                unless @dispatch_info[pocolog].in_use?
+                    @stream_syskit_to_pocolog.delete(s)
+                    @dispatch_info.delete(pocolog)
+                    removed_streams << pocolog
                 end
             end
 
@@ -157,8 +205,12 @@ module Syskit::Log
         # @api private
         #
         # Play samples required by the current execution engine's time
-        def process_in_realtime(replay_speed,
-            limit_real_time: end_of_current_engine_cycle)
+        def process_in_realtime(
+            replay_speed,
+            limit_real_time: end_of_current_engine_cycle
+        )
+            return unless base_logical_time
+
             limit_logical_time = base_logical_time +
                                  (limit_real_time - base_real_time) * replay_speed
 
@@ -184,13 +236,12 @@ module Syskit::Log
         # Immediately dispatch the sample last read by {#stream_aligner}
         def dispatch(stream_index, time)
             @time = time
-            stream = stream_aligner.streams[stream_index]
-            tasks = stream_to_deployment[stream]
-            return if tasks.empty?
+            pocolog_stream = stream_aligner.streams[stream_index]
+            info = @dispatch_info.fetch(pocolog_stream)
 
             sample = stream_aligner.single_data(stream_index)
-            tasks.each do |task|
-                task.process_sample(stream, time, sample)
+            info.deployments.each do |task|
+                task.process_sample(info.syskit_stream, time, sample)
             end
         end
 

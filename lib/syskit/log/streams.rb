@@ -21,6 +21,13 @@ module Syskit::Log
             streams
         end
 
+        # Load the set of streams available from a file
+        def self.from_dataset(dataset)
+            streams = new
+            streams.add_dataset(dataset)
+            streams
+        end
+
         # The list of streams that are available
         #
         # @return [Array<LazyDataStream>]

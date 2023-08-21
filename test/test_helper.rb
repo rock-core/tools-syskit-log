@@ -6,7 +6,9 @@ require "syskit/log"
 require "pocolog"
 require "pocolog/test_helpers"
 require "minitest/autorun"
+
 require "syskit/log/datastore/index_build"
+require "syskit/log/datastore/import"
 
 module Syskit::Log
     module Test
@@ -94,6 +96,17 @@ module Syskit::Log
             Datastore::IndexBuild.rebuild(store, set)
 
             [store, set]
+        end
+
+        def import_logfiles(path = logfile_pathname)
+            root_path = make_tmppath
+            datastore_path = root_path + "datastore"
+            datastore_path.mkpath
+            datastore = Datastore.create(datastore_path)
+
+            import = Datastore::Import.new(datastore)
+            dataset = import.import([path])
+            [datastore, dataset]
         end
     end
 end
