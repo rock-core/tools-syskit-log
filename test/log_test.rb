@@ -93,4 +93,58 @@ module Syskit::Log
             assert_equal Digest::SHA256.hexdigest("something\n"), digest
         end
     end
+
+    describe ".decompressed" do
+        before do
+            root = make_tmppath
+            @path = root + "data"
+            @path.mkpath
+            @cache = root + "cache"
+            @cache.mkpath
+        end
+
+        it "does nothing if the file is not compressed" do
+            file_path = @path + "file"
+            FileUtils.touch(file_path.to_s)
+            assert_equal file_path, Syskit::Log.decompressed(file_path, @cache)
+        end
+
+        it "decompresses the file in the cache path and returns the path" do
+            file_path = @path + "file.zst"
+            file_path.write Zstd.compress("something\n")
+            decompressed = Syskit::Log.decompressed(file_path, @cache)
+            assert_equal @cache + "file", decompressed
+            assert_equal "something\n", decompressed.read
+        end
+
+        it "handles files in subfolders" do
+            file_path = @path + "dir" + "file.zst"
+            file_path.dirname.mkpath
+            file_path.write Zstd.compress("something\n")
+            decompressed = Syskit::Log.decompressed(file_path, @cache + "dir")
+            assert_equal @cache + "dir" + "file", decompressed
+            assert_equal "something\n", decompressed.read
+        end
+
+        it "returns an already decompressed file" do
+            file_path = @path + "file.zst"
+            file_path.write Zstd.compress("something\n")
+            decompressed = @cache + "file"
+            decompressed.write "somethingelse"
+
+            assert_equal decompressed, Syskit::Log.decompressed(file_path, @cache)
+            assert_equal "somethingelse", decompressed.read
+        end
+
+        it "does decompress again over an already decompressed file if force is true" do
+            file_path = @path + "file.zst"
+            file_path.write Zstd.compress("something\n")
+            decompressed = @cache + "file"
+            decompressed.write "somethingelse"
+
+            result = Syskit::Log.decompressed(file_path, @cache, force: true)
+            assert_equal decompressed, result
+            assert_equal "something\n", decompressed.read
+        end
+    end
 end

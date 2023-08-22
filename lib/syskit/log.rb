@@ -112,6 +112,7 @@ module Syskit
 
             out_path.unlink if out_path.exist?
             decompress(in_path, out_path, reporter: reporter)
+            out_path
         end
 
         # Decompress a zst-compressed file in a given output
