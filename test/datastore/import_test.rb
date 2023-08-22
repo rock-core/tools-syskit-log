@@ -148,7 +148,8 @@ module Syskit::Log
                                    "timestamp" => Set[0],
                                    "digest" => Set[dataset.digest] }, dataset.metadata)
                     assert_equal({ "roby:app_name" => Set["test"],
-                                   "timestamp" => Set[0] },
+                                   "timestamp" => Set[0],
+                                   "digest" => Set[dataset.digest] },
                                  Dataset.new(dataset.dataset_path).metadata)
                 end
                 it "ignores the Roby metadata if it cannot be loaded" do
@@ -163,7 +164,7 @@ module Syskit::Log
                     assert_match(/failed to load Roby metadata/, err)
                     assert_equal({ "timestamp" => Set[0], "digest" => Set[imported.digest] },
                                  imported.metadata)
-                    assert_equal({ "timestamp" => Set[0] },
+                    assert_equal({ "timestamp" => Set[0], "digest" => Set[imported.digest] },
                                  Dataset.new(imported.dataset_path).metadata)
                 end
                 it "rebuilds a valid Roby index" do

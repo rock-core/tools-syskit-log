@@ -104,8 +104,12 @@ module Syskit::Log
             datastore_path.mkpath
             datastore = Datastore.create(datastore_path)
 
-            import = Datastore::Import.new(datastore)
-            dataset = import.import([path])
+            import = Datastore::Import.new(
+                root_path + "import-core",
+                cache_path: root_path + "import-cache"
+            )
+            dataset = import.normalize_dataset([path])
+            dataset = Datastore::Import.move_dataset_to_store(dataset, datastore)
             [datastore, dataset]
         end
     end

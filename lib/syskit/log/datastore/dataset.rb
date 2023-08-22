@@ -419,6 +419,9 @@ module Syskit::Log
                 dataset_identity = compute_dataset_identity_from_files
             )
                 dataset_digest = compute_dataset_digest(dataset_identity)
+                @digest = dataset_digest
+                metadata_set "digest", dataset_digest
+
                 dataset_identity = dataset_identity.map do |entry|
                     relative_path = entry.path.relative_path_from(dataset_path)
                     if relative_path.each_filename.find { |p| p == ".." }
