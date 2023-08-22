@@ -134,7 +134,7 @@ module Syskit::Log
                     (dataset_path + "roby-events.0.log").open("w") do |io|
                         Roby::DRoby::Logfile.write_header(io, version: 0)
                     end
-                    reporter = flexmock(Pocolog::CLI::NullReporter.new)
+                    reporter = flexmock(NullReporter.new)
                     reporter.should_receive(:warn)
                             .with("  roby-events.0.log is in an obsolete "\
                                   "Roby log file format, skipping")

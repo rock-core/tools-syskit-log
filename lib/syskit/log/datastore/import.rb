@@ -15,8 +15,7 @@ module Syskit::Log
 
             def initialize(
                 output_path,
-                cache_path: output_path, compress: false,
-                reporter: Pocolog::CLI::NullReporter.new
+                cache_path: output_path, compress: false, reporter: NullReporter.new
             )
                 @reporter = reporter
 
@@ -116,8 +115,7 @@ module Syskit::Log
             #
             # Verifies that the given data should be imported
             def self.validate_dataset_import(
-                datastore, dataset,
-                force: false, reporter: Pocolog::CLI::NullReporter.new
+                datastore, dataset, force: false, reporter: NullReporter.new
             )
                 return unless datastore.has?(dataset.digest)
 
@@ -165,16 +163,19 @@ module Syskit::Log
                     dir_paths.map { |dir| prepare_import(dir) }
                              .transpose.map(&:flatten)
 
+                identity = []
                 if include.include?(:pocolog)
                     @reporter.info "Normalizing pocolog log files"
-                    normalize_pocolog_files(pocolog_files, delete_input: delete_input)
+                    identity += normalize_pocolog_files(
+                        pocolog_files, delete_input: delete_input
+                    )
                 end
 
                 if include.include?(:roby)
                     @reporter.info "Copying the Roby event logs"
-                    normalize_roby_logs(roby_event_logs)
+                    identity += normalize_roby_logs(roby_event_logs)
                 elsif include.include?(:roby_no_index)
-                    roby_event_logs.each do |log|
+                    identity += roby_event_logs.map do |log|
                         copy_roby_event_log_no_index(log)
                     end
                 end
@@ -190,7 +191,7 @@ module Syskit::Log
                     copy_ignored_entries(ignored_entries)
                 end
 
-                import_generate_identity(dir_paths)
+                import_generate_identity(dir_paths, identity)
             end
 
             # @api private
@@ -198,7 +199,7 @@ module Syskit::Log
             # Copy roby logs to the output path while generating a SQL index
             def normalize_roby_logs(roby_event_logs)
                 roby_sql_index = RobySQLIndex::Index.create(@cache_path + "roby.sql")
-                roby_event_logs.each do |roby_event_log|
+                roby_event_logs.map do |roby_event_log|
                     copy_roby_event_log(roby_event_log, roby_sql_index)
                 rescue TypeError, RuntimeError => e
                     @reporter.error "Failed to create index from Roby log file"
@@ -222,11 +223,10 @@ module Syskit::Log
             # It computes the log file's SHA256 digests
             #
             # @param [Array<Pathname>] paths the input pocolog log files
-            # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
-            #   pathname to the file's SHA256 digest. The pathnames are
-            #   relative to the output path given to {#initialize}
+            # @return [[Dataset::IdentityEntry]] information needed to compute
+            #   the dataset identity
             def normalize_pocolog_files(files, delete_input: false)
-                return {} if files.empty?
+                return [] if files.empty?
 
                 out_pocolog_dir = (@output_path + "pocolog")
                 out_pocolog_dir.mkpath
@@ -240,8 +240,7 @@ module Syskit::Log
                 Syskit::Log::Datastore.normalize(
                     files,
                     output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
-                    compute_sha256: true, delete_input: delete_input,
-                    compress: @compress, reporter: @reporter
+                    delete_input: delete_input, compress: @compress, reporter: @reporter
                 )
             ensure
                 @reporter.finish
@@ -264,9 +263,9 @@ module Syskit::Log
             # @api private
             #
             # Generate identity and metadata files at the end of an import
-            def import_generate_identity(input_paths)
+            def import_generate_identity(input_paths, identity)
                 dataset = Dataset.new(@output_path, cache: @cache_path)
-                dataset.write_dataset_identity_to_metadata_file
+                dataset.write_dataset_identity_to_metadata_file(identity)
 
                 input_paths.reverse.each do |dir_path|
                     roby_info_yml_path = (dir_path + "info.yml")
@@ -315,9 +314,12 @@ module Syskit::Log
                     break unless valid
                 end
 
+                entry = Dataset::IdentityEntry.new(
+                    out_path, out_io.tell, out_io.string_digest
+                )
                 out_io.close
                 FileUtils.touch out_path.to_s, mtime: in_stat.mtime
-                { out_path => out_io.digest }
+                entry
             rescue StandardError
                 out_path&.unlink
                 index_path&.unlink
@@ -369,8 +371,8 @@ module Syskit::Log
             # It computes the log file's SHA256 digests
             #
             # @param [Array<Pathname>] paths the input roby log files
-            # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
-            #   pathname to the file's SHA256 digest
+            # @return [Dataset::IdentityEntry] the file's identity as used by the
+            #   dataset to identity itself
             def copy_roby_event_log_no_index(event_log_path)
                 in_reader, out_path, out_io, in_stat =
                     prepare_roby_event_log_copy(event_log_path)
@@ -392,9 +394,12 @@ module Syskit::Log
                     end
                 end
 
+                entry = Dataset::IdentityEntry.new(
+                    out_path, out_io.tell, out_io.string_digest
+                )
                 out_io.close
                 FileUtils.touch out_path.to_s, mtime: in_stat.mtime
-                { out_path => out_io.digest }
+                entry
             ensure
                 in_reader&.close
                 out_io&.close unless out_io&.closed?

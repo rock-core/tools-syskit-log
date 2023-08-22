@@ -5,8 +5,7 @@ module Syskit::Log
         module Repair # rubocop:disable Style/Documentation
             # Detect problems and perform repair steps on the given dataset
             def self.repair_dataset(
-                datastore, dataset,
-                dry_run: true, reporter: Pocolog::CLI::NullReporter.new
+                datastore, dataset, dry_run: true, reporter: NullReporter.new
             )
                 if dry_run
                     ops = find_all_repair_ops(datastore, dataset)

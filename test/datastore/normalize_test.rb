@@ -129,16 +129,15 @@ module Syskit::Log
                     it "optionally computes the sha256 digest of the generated file, "\
                        "without the prologue" do
                         logfile_pathname("normalized").mkdir
-                        result = normalize.normalize(
-                            [logfile_pathname("file0.0.log")], compute_sha256: true
-                        )
+                        result = normalize.normalize([logfile_pathname("file0.0.log")])
 
                         path = logfile_pathname("normalized", "task0::port.0.log")
                         actual_data = read_logfile("normalized", "task0::port.0.log")
                         expected = Digest::SHA256.hexdigest(
                             actual_data[Pocolog::Format::Current::PROLOGUE_SIZE..-1]
                         )
-                        assert_equal expected, result[path].hexdigest
+                        entry = result.find { |e| e.path == path }
+                        assert_equal expected, entry.sha2
                     end
                 end
                 it "detects followup streams" do
@@ -218,7 +217,7 @@ module Syskit::Log
             describe "#normalize_logfile" do
                 it "skips invalid files" do
                     write_logfile "file0.0.log", "INVALID"
-                    reporter = flexmock(Pocolog::CLI::NullReporter.new)
+                    reporter = flexmock(NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
                     ext = ".zst" if compress?
                     reporter
@@ -240,7 +239,7 @@ module Syskit::Log
                     end
                     file0_path = logfile_pathname("file0.0.log")
                     logfile_pathname("normalized").mkpath
-                    reporter = flexmock(Pocolog::CLI::NullReporter.new)
+                    reporter = flexmock(NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
                     ext = ".zst" if compress?
                     reporter.should_receive(:warn)

@@ -130,7 +130,11 @@ module Syskit::Log
                         dataset.dataset_path + "pocolog" + "task0::port.0.log#{file_ext}"
                     assert expected_file.exist?
                 end
-
+                it "calculates the dataset digest" do
+                    dataset = import.normalize_dataset([logfile_pathname])
+                    identity = dataset.compute_dataset_identity_from_files
+                    assert_equal dataset.digest, dataset.compute_dataset_digest(identity)
+                end
                 it "copies the text files" do
                     import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
                     assert logfile_pathname("test.txt").exist?

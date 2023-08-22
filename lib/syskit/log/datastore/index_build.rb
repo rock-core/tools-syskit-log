@@ -5,7 +5,7 @@ require "roby/droby/logfile/index"
 module Syskit::Log
     class Datastore
         def self.index_build(datastore, dataset,
-            force: false, reporter: Pocolog::CLI::NullReporter.new)
+            force: false, reporter: NullReporter.new)
             IndexBuild.new(datastore, dataset)
                       .rebuild(force: force, reporter: reporter)
         end
@@ -26,14 +26,14 @@ module Syskit::Log
             end
 
             # Rebuild this dataset's indexes
-            def rebuild(force: false, reporter: Pocolog::CLI::NullReporter.new)
+            def rebuild(force: false, reporter: NullReporter.new)
                 rebuild_pocolog_indexes(force: force, reporter: reporter)
                 rebuild_roby_index(force: force, reporter: reporter)
             end
 
             # Rebuild this dataset's indexes
             def self.rebuild(
-                datastore, dataset, force: false, reporter: Pocolog::CLI::NullReporter.new
+                datastore, dataset, force: false, reporter: NullReporter.new
             )
                 new(datastore, dataset).rebuild(force: force, reporter: reporter)
             end
@@ -43,9 +43,7 @@ module Syskit::Log
             # @param [Boolean] force if true, the indexes will all be rebuilt.
             #   Otherwise, only the indexes that do not seem to be up-to-date
             #   will.
-            def rebuild_pocolog_indexes(
-                force: false, reporter: Pocolog::CLI::NullReporter.new
-            )
+            def rebuild_pocolog_indexes(force: false, reporter: NullReporter.new)
                 pocolog_index_dir = (dataset.cache_path + "pocolog")
                 pocolog_index_dir.mkpath
                 if force
@@ -77,7 +75,7 @@ module Syskit::Log
             end
 
             # Rebuild the dataset's Roby index
-            def rebuild_roby_index(force: false, reporter: Pocolog::CLI::NullReporter.new)
+            def rebuild_roby_index(force: false, reporter: NullReporter.new)
                 dataset.cache_path.mkpath
                 event_logs = Syskit::Log.logfiles_in_dir(dataset.dataset_path)
                 event_logs = event_logs.find_all do |roby_log_path|
@@ -96,7 +94,7 @@ module Syskit::Log
             # @return [Boolean] true if the log file is valid and has a valid index,
             #   false otherwise (e.g. if the log file format is too old)
             def rebuild_roby_own_index(
-                roby_log_path, force: false, reporter: Pocolog::CLI::NullReporter.new
+                roby_log_path, force: false, reporter: NullReporter.new
             )
                 roby_index_path = dataset.roby_index_path(roby_log_path)
                 needs_rebuild =
@@ -126,7 +124,7 @@ module Syskit::Log
             #
             # Rebuild the Roby SQL index
             def rebuild_roby_sql_index(
-                roby_log_paths, force: false, reporter: Pocolog::CLI::NullReporter.new
+                roby_log_paths, force: false, reporter: NullReporter.new
             )
                 roby_index_path = dataset.cache_path + "roby.sql"
                 if roby_index_path.exist?

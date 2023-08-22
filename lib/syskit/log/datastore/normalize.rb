@@ -4,18 +4,17 @@ require "digest/sha2"
 
 module Syskit::Log
     class Datastore
+        # @return [Array<Dataset::IdentityEntry>]
         def self.normalize(
             paths,
-            output_path: paths.first.dirname + "normalized",
-            reporter: Pocolog::CLI::NullReporter.new,
-            compute_sha256: false, index_dir: output_path, delete_input: false,
+            output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
+            index_dir: output_path, delete_input: false,
             compress: false
         )
             Normalize.new(compress: compress).normalize(
                 paths,
                 output_path: output_path, reporter: reporter,
-                compute_sha256: compute_sha256, index_dir: index_dir,
-                delete_input: delete_input
+                index_dir: index_dir, delete_input: delete_input
             )
         end
 
@@ -89,6 +88,10 @@ module Syskit::Log
                     @interval_rt[1] = rt_time
                     @last_data_block_time = [rt_time, lg_time]
                 end
+
+                def string_digest
+                    Dataset.string_digest(@digest)
+                end
             end
 
             def initialize(compress: false)
@@ -100,11 +103,12 @@ module Syskit::Log
                 @compress
             end
 
+            # @return [Array<Dataset::IdentityEntry>]
             def normalize(
                 paths,
                 output_path: paths.first.dirname + "normalized",
-                index_dir: output_path, reporter: Pocolog::CLI::NullReporter.new,
-                compute_sha256: false, delete_input: false
+                index_dir: output_path, reporter: NullReporter.new,
+                delete_input: false
             )
                 output_path.mkpath
                 index_dir.mkpath
@@ -115,32 +119,21 @@ module Syskit::Log
                 result = logfile_groups.values.map do |files|
                     group_result = normalize_logfile_group(
                         files,
-                        output_path: output_path, index_dir: index_dir,
-                        reporter: reporter, compute_sha256: compute_sha256
+                        output_path: output_path, index_dir: index_dir, reporter: reporter
                     )
 
                     files.each(&:unlink) if delete_input
                     group_result
                 end
 
-                if compute_sha256
-                    result.inject { |a, b| a.merge(b) }
-                else
-                    result.flatten
-                end
+                result.flatten
             end
 
             def normalize_logfile_group(
-                files,
-                output_path:,
-                index_dir:, reporter: Pocolog::CLI::NullReporter.new,
-                compute_sha256: false
+                files, output_path:, index_dir:, reporter: NullReporter.new
             )
                 files.each do |logfile_path|
-                    normalize_logfile(
-                        logfile_path, output_path,
-                        reporter: reporter, compute_sha256: compute_sha256
-                    )
+                    normalize_logfile(logfile_path, output_path, reporter: reporter)
                 rescue Exception # rubocop:disable Lint/RescueException
                     reporter.warn(
                         "normalize: exception caught while processing #{logfile_path}"
@@ -152,14 +145,10 @@ module Syskit::Log
                 # index ... it makes little sense to write the index
                 write_pending_pocolog_indexes(index_dir) unless compress?
 
-                if compute_sha256
-                    result = {}
-                    out_files.each_value.map do |output|
-                        result[output.path] = output.digest
-                    end
-                    result
-                else
-                    out_files.each_value.map(&:path)
+                out_files.each_value.map do |output|
+                    Dataset::IdentityEntry.new(
+                        output.path, output.tell, output.string_digest
+                    )
                 end
             rescue Exception # rubocop:disable Lint/RescueException
                 reporter.warn(
@@ -236,10 +225,7 @@ module Syskit::Log
             # @return [(nil,Array<IO>),(Exception,Array<IO>)] returns a potential
             #   exception that has been raised during processing, and the IOs that
             #   have been touched by the call.
-            def normalize_logfile(
-                logfile_path, output_path,
-                reporter: Pocolog::CLI::NullReporter.new, compute_sha256: false
-            )
+            def normalize_logfile(logfile_path, output_path, reporter: NullReporter.new)
                 state = NormalizationState.new([], +"", [])
 
                 in_io = Syskit::Log.open_in_stream(logfile_path)
@@ -249,8 +235,7 @@ module Syskit::Log
 
                 reporter_offset = reporter.current
                 normalize_logfile_process_block_stream(
-                    output_path, state, in_block_stream,
-                    reporter: reporter, compute_sha256: compute_sha256
+                    output_path, state, in_block_stream, reporter: reporter
                 )
             rescue Pocolog::InvalidBlockFound => e
                 reporter.warn "#{logfile_path.basename} looks truncated or contains "\
@@ -263,7 +248,7 @@ module Syskit::Log
             end
 
             def normalize_logfile_process_block_stream(
-                output_path, state, in_block_stream, reporter:, compute_sha256:
+                output_path, state, in_block_stream, reporter:
             )
                 reporter_offset = reporter.current
 
@@ -271,8 +256,7 @@ module Syskit::Log
                 while (block_header = in_block_stream.read_next_block_header)
                     begin
                         normalize_logfile_process_block(
-                            output_path, state, block_header, in_block_stream.read_payload,
-                            compute_sha256: compute_sha256
+                            output_path, state, block_header, in_block_stream.read_payload
                         )
                     rescue InvalidFollowupStream => e
                         raise e, "while processing #{in_block_stream.io.path}: #{e.message}"
@@ -291,7 +275,7 @@ module Syskit::Log
             # Process a single in block and dispatch it into separate
             # normalized logfiles
             def normalize_logfile_process_block(
-                output_path, state, block_header, raw_payload, compute_sha256: false
+                output_path, state, block_header, raw_payload
             )
                 stream_index = block_header.stream_index
 
@@ -306,7 +290,7 @@ module Syskit::Log
                 elsif block_header.kind == Pocolog::STREAM_BLOCK
                     normalize_logfile_process_stream_block(
                         state, output_path, stream_index, block_header.raw_data,
-                        raw_payload, compute_sha256: compute_sha256
+                        raw_payload
                     )
                 else
                     normalize_logfile_process_data_block(
@@ -342,14 +326,12 @@ module Syskit::Log
             # Process a single stream definition block in
             # {#normalize_logfile_process_block}
             def normalize_logfile_process_stream_block(
-                state, output_path, stream_index, raw_data, raw_payload,
-                compute_sha256: false
+                state, output_path, stream_index, raw_data, raw_payload
             )
                 stream_block = Pocolog::BlockStream::StreamBlock.parse(raw_payload)
                 stream_block = normalize_stream_definition(stream_block)
                 output = create_or_reuse_out_io(
-                    output_path, raw_data, stream_block, state.control_blocks,
-                    compute_sha256: compute_sha256
+                    output_path, raw_data, stream_block, state.control_blocks
                 )
                 state.out_io_streams[stream_index] = output
 
@@ -393,8 +375,7 @@ module Syskit::Log
             end
 
             def create_or_reuse_out_io(
-                output_path, raw_header, stream_info, initial_blocks,
-                compute_sha256: false
+                output_path, raw_header, stream_info, initial_blocks
             )
                 basename = Streams.normalized_filename(stream_info.metadata)
                 ext = ".zst" if compress?
@@ -418,8 +399,7 @@ module Syskit::Log
                 raw_payload = stream_info.encode
                 raw_header[4, 4] = [raw_payload.size].pack("V")
                 initialize_out_file(
-                    out_file_path, stream_info, raw_header, raw_payload, initial_blocks,
-                    compute_sha256: compute_sha256
+                    out_file_path, stream_info, raw_header, raw_payload, initial_blocks
                 )
             end
 
@@ -429,16 +409,13 @@ module Syskit::Log
             #
             # @return [Output]
             def initialize_out_file(
-                out_file_path, stream_info, raw_header, raw_payload, initial_blocks,
-                compute_sha256: false
+                out_file_path, stream_info, raw_header, raw_payload, initial_blocks
             )
                 wio = Syskit::Log.open_out_stream(out_file_path)
 
                 Pocolog::Format::Current.write_prologue(wio)
-                if compute_sha256
-                    digest = Digest::SHA256.new
-                    wio = DigestIO.new(wio, digest)
-                end
+                digest = Digest::SHA256.new
+                wio = DigestIO.new(wio, digest)
 
                 output = Output.new(out_file_path, wio, stream_info, digest, wio.tell + initial_blocks.size)
                 output.write initial_blocks
