@@ -710,6 +710,18 @@ module Syskit::Log
                 end
             end
 
+            desc "validate [QUERY]", "validate that the given datasets "\
+                                     "match their expected identity"
+            def validate(*query)
+                store = open_store
+                reporter = create_reporter
+
+                resolve_datasets(store, *query, validate: false).each do |ds|
+                    reporter.info "validating #{ds.digest}"
+                    ds.validate_identity_metadata
+                end
+            end
+
             desc "repair [QUERY]", "verify and repair the given datasets"
             option "dry_run", type: :boolean, default: false
             def repair(*query)
