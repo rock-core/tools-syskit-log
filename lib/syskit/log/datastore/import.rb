@@ -1,24 +1,32 @@
 # frozen_string_literal: true
 
 require "pocolog/cli/tty_reporter"
+
 require "roby/droby/plan_rebuilder"
 require "syskit/log/datastore/normalize"
 
 module Syskit::Log
     class Datastore
-        def self.import(datastore, dataset_path, silent: false, force: false)
-            Import.new(datastore).import(dataset_path, silent: silent, force: force)
-        end
-
-        # Import dataset(s) in a datastore
+        # Importation of a raw dataset into a datastore
         class Import
             class DatasetAlreadyExists < RuntimeError; end
 
             BASENAME_IMPORT_TAG = ".syskit-pocolog-import"
 
-            attr_reader :datastore
-            def initialize(datastore)
-                @datastore = datastore
+            def initialize(
+                output_path,
+                cache_path: output_path, compress: false,
+                reporter: Pocolog::CLI::NullReporter.new
+            )
+                @reporter = reporter
+
+                @output_path = output_path
+                @cache_path = cache_path
+                @compress = compress
+            end
+
+            def compress?
+                @compress
             end
 
             # Compute the information about what will need to be done during the
@@ -45,28 +53,6 @@ module Syskit::Log
             # Default steps for the "include" argument to {#import} and
             # {#normalize_dataset}
             IMPORT_DEFAULT_STEPS = %I[pocolog roby text ignored].freeze
-
-            # Import a dataset into the store
-            #
-            # @param [Pathname] dir_path the input directory
-            # @return [Pathname] the directory of the imported dataset in the store
-            def import(
-                in_dataset_paths,
-                force: false, reporter: Pocolog::CLI::NullReporter.new,
-                include: IMPORT_DEFAULT_STEPS, delete_input: false
-            )
-                datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
-                    dataset = normalize_dataset(
-                        in_dataset_paths, core_path,
-                        cache_path: cache_path, reporter: reporter, include: include,
-                        delete_input: delete_input
-                    )
-                    validate_dataset_import(
-                        dataset, force: force, reporter: reporter
-                    )
-                    move_dataset_to_store(dataset)
-                end
-            end
 
             # Find if a directory has already been imported
             #
@@ -96,18 +82,19 @@ module Syskit::Log
             # @param [Pathname] dir_path the imported directory
             # @param [Dataset] dataset the normalized dataset, ready to be moved in
             #   the store
-            # @param [Boolean] force if force (the default), the method will fail if
-            #   the dataset is already in the store. Otherwise, it will erase the
-            #   existing dataset with the new one
             # @return [Dataset] the dataset at its final place
-            # @raise DatasetAlreadyExists if a dataset already exists with the same
-            #   ID than the new one and 'force' is false
-            def move_dataset_to_store(dataset)
+            def self.move_dataset_to_store(dataset, datastore)
+                if dataset.dataset_path == dataset.cache_path
+                    raise ArgumentError,
+                          "cannot move a dataset that has identical cache and data paths"
+                end
+
                 dataset_digest = dataset.digest
                 final_core_dir = datastore.core_path_of(dataset_digest)
                 FileUtils.mv dataset.dataset_path, final_core_dir
-                final_cache_dir = datastore.cache_path_of(dataset_digest)
-                if final_core_dir != final_cache_dir
+
+                if dataset.cache_path.exist?
+                    final_cache_dir = datastore.cache_path_of(dataset_digest)
                     FileUtils.mv dataset.cache_path, final_cache_dir
                 end
 
@@ -119,8 +106,9 @@ module Syskit::Log
             # @api private
             #
             # Verifies that the given data should be imported
-            def validate_dataset_import(
-                dataset, force: false, reporter: Pocolog::CLI::NullReporter.new
+            def self.validate_dataset_import(
+                datastore, dataset,
+                force: false, reporter: Pocolog::CLI::NullReporter.new
             )
                 return unless datastore.has?(dataset.digest)
 
@@ -160,84 +148,61 @@ module Syskit::Log
             # It does not import the result into the store
             #
             # @param [Pathname] dir_path the input directory
-            # @param [Pathname] output_dir_path the output directory
             # @return [Dataset] the resulting dataset
-            def normalize_dataset( # rubocop:disable Metrics/ParameterLists
-                dir_paths, output_dir_path,
-                cache_path: output_dir_path, reporter: CLI::NullReporter.new,
-                include: IMPORT_DEFAULT_STEPS, delete_input: false,
-                compress: false
+            def normalize_dataset(
+                dir_paths, include: IMPORT_DEFAULT_STEPS, delete_input: false
             )
                 pocolog_files, text_files, roby_event_logs, ignored_entries =
                     dir_paths.map { |dir| prepare_import(dir) }
                              .transpose.map(&:flatten)
 
                 if include.include?(:pocolog)
-                    reporter.info "Normalizing pocolog log files"
-                    normalize_pocolog_files(
-                        output_dir_path, pocolog_files,
-                        cache_path: cache_path, reporter: reporter,
-                        delete_input: delete_input, compress: compress
-                    )
+                    @reporter.info "Normalizing pocolog log files"
+                    normalize_pocolog_files(pocolog_files, delete_input: delete_input)
                 end
 
                 if include.include?(:roby)
-                    reporter.info "Copying the Roby event logs"
-                    normalize_roby_logs(
-                        roby_event_logs, output_dir_path,
-                        cache_path: cache_path, reporter: reporter
-                    )
+                    @reporter.info "Copying the Roby event logs"
+                    normalize_roby_logs(roby_event_logs)
                 elsif include.include?(:roby_no_index)
                     roby_event_logs.each do |log|
-                        copy_roby_event_log_no_index(
-                            output_dir_path, log, reporter: reporter
-                        )
+                        copy_roby_event_log_no_index(log)
                     end
                 end
 
                 if include.include?(:text)
-                    reporter.info "Copying #{text_files.size} text files"
-                    copy_text_files(output_dir_path, text_files)
+                    @reporter.info "Copying #{text_files.size} text files"
+                    copy_text_files(text_files)
                 end
 
                 if include.include?(:ignored)
-                    reporter.info "Copying #{ignored_entries.size} remaining "\
+                    @reporter.info "Copying #{ignored_entries.size} remaining "\
                                 "files and folders"
-                    copy_ignored_entries(output_dir_path, ignored_entries)
+                    copy_ignored_entries(ignored_entries)
                 end
 
-                import_generate_identity(
-                    dir_paths, output_dir_path, cache_path: cache_path
-                )
+                import_generate_identity(dir_paths)
             end
 
             # @api private
             #
             # Copy roby logs to the output path while generating a SQL index
-            def normalize_roby_logs(
-                roby_event_logs, output_dir_path, cache_path: output_dir_path,
-                reporter: CLI::NullReporter.new
-            )
-                roby_sql_index = RobySQLIndex::Index.create(cache_path + "roby.sql")
+            def normalize_roby_logs(roby_event_logs)
+                roby_sql_index = RobySQLIndex::Index.create(@cache_path + "roby.sql")
                 roby_event_logs.each do |roby_event_log|
-                    copy_roby_event_log(
-                        output_dir_path, roby_event_log, roby_sql_index,
-                        cache_path: cache_path, reporter: reporter
-                    )
+                    copy_roby_event_log(roby_event_log, roby_sql_index)
                 rescue TypeError, RuntimeError => e
-                    reporter.error "Failed to create index from Roby log file"
-                    reporter.error "The log file will still be part of the dataset. "\
+                    @reporter.error "Failed to create index from Roby log file"
+                    @reporter.error "The log file will still be part of the dataset. "\
                                     "You may attempt to re-create the cached version "\
                                     "later once what is likely to be a bug is fixed"
                     e.full_message.split("\n").each do |line|
-                        reporter.error line
+                        @reporter.error line
                     end
                     roby_sql_index.close
-                    FileUtils.rm_f cache_path + "roby.sql"
+                    FileUtils.rm_f @cache_path + "roby.sql"
 
-                    copy_roby_event_log_no_index(
-                        output_dir_path, roby_event_log, reporter: reporter
-                    )
+                    copy_roby_event_log_no_index(roby_event_log)
                 end
             end
 
@@ -247,23 +212,18 @@ module Syskit::Log
             #
             # It computes the log file's SHA256 digests
             #
-            # @param [Pathname] output_dir the target directory
             # @param [Array<Pathname>] paths the input pocolog log files
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest. The pathnames are
-            #   relative to output_dir
-            def normalize_pocolog_files( # rubocop:disable Metrics/ParameterLists
-                output_dir, files,
-                reporter: CLI::NullReporter.new, cache_path: output_dir,
-                delete_input: false, compress: false
-            )
+            #   relative to the output path given to {#initialize}
+            def normalize_pocolog_files(files, delete_input: false)
                 return {} if files.empty?
 
-                out_pocolog_dir = (output_dir + "pocolog")
+                out_pocolog_dir = (@output_path + "pocolog")
                 out_pocolog_dir.mkpath
-                out_pocolog_cache_dir = (cache_path + "pocolog")
+                out_pocolog_cache_dir = (@cache_path + "pocolog")
                 bytes_total = files.inject(0) { |s, p| s + p.size }
-                reporter.reset_progressbar(
+                @reporter.reset_progressbar(
                     "|:bar| :current_byte/:total_byte :eta (:byte_rate/s)",
                     total: bytes_total
                 )
@@ -271,24 +231,23 @@ module Syskit::Log
                 Syskit::Log::Datastore.normalize(
                     files,
                     output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
-                    reporter: reporter, compute_sha256: true, delete_input: delete_input,
-                    compress: compress
+                    compute_sha256: true, delete_input: delete_input,
+                    compress: @compress, reporter: @reporter
                 )
             ensure
-                reporter&.finish
+                @reporter.finish
             end
 
             # @api private
             #
             # Copy text files found in the input directory into the dataset
             #
-            # @param [Pathname] output_dir the target directory
             # @param [Array<Pathname>] paths the input text file paths
             # @return [void]
-            def copy_text_files(output_dir, files)
+            def copy_text_files(files)
                 return if files.empty?
 
-                out_text_dir = (output_dir + "text")
+                out_text_dir = (@output_path + "text")
                 out_text_dir.mkpath
                 FileUtils.cp files, out_text_dir
             end
@@ -296,10 +255,8 @@ module Syskit::Log
             # @api private
             #
             # Generate identity and metadata files at the end of an import
-            def import_generate_identity(
-                input_paths, output_dir_path, cache_path: output_dir_path
-            )
-                dataset = Dataset.new(output_dir_path, cache: cache_path)
+            def import_generate_identity(input_paths)
+                dataset = Dataset.new(@output_path, cache: @cache_path)
                 dataset.write_dataset_identity_to_metadata_file
 
                 input_paths.reverse.each do |dir_path|
@@ -320,22 +277,19 @@ module Syskit::Log
             #
             # It computes the log file's SHA256 digests
             #
-            # @param [Pathname] output_dir the target directory
             # @param [Array<Pathname>] paths the input roby log files
             # @param [Log::RobySQLIndex::Index] roby_sql_index the database in
             #   which essential Roby information is stored
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest
-            def copy_roby_event_log(
-                output_dir, event_log_path, roby_sql_index,
-                cache_path: output_dir, reporter: CLI::NullReporter.new
-            )
+            def copy_roby_event_log(event_log_path, roby_sql_index)
                 in_reader, out_path, out_io, digest, in_stat =
-                    prepare_roby_event_log_copy(output_dir, event_log_path)
+                    prepare_roby_event_log_copy(event_log_path)
                 index_path, index_io = create_roby_event_log_index(
-                    out_path, event_log_path, cache_path
+                    out_path, event_log_path
                 )
-                reporter.reset_progressbar(
+
+                @reporter.reset_progressbar(
                     "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
                 )
 
@@ -346,7 +300,7 @@ module Syskit::Log
                     valid = copy_roby_event_log_one_cycle(
                         in_reader, out_io, index_io,
                         rebuilder, roby_sql_index, in_stat,
-                        metadata_update, digest, reporter
+                        metadata_update, digest
                     )
                     break unless valid
                 end
@@ -370,10 +324,10 @@ module Syskit::Log
             def copy_roby_event_log_one_cycle( # rubocop:disable Metrics/ParameterLists
                 in_reader, out_io, index_io,
                 rebuilder, roby_sql_index, in_stat,
-                metadata_update, digest, reporter
+                metadata_update, digest
             )
                 pos = in_reader.tell
-                reporter.current = pos
+                @reporter.current = pos
                 chunk = in_reader.read_one_chunk
                 cycle = in_reader.decode_one_chunk(chunk)
 
@@ -384,8 +338,8 @@ module Syskit::Log
                 roby_sql_index.add_one_cycle(metadata_update, rebuilder, cycle)
                 true
             rescue Roby::DRoby::Logfile::TruncatedFileError => e
-                reporter.warn e.message
-                reporter.warn "truncating Roby log file"
+                @reporter.warn e.message
+                @reporter.warn "truncating Roby log file"
                 index_io.rewind
                 Roby::DRoby::Logfile::Index.write_header(
                     index_io, pos, in_stat.mtime
@@ -401,31 +355,27 @@ module Syskit::Log
             #
             # It computes the log file's SHA256 digests
             #
-            # @param [Pathname] output_dir the target directory
             # @param [Array<Pathname>] paths the input roby log files
             # @return [Hash<Pathname,Digest::SHA256>] a hash of the log file's
             #   pathname to the file's SHA256 digest
-            def copy_roby_event_log_no_index(
-                output_dir, event_log_path,
-                reporter: CLI::NullReporter.new
-            )
+            def copy_roby_event_log_no_index(event_log_path)
                 in_reader, out_path, out_io, digest, in_stat =
-                    prepare_roby_event_log_copy(output_dir, event_log_path)
-                reporter.reset_progressbar(
+                    prepare_roby_event_log_copy(event_log_path)
+                @reporter.reset_progressbar(
                     "#{event_log_path.basename} [:bar]", total: event_log_path.stat.size
                 )
 
                 until in_reader.eof?
                     begin
                         pos = in_reader.tell
-                        reporter.current = pos
+                        @reporter.current = pos
                         chunk = in_reader.read_one_chunk
 
                         Roby::DRoby::Logfile.write_entry(out_io, chunk)
                         digest.update(chunk)
                     rescue Roby::DRoby::Logfile::TruncatedFileError => e
-                        reporter.warn e.message
-                        reporter.warn "truncating Roby log file"
+                        @reporter.warn e.message
+                        @reporter.warn "truncating Roby log file"
                         break
                     end
                 end
@@ -443,9 +393,9 @@ module Syskit::Log
             # Initialize the IOs and objects needed for a roby event log copy
             #
             # Helper to both {#copy_roby_event_log} and {#copy_roby_event_log_no_index}
-            def prepare_roby_event_log_copy(output_dir, event_log_path)
+            def prepare_roby_event_log_copy(event_log_path)
                 i = 0
-                i += 1 while (target_path = output_dir + "roby-events.#{i}.log").file?
+                i += 1 while (target_path = @output_path + "roby-events.#{i}.log").file?
 
                 digest = Digest::SHA256.new
 
@@ -468,8 +418,8 @@ module Syskit::Log
             # @api private
             #
             # Create the index file to be filled by {#copy_roby_event_log}
-            def create_roby_event_log_index(out_path, in_stat, cache_path)
-                index_path = cache_path + out_path.basename.sub_ext(".idx")
+            def create_roby_event_log_index(out_path, in_stat)
+                index_path = @cache_path + out_path.basename.sub_ext(".idx")
                 index_io = index_path.open("w")
                 Roby::DRoby::Logfile::Index.write_header(
                     index_io, in_stat.size, in_stat.mtime
@@ -482,15 +432,14 @@ module Syskit::Log
             # Copy the entries in the input directory that are not recognized as a
             # dataset element
             #
-            # @param [Pathname] output_dir the target directory
             # @param [Array<Pathname>] paths the input elements, which can be
             #   pointing to both files and directories. Directories are copied
             #   recursively
             # @return [void]
-            def copy_ignored_entries(output_dir, paths)
+            def copy_ignored_entries(paths)
                 return if paths.empty?
 
-                out_ignored_dir = (output_dir + "ignored")
+                out_ignored_dir = (@output_path + "ignored")
                 out_ignored_dir.mkpath
                 FileUtils.cp_r paths, out_ignored_dir
             end

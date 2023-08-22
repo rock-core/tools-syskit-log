@@ -46,31 +46,77 @@ module Syskit::Log
             end
 
             describe "#import" do
-                it "imports a single dataset into the store" do
-                    incoming_path = datastore_path + "incoming" + "0"
-                    flexmock(datastore_m::Import)
-                        .new_instances.should_receive(:normalize_dataset)
-                        .with(
-                            [logfile_pathname], incoming_path + "core",
-                            on do |h|
-                                h[:cache_path] == incoming_path + "cache" &&
-                                h[:reporter].kind_of?(Pocolog::CLI::NullReporter)
-                            end
-                        )
-                        .once.pass_thru
-                    expected_dataset = lambda do |s|
-                        assert_equal incoming_path + "core", s.dataset_path
-                        assert_equal incoming_path + "cache", s.cache_path
-                        true
+                before do
+                    create_logfile "test.0.log" do
+                        create_logfile_stream "test",
+                                              metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
                     end
-                    flexmock(datastore_m::Import)
-                        .new_instances.should_receive(:move_dataset_to_store)
-                        .with(expected_dataset)
-                        .once.pass_thru
+                    create_roby_logfile("test-events.log")
+                end
+
+                it "imports a single dataset into the store" do
+                    flexmock(Syskit::Log::Datastore::Dataset)
+                        .new_instances.should_receive(:compute_dataset_digest)
+                        .and_return("ABCDEF")
 
                     call_cli("import", "--min-duration=0",
                              "--store", datastore_path.to_s, logfile_pathname.to_s,
                              silent: true)
+
+                    core_path = @datastore_path + "core" + "ABCDEF"
+                    assert core_path.exist?
+                    assert (core_path + "pocolog" + "task0::port.0.log").exist?
+                    assert (core_path + "roby-events.0.log").exist?
+                end
+
+                it "refuses to import if the normalized dataset's ID already exists" do
+                    flexmock(Syskit::Log::Datastore::Dataset)
+                        .new_instances.should_receive(:compute_dataset_digest)
+                        .and_return("ABCDEF")
+                    (datastore_path + "core" + "ABCDEF").mkpath
+                    flexmock(Syskit::Log::Datastore::Import)
+                        .should_receive(:move_dataset_to_store).never
+                    call_cli("import", "--min-duration=0",
+                             "--store", datastore_path.to_s, logfile_pathname.to_s,
+                             silent: true)
+                end
+
+                it "does import if the normalized dataset's ID already exists but "\
+                   "--force is given" do
+                    flexmock(Syskit::Log::Datastore::Dataset)
+                        .new_instances.should_receive(:compute_dataset_digest)
+                        .and_return("ABCDEF")
+                    call_cli("import", "--min-duration=0",
+                             "--store", datastore_path.to_s, logfile_pathname.to_s,
+                             "--force", silent: true)
+                    assert((datastore_path + "core" + "ABCDEF").exist?)
+                end
+
+                it "refuses to import if the dataset already has been imported" do
+                    flexmock(Syskit::Log::Datastore::Dataset)
+                        .new_instances.should_receive(:compute_dataset_digest)
+                        .and_return("ABCDEF")
+                    (datastore_path + "core" + "ABCDEF").mkpath
+                    flexmock(Syskit::Log::Datastore::Import).should_receive(:new).never
+                    (logfile_pathname + ".syskit-pocolog-import")
+                        .write(YAML.dump({ "digest" => "ABCDEF", "time" => Time.now }))
+                    call_cli("import", "--min-duration=0",
+                             "--store", datastore_path.to_s, logfile_pathname.to_s,
+                             silent: true)
+                end
+
+                it "does import if the dataset already has been imported "\
+                   "but --force is given" do
+                    flexmock(Syskit::Log::Datastore::Dataset)
+                        .new_instances.should_receive(:compute_dataset_digest)
+                        .and_return("ABCDEF")
+                    (logfile_pathname + ".syskit-pocolog-import")
+                        .write(YAML.dump({ "digest" => "ABCDEF", "time" => Time.now }))
+                    flexmock(Syskit::Log::Datastore::Import)
+                        .should_receive(:new).once.pass_thru
+                    call_cli("import", "--min-duration=0",
+                             "--store", datastore_path.to_s, logfile_pathname.to_s,
+                             "--force", silent: true)
                 end
 
                 it "optionally sets tags, description and arbitraty metadata" do
@@ -105,23 +151,21 @@ module Syskit::Log
                         incoming_path = datastore_path + "incoming" + "0"
                         flexmock(datastore_m::Import)
                             .new_instances.should_receive(:normalize_dataset)
-                            .with(
-                                [logfile_pathname], incoming_path + "core",
-                                on do |h|
-                                    h[:cache_path] == incoming_path + "cache" &&
-                                    h[:reporter].kind_of?(Pocolog::CLI::NullReporter)
-                                end
-                            )
+                            .with([logfile_pathname], Hash)
                             .once.pass_thru
                         expected_dataset = lambda do |s|
                             assert_equal incoming_path + "core", s.dataset_path
                             assert_equal incoming_path + "cache", s.cache_path
                             true
                         end
+                        expected_datastore = lambda do |s|
+                            assert_equal datastore_path, s.datastore_path
+                            true
+                        end
 
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
-                            .with(expected_dataset)
+                            .should_receive(:move_dataset_to_store)
+                            .with(expected_dataset, expected_datastore)
                             .once.pass_thru
 
                         call_cli("import", "--auto", "--min-duration=0",
@@ -144,7 +188,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .never
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
                         out, = capture_io do
                             call_cli("import", "--auto", "--min-duration=0",
@@ -168,7 +212,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             . once.pass_thru
                         capture_io do
                             call_cli("import", "--auto", "--min-duration=0", "--force",
@@ -192,7 +236,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
                         out, = capture_io do
                             call_cli("import", "--auto", "--min-duration=0",
@@ -220,7 +264,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .once.pass_thru
                         out, = capture_io do
                             call_cli("import", "--auto", "--force", "--min-duration=0",
@@ -238,7 +282,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
 
                         call_cli("import", "--auto", "--min-duration=1",
@@ -260,7 +304,7 @@ module Syskit::Log
                             .new_instances.should_receive(:normalize_dataset)
                             .once.pass_thru
                         flexmock(datastore_m::Import)
-                            .new_instances.should_receive(:move_dataset_to_store)
+                            .should_receive(:move_dataset_to_store)
                             .never
 
                         out, = capture_io do
@@ -317,32 +361,30 @@ module Syskit::Log
 
                 def expect_builds_indexes(datasets, roby: true, pocolog: true)
                     mock = flexmock(CLI::Datastore).new_instances
-                    reporter = Pocolog::CLI::NullReporter.new
-                    mock.should_receive(:create_reporter).and_return(reporter)
 
                     datasets.each do |ds|
                         mock.should_receive(:index_dataset)
                             .with(expected_store, expected_dataset(ds),
-                                  hsh({ roby: roby, pocolog: pocolog, reporter: reporter }))
+                                  hsh({ roby: roby, pocolog: pocolog }))
                             .once.pass_thru
                     end
                 end
 
                 it "runs the indexer on all datasets of the store if none are provided on the command line" do
                     expect_builds_indexes(%w[a b])
-                    call_cli("index", "--store", datastore_path.to_s)
+                    call_cli("index", "--store", datastore_path.to_s, "--silent")
                 end
                 it "runs the indexer on the datasets of the store specified on the command line" do
                     expect_builds_indexes(%w[a])
-                    call_cli("index", "--store", datastore_path.to_s, "a")
+                    call_cli("index", "--store", datastore_path.to_s, "a", "--silent")
                 end
                 it "only builds the pocolog indexes if --only pocolog is given" do
                     expect_builds_indexes(%w[a], roby: false)
-                    call_cli("index", "--store", datastore_path.to_s, "a", "--only", "pocolog")
+                    call_cli("index", "--store", datastore_path.to_s, "a", "--only", "pocolog", "--silent")
                 end
                 it "only builds the roby indexes if --only roby is given" do
                     expect_builds_indexes(%w[a], pocolog: false)
-                    call_cli("index", "--store", datastore_path.to_s, "a", "--only", "roby")
+                    call_cli("index", "--store", datastore_path.to_s, "a", "--only", "roby", "--silent")
                 end
             end
 

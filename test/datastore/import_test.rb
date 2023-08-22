@@ -15,8 +15,14 @@ module Syskit::Log
                 @datastore_path = root_path + "datastore"
                 datastore_path.mkpath
                 @datastore = Datastore.create(datastore_path)
-                @import = Import.new(datastore)
+
+                @output_path = @root_path + "normalize-out"
+                @cache_path = @root_path + "cache-out"
+                @output_path.mkpath
+                @cache_path.mkpath
+                @import = Import.new(@output_path, cache_path: @cache_path)
             end
+
             after do
                 root_path.rmtree
             end
@@ -69,11 +75,16 @@ module Syskit::Log
                 end
             end
 
-            describe "#import" do
+            describe "#normalize_dataset" do
                 before do
                     create_logfile "test.0.log" do
-                        create_logfile_stream "test",
-                                              metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
+                        create_logfile_stream(
+                            "test",
+                            metadata: {
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port"
+                            }
+                        )
                     end
                     create_roby_logfile("test-events.log")
                     FileUtils.touch logfile_pathname("test.txt")
@@ -86,75 +97,38 @@ module Syskit::Log
                     Pocolog::CLI::TTYReporter.new("", color: false, progress: false)
                 end
 
-                it "can import an empty folder" do
+                it "normalizes an empty folder" do
                     Dir.mktmpdir do |dir|
-                        import.import([Pathname.new(dir)])
+                        import.normalize_dataset([Pathname.new(dir)])
                     end
                 end
 
-                it "moves the results under the dataset's ID" do
-                    flexmock(Dataset).new_instances.should_receive(:compute_dataset_digest)
-                                     .and_return("ABCDEF")
-                    import_dir = import.import([logfile_pathname]).dataset_path
-                    assert_equal(datastore_path + "core" + "ABCDEF", import_dir)
-                end
-                it "raises if the target dataset ID already exists" do
-                    flexmock(Dataset).new_instances.should_receive(:compute_dataset_digest)
-                                     .and_return("ABCDEF")
-                    (datastore_path + "core" + "ABCDEF").mkpath
-                    assert_raises(Import::DatasetAlreadyExists) do
-                        import.import([logfile_pathname])
-                    end
-                end
-                it "replaces the current dataset by the new one if the ID already exists but 'force' is true" do
-                    digest = "ABCDEF"
-                    flexmock(Dataset)
-                        .new_instances.should_receive(:compute_dataset_digest)
-                        .and_return(digest)
-                    (datastore_path + "core" + digest).mkpath
-                    FileUtils.touch(datastore_path + "core" + digest + "file")
-                    out, = capture_io do
-                        import.import(
-                            [logfile_pathname], reporter: tty_reporter, force: true
-                        )
-                    end
-                    assert_match(/Replacing existing dataset #{digest} with new one/, out)
-                    assert !(datastore_path + digest + "file").exist?
-                end
-                it "reports its progress" do
-                    # This is not really a unit test. It just exercises the code
-                    # path that reports progress, but checks nothing except the lack
-                    # of exceptions
-                    capture_io do
-                        import.import([logfile_pathname])
-                    end
-                end
                 it "normalizes the pocolog logfiles" do
-                    incoming_path = datastore_path + "incoming" + "0"
                     expected_normalize_args = hsh(
-                        output_path: incoming_path + "core" + "pocolog",
-                        index_dir: incoming_path + "cache" + "pocolog"
+                        output_path: @output_path + "pocolog",
+                        index_dir: @cache_path + "pocolog"
                     )
 
                     flexmock(Syskit::Log::Datastore)
                         .should_receive(:normalize)
                         .with([logfile_pathname("test.0.log")], expected_normalize_args)
                         .once.pass_thru
-                    dataset = import.import([logfile_pathname])
+                    dataset = import.normalize_dataset([logfile_pathname])
                     assert (dataset.dataset_path + "pocolog" + "task0::port.0.log").exist?
                 end
+
                 it "copies the text files" do
-                    import_dir = import.import([logfile_pathname]).dataset_path
+                    import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
                     assert logfile_pathname("test.txt").exist?
                     assert (import_dir + "text" + "test.txt").exist?
                 end
                 it "copies the roby log files into roby-events.N.log" do
-                    import_dir = import.import([logfile_pathname]).dataset_path
+                    import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
                     assert logfile_pathname("test-events.log").exist?
                     assert (import_dir + "roby-events.0.log").exist?
                 end
                 it "copies the unrecognized files" do
-                    import_dir = import.import([logfile_pathname]).dataset_path
+                    import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
 
                     assert logfile_pathname("not_recognized_file").exist?
                     assert logfile_pathname("not_recognized_dir").exist?
@@ -169,7 +143,7 @@ module Syskit::Log
                     logfile_pathname("info.yml").open("w") do |io|
                         YAML.dump(roby_metadata, io)
                     end
-                    dataset = import.import([logfile_pathname])
+                    dataset = import.normalize_dataset([logfile_pathname])
                     assert_equal({ "roby:app_name" => Set["test"],
                                    "timestamp" => Set[0],
                                    "digest" => Set[dataset.digest] }, dataset.metadata)
@@ -184,7 +158,7 @@ module Syskit::Log
 
                     imported = nil
                     _out, err = capture_io do
-                        imported = import.import([logfile_pathname])
+                        imported = import.normalize_dataset([logfile_pathname])
                     end
                     assert_match(/failed to load Roby metadata/, err)
                     assert_equal({ "timestamp" => Set[0], "digest" => Set[imported.digest] },
@@ -201,7 +175,7 @@ module Syskit::Log
                                     mtime: mtime
                     imported = nil
                     capture_io do
-                        imported = import.import([logfile_pathname])
+                        imported = import.normalize_dataset([logfile_pathname])
                     end
 
                     log_path = imported.dataset_path + "roby-events.0.log"
@@ -226,7 +200,7 @@ module Syskit::Log
                         .should_receive(:add_one_cycle).and_raise(RuntimeError)
                     imported = nil
                     capture_io do
-                        imported = import.import([logfile_pathname])
+                        imported = import.normalize_dataset([logfile_pathname])
                     end
 
                     log_path = imported.dataset_path + "roby-events.0.log"
@@ -245,7 +219,7 @@ module Syskit::Log
                                     mtime: mtime
                     imported = nil
                     capture_io do
-                        imported = import.import([logfile_pathname])
+                        imported = import.normalize_dataset([logfile_pathname])
                     end
 
                     log_path = imported.dataset_path + "roby-events.0.log"
@@ -257,6 +231,39 @@ module Syskit::Log
 
                     index = Roby::DRoby::Logfile::Index.read(index_path)
                     assert index.valid_for?(log_path)
+                end
+            end
+
+            describe ".move_dataset_to_store" do
+                it "moves the results under the dataset's ID" do
+                    dataset = Dataset.new(
+                        @output_path,
+                        cache: @cache_path, digest: "ABCDEF"
+                    )
+                    dataset = Import.move_dataset_to_store(dataset, @datastore)
+                    assert_equal(
+                        datastore_path + "core" + "ABCDEF",
+                        dataset.dataset_path
+                    )
+                end
+
+                it "raises if the dataset's core and cache paths are the same" do
+                    dataset = Dataset.new(@output_path, digest: "ABCDEF")
+                    e = assert_raises(ArgumentError) do
+                        Import.move_dataset_to_store(dataset, @datastore)
+                    end
+                    assert_match(
+                        /cannot move a dataset that has identical cache and data paths/,
+                        e.message
+                    )
+                end
+
+                it "ignores if the cache path does not exist" do
+                    dataset = Dataset.new(
+                        @output_path,
+                        cache: Pathname("/does/not/exist"), digest: "ABCDEF"
+                    )
+                    Import.move_dataset_to_store(dataset, @datastore)
                 end
             end
 
