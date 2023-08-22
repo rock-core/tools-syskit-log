@@ -18,6 +18,23 @@ module Syskit::Log
                 end
             end
 
+            def dataset_open(*names, mode:, compress: compress?)
+                path = dataset_pathname(*names, compress: compress)
+                io = path.open(mode)
+                if path.extname == ".zst"
+                    io = ZstdIO.new(
+                        io, read: %w[r a].include?(mode), write: %w[w a].include?(mode)
+                    )
+                end
+                return io unless block_given?
+
+                begin
+                    yield(io)
+                ensure
+                    io.close
+                end
+            end
+
             before do
                 @root_path = Pathname.new(Dir.mktmpdir)
                 @store = Datastore.new(root_path)
@@ -34,10 +51,10 @@ module Syskit::Log
                                           metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
                 end
                 FileUtils.touch dataset_pathname("text", "test.txt")
-                dataset_pathname("roby-events.0.log").open("w") { |io| io.write "ROBY" }
-                FileUtils.touch dataset_pathname("ignored", "not_recognized_file")
+                dataset_open("roby-events.0.log", mode: "w") { |io| io.write "ROBY" }
+                dataset_open("ignored", "not_recognized_file", mode: "w").close
                 dataset_pathname("ignored", "not_recognized_dir", compress: false).mkpath
-                FileUtils.touch dataset_pathname("ignored", "not_recognized_dir", "test")
+                dataset_open("ignored", "not_recognized_dir", "test", mode: "w").close
             end
             after do
                 root_path.rmtree
@@ -144,16 +161,25 @@ module Syskit::Log
 
             describe "#compute_dataset_identity_from_files" do
                 it "returns a list of entries with full path, size and sha256 digest" do
-                    roby_path = dataset_pathname("roby-events.0.log")
-                    roby_digest = Digest::SHA256.hexdigest(roby_path.read)
-                    pocolog_path = dataset_pathname("pocolog", "task0::port.0.log")
+                    roby_path = dataset_path + "roby-events.0.log"
+                    roby_data = dataset_open("roby-events.0.log", mode: "r", &:read)
+                    roby_digest = Digest::SHA256.hexdigest(roby_data)
+                    pocolog_path = dataset_path + "pocolog" + "task0::port.0.log"
+                    pocolog_data =
+                        dataset_open("pocolog", "task0::port.0.log", mode: "r", &:read)
                     pocolog_digest = Digest::SHA256.hexdigest(
-                        pocolog_path.read[Pocolog::Format::Current::PROLOGUE_SIZE..-1]
+                        pocolog_data[Pocolog::Format::Current::PROLOGUE_SIZE..-1]
                     )
                     expected = Set[
-                        Dataset::IdentityEntry.new(roby_path, roby_path.size, roby_digest),
-                        Dataset::IdentityEntry.new(pocolog_path, pocolog_path.size, pocolog_digest)]
-                    assert_equal expected, dataset.compute_dataset_identity_from_files.to_set
+                        Dataset::IdentityEntry.new(
+                            roby_path, roby_data.size, roby_digest
+                        ),
+                        Dataset::IdentityEntry.new(
+                            pocolog_path, pocolog_data.size, pocolog_digest
+                        )
+                    ]
+                    assert_equal expected,
+                                 dataset.compute_dataset_identity_from_files.to_set
                 end
             end
 
@@ -310,12 +336,14 @@ module Syskit::Log
                     digest = dataset.compute_dataset_digest(entries)
 
                     path = entries[0].path
+                    compressed_path = path.dirname + "#{path.basename}.zst"
                     if compress?
-                        Syskit::Log.decompress(path, path.sub_ext(""))
+                        Syskit::Log.decompress(compressed_path, path)
+                        compressed_path.unlink
                     else
-                        Syskit::Log.compress(path, path.dirname + "#{path.basename}.zst")
+                        Syskit::Log.compress(path, compressed_path)
+                        path.unlink
                     end
-                    path.unlink
 
                     new_entries = dataset.compute_dataset_identity_from_files
                     assert_equal digest, dataset.compute_dataset_digest(new_entries)
@@ -367,13 +395,13 @@ module Syskit::Log
                     end
                 end
                 it "raises if a new pocolog log file is added on disk" do
-                    FileUtils.touch dataset_pathname("pocolog", "some::Task.0.log")
+                    dataset_open("pocolog", "some::Task.0.log", mode: "w").close
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.weak_validate_identity_metadata
                     end
                 end
                 it "raises if a new Roby log file is added on disk" do
-                    FileUtils.touch dataset_pathname("roby-events.1.log")
+                    dataset_open("roby-events.1.log", mode: "w").close
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.weak_validate_identity_metadata
                     end
@@ -394,25 +422,25 @@ module Syskit::Log
                     end
                 end
                 it "raises if a new pocolog log file is added on disk" do
-                    FileUtils.touch dataset_pathname("pocolog", "some::Task.0.log")
+                    dataset_open("pocolog", "some::Task.0.log", mode: "w").close
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
                 end
                 it "raises if a new Roby log file is added on disk" do
-                    FileUtils.touch dataset_pathname("roby-events.1.log")
+                    dataset_open("roby-events.1.log", mode: "w").close
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
                 end
                 it "raises if a file size mismatches" do
-                    dataset_pathname("roby-events.0.log").open("a") { |io| io.write("10") }
+                    dataset_open("roby-events.0.log", mode: "a") { |io| io.write("10") }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end
                 end
                 it "raises if the contents of a file changed" do
-                    dataset_pathname("roby-events.0.log").open("a") { |io| io.seek(5); io.write("0") }
+                    dataset_open("roby-events.0.log", mode: "w") { |io| io.write "ROBA" }
                     assert_raises(Dataset::InvalidIdentityMetadata) do
                         dataset.validate_identity_metadata
                     end

@@ -74,6 +74,10 @@ module Syskit::Log
                     @wio.close
                 end
 
+                def closed?
+                    @wio.closed?
+                end
+
                 def create_block_stream
                     Pocolog::BlockStream.new(@wio.dup)
                 end
@@ -145,6 +149,7 @@ module Syskit::Log
                 # index ... it makes little sense to write the index
                 write_pending_pocolog_indexes(index_dir) unless compress?
 
+                out_files.each_value(&:close)
                 out_files.each_value.map do |output|
                     Dataset::IdentityEntry.new(
                         output.path, output.tell, output.string_digest
@@ -157,7 +162,7 @@ module Syskit::Log
                 out_files.each_value { _1.path.unlink }
                 raise
             ensure
-                out_files.each_value(&:close)
+                out_files.each_value { _1.close unless _1.closed? }
                 out_files.clear
             end
 
@@ -417,7 +422,7 @@ module Syskit::Log
                 digest = Digest::SHA256.new
                 wio = DigestIO.new(wio, digest)
 
-                output = Output.new(out_file_path, wio, stream_info, digest, wio.tell + initial_blocks.size)
+                output = Output.new(out_file_path, wio, stream_info, digest, wio.tell)
                 output.write initial_blocks
                 output.write raw_header[0, 2]
                 output.write ZERO_BYTE

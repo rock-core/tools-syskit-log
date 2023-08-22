@@ -50,24 +50,43 @@ module Syskit
                       "in its entirety"
             end
 
-            # Read at most count bytes
-            def read(count)
+            # Read at most count bytes of decompressed data
+            def read(count = nil)
+                return read_all unless count
+
+                eof_reached = read_in_buffer(count)
+
+                ret = @buffer[0, count]
+                @tell += ret.size
+                @buffer = @buffer[ret.size..-1] || +""
+                ret if !ret.empty? || !eof_reached
+            end
+
+            # @api private
+            #
+            # Read at least this many bytes of decompressed data in the internal buffer
+            def read_in_buffer(count)
                 while @buffer.size < count
                     break unless (data = @io.read(DECOMPRESS_READ_SIZE))
 
                     @buffer.concat(@zstd_in.decompress(data))
                 end
 
-                ret = @buffer[0, count]
-                @tell += ret.size
-                @buffer = @buffer[ret.size..-1] || +""
-                ret if !ret.empty? || data
+                !data
+            end
+
+            # @api private
+            #
+            # Read and return all file data
+            def read_all
+                Zstd.decompress(@io.read)
             end
 
             # Write this data in the compressed stream
             def write(buffer)
                 raise ArgumentError, "not opened for writing" unless @zstd_out
 
+                @tell += buffer.size
                 compressed = @zstd_out.compress(buffer)
                 @io.write(compressed)
             end

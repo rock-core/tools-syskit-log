@@ -382,10 +382,12 @@ module Syskit::Log
 
                 important_files = each_important_file.to_set
                 dataset_identity.each do |entry|
-                    next if important_files.delete?(entry.path)
+                    path = entry.path
+                    next if important_files.delete?(path)
+                    next if important_files.delete?(path.dirname + "#{path.basename}.zst")
 
                     raise InvalidIdentityMetadata,
-                          "file #{entry.path} is listed in the identity "\
+                          "file #{path} is listed in the identity "\
                           "metadata, but is not present on disk. Try "\
                           "`syskit ds repair`"
                 end
