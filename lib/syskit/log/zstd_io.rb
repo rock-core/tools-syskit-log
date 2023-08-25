@@ -14,6 +14,7 @@ module Syskit
                 @io = io
                 @mode_read = read
                 @mode_write = write
+                @in_buffer = +"" if read
                 rewind
             end
 
@@ -67,7 +68,7 @@ module Syskit
             # Read at least this many bytes of decompressed data in the internal buffer
             def read_in_buffer(count)
                 while @buffer.size < count
-                    break unless (data = @io.read(DECOMPRESS_READ_SIZE))
+                    break unless (data = @io.read(DECOMPRESS_READ_SIZE, @in_buffer))
 
                     @buffer.concat(@zstd_in.decompress(data))
                 end
