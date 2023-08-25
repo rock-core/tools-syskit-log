@@ -146,6 +146,10 @@ module Syskit::Log
                 assert @subject
             end
 
+            def compress?
+                false
+            end
+
             task_streams_behavior(::Pocolog::DataStream)
 
             describe "#each_port_stream" do

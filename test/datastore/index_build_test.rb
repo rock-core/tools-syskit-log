@@ -12,6 +12,7 @@ module Syskit::Log
                 @datastore = Datastore.create(logfile_pathname("datastore"))
                 @dataset = create_dataset "TEST"
                 @index_build = IndexBuild.new(datastore, dataset)
+                move_logfile_path (@dataset.dataset_path + "pocolog").to_s
             end
 
             def dataset_path
@@ -31,6 +32,10 @@ module Syskit::Log
                         )
                         write_logfile_sample Time.now, Time.now, 10
                     end
+
+                    refute(
+                        (dataset.cache_path + "pocolog" + "task::port.0.idx").exist?
+                    )
                 end
 
                 it "does nothing if the dataset has no pocolog streams" do
@@ -71,12 +76,30 @@ module Syskit::Log
                         (dataset.cache_path + "pocolog" + "task::port.0.idx").read
                     )
                 end
-                it "creates a new index file if none exists" do
+                it "creates a new index file if none exists "\
+                   "and the source file is uncompressed" do
                     flexmock(Pocolog::Format::Current)
                         .should_receive(:rebuild_index_file)
                         .once.pass_thru
-                    index_build.rebuild_pocolog_indexes(force: true)
+                    # Force decompression but - unlike open_logfile we use in the other
+                    # tests - does not generate an index. Is a no-op in the
+                    # not-compressed case
+                    Syskit::Log.decompressed(
+                        logfile_pathname("task::port.0.log"),
+                        dataset.cache_path + "pocolog"
+                    )
+                    index_build.rebuild_pocolog_indexes
                     assert(
+                        (dataset.cache_path + "pocolog" + "task::port.0.idx").exist?
+                    )
+                end
+                it "does nothing if the source file has not be uncompressed yet" do
+                    skip unless compress?
+
+                    flexmock(Pocolog::Format::Current)
+                        .should_receive(:rebuild_index_file).never
+                    index_build.rebuild_pocolog_indexes
+                    refute(
                         (dataset.cache_path + "pocolog" + "task::port.0.idx").exist?
                     )
                 end

@@ -6,6 +6,10 @@ module Syskit::Log
     describe Streams do
         subject { Streams.new }
 
+        def compress?
+            false
+        end
+
         describe "#add_file" do
             it "adds the file's streams to the object" do
                 create_logfile "test.0.log" do

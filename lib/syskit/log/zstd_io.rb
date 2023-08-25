@@ -50,33 +50,60 @@ module Syskit
                       "in its entirety"
             end
 
-            # Read at most count bytes
-            def read(count)
+            # Read at most count bytes of decompressed data
+            def read(count = nil)
+                return read_all unless count
+
+                eof_reached = read_in_buffer(count)
+
+                ret = @buffer[0, count]
+                @tell += ret.size
+                @buffer = @buffer[ret.size..-1] || +""
+                ret if !ret.empty? || !eof_reached
+            end
+
+            # @api private
+            #
+            # Read at least this many bytes of decompressed data in the internal buffer
+            def read_in_buffer(count)
                 while @buffer.size < count
                     break unless (data = @io.read(DECOMPRESS_READ_SIZE))
 
                     @buffer.concat(@zstd_in.decompress(data))
                 end
 
-                ret = @buffer[0, count]
-                @tell += ret.size
-                @buffer = @buffer[ret.size..-1] || +""
-                ret
+                !data
+            end
+
+            # @api private
+            #
+            # Read and return all file data
+            def read_all
+                Zstd.decompress(@io.read)
             end
 
             # Write this data in the compressed stream
             def write(buffer)
                 raise ArgumentError, "not opened for writing" unless @zstd_out
 
+                @tell += buffer.size
                 compressed = @zstd_out.compress(buffer)
                 @io.write(compressed)
             end
 
             # Seek in the IO. Can only seek forward
-            def seek(pos)
-                raise ArgumentError, "cannot seek backwards" if pos < @tell
+            def seek(pos, mode = IO::SEEK_SET)
+                if mode == IO::SEEK_SET
+                    raise ArgumentError, "cannot seek backwards" if pos < @tell
 
-                read(pos - @tell)
+                    read(pos - @tell)
+                elsif mode == IO::SEEK_CUR
+                    raise ArgumentError, "cannot seek backwards" if pos < 0
+
+                    read(pos)
+                else
+                    raise ArgumentError, "seek mode #{mode} not supported"
+                end
             end
 
             def flush

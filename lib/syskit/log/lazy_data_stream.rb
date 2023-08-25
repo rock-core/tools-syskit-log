@@ -82,7 +82,10 @@ module Syskit::Log
         def syskit_eager_load
             return @pocolog_stream if @pocolog_stream
 
-            file = Pocolog::Logfiles.open(path, index_dir: index_dir)
+            file = Pocolog::Logfiles.open(
+                Syskit::Log.decompressed(path, index_dir).to_s,
+                index_dir: index_dir
+            )
             @pocolog_stream = file.streams.first
         end
 

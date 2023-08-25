@@ -119,6 +119,10 @@ module Syskit::Log
                     @streams = @all_streams.find_task_by_name("task")
                 end
 
+                def compress?
+                    false
+                end
+
                 common_behavior
             end
 

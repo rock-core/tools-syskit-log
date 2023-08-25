@@ -145,6 +145,10 @@ module Syskit::Log
         end
 
         describe "from_dir" do
+            def compress?
+                false
+            end
+
             def load_logfiles_as_stream
                 Streams.from_dir(logfile_pathname)
             end

@@ -12,10 +12,6 @@ module Syskit::Log
                 @normalize = Normalize.new(compress: compress?)
             end
 
-            def compress?
-                ENV["SYSKIT_LOG_TEST_COMPRESS"] == "1"
-            end
-
             describe "#normalize" do
                 before do
                     create_logfile "file0.0.log" do
@@ -29,14 +25,13 @@ module Syskit::Log
                 it "splits the file into a one-file-per-stream scheme" do
                     logfile_pathname("normalized").mkdir
                     normalize.normalize([logfile_pathname("file0.0.log")])
-                    normalized_dir = logfile_pathname("normalized")
                     stream = open_logfile_stream(
-                        normalized_dir + "task0::port.0.log", "task0.port"
+                        ["normalized", "task0::port.0.log"], "task0.port"
                     )
                     assert_equal [[base_time + 2, base_time + 20, 2]],
                                  stream.samples.to_a
                     stream = open_logfile_stream(
-                        normalized_dir + "task1::port.0.log", "task1.port"
+                        ["normalized", "task1::port.0.log"], "task1.port"
                     )
                     assert_equal [[base_time + 1, base_time + 10, 1]],
                                  stream.samples.to_a
@@ -45,14 +40,13 @@ module Syskit::Log
                     logfile_pathname("normalized").mkdir
                     input_path = logfile_pathname("file0.0.log")
                     normalize.normalize([input_path], delete_input: true)
-                    normalized_dir = logfile_pathname("normalized")
                     stream = open_logfile_stream(
-                        normalized_dir + "task0::port.0.log", "task0.port"
+                        ["normalized", "task0::port.0.log"], "task0.port"
                     )
                     assert_equal [[base_time + 2, base_time + 20, 2]],
                                  stream.samples.to_a
                     stream = open_logfile_stream(
-                        normalized_dir + "task1::port.0.log", "task1.port"
+                        ["normalized", "task1::port.0.log"], "task1.port"
                     )
                     assert_equal [[base_time + 1, base_time + 10, 1]],
                                  stream.samples.to_a
@@ -69,16 +63,20 @@ module Syskit::Log
                     assert_raises(e) do
                         normalize.normalize([input_path], delete_input: true)
                     end
-                    normalized_dir = logfile_pathname("normalized")
-                    refute((normalized_dir + "task0::port.0.log").exist?)
-                    refute((normalized_dir + "task1::port.0.log").exist?)
+                    refute logfile_pathname("normalized", "task0::port.0.log").exist?
+                    refute logfile_pathname("normalized", "task1::port.0.log").exist?
                     assert input_path.exist?
                 end
                 it "does delete unrelated input files if they have been already "\
                    "processed" do
                     logfile_pathname("normalized").mkdir
                     create_logfile "file1.0.log" do
-                        create_logfile_stream "stream2", metadata: Hash["rock_task_name" => "task2", "rock_task_object_name" => "port"]
+                        create_logfile_stream(
+                            "stream2", metadata: {
+                                "rock_task_name" => "task2",
+                                "rock_task_object_name" => "port"
+                            }
+                        )
                         write_logfile_sample base_time + 2, base_time + 20, 2
                     end
                     input0_path = logfile_pathname("file0.0.log")
@@ -92,8 +90,8 @@ module Syskit::Log
                     assert_raises(e) do
                         normalize.normalize([input0_path, input1_path], delete_input: true)
                     end
-                    assert(logfile_pathname("normalized", "task0::port.0.log").exist?)
-                    refute(logfile_pathname("normalized", "task2::port.0.log").exist?)
+                    assert logfile_pathname("normalized", "task0::port.0.log").exist?
+                    refute logfile_pathname("normalized", "task2::port.0.log").exist?
                     refute input0_path.exist?
                     assert input1_path.exist?
                 end
@@ -105,9 +103,8 @@ module Syskit::Log
                     flexmock(Pocolog::Logfiles).new_instances
                                                .should_receive(:rebuild_and_load_index)
                                                .never
-                    normalized_dir = logfile_pathname("normalized")
-                    open_logfile_stream (normalized_dir + "task0::port.0.log"), "task0.port"
-                    open_logfile_stream (normalized_dir + "task1::port.0.log"), "task1.port"
+                    open_logfile_stream ["normalized", "task0::port.0.log"], "task0.port"
+                    open_logfile_stream ["normalized", "task1::port.0.log"], "task1.port"
                 end
                 it "allows to specify the cache directory" do
                     skip if compress?
@@ -121,9 +118,8 @@ module Syskit::Log
                         .new_instances
                         .should_receive(:rebuild_and_load_index)
                         .never
-                    normalized_dir = logfile_pathname("normalized")
-                    open_logfile_stream (normalized_dir + "task0::port.0.log"), "task0.port", index_dir: index_dir
-                    open_logfile_stream (normalized_dir + "task1::port.0.log"), "task1.port", index_dir: index_dir
+                    open_logfile_stream ["normalized", "task0::port.0.log"], "task0.port", index_dir: index_dir
+                    open_logfile_stream ["normalized", "task1::port.0.log"], "task1.port", index_dir: index_dir
                 end
                 describe "digest generation" do
                     it "optionally computes the sha256 digest of the generated file, "\
@@ -145,9 +141,12 @@ module Syskit::Log
                         create_logfile_stream "stream0", metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
                         write_logfile_sample base_time + 3, base_time + 30, 3
                     end
-                    normalize.normalize([logfile_pathname("file0.0.log"), logfile_pathname("file0.1.log")])
-                    normalized_dir = logfile_pathname("normalized")
-                    stream = open_logfile_stream (normalized_dir + "task0::port.0.log"), "task0.port"
+                    normalize.normalize(
+                        [logfile_pathname("file0.0.log"), logfile_pathname("file0.1.log")]
+                    )
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
                     assert_equal [[base_time + 2, base_time + 20, 2],
                                   [base_time + 3, base_time + 30, 3]], stream.samples.to_a
                 end
@@ -196,22 +195,6 @@ module Syskit::Log
                         end
                     end
                 end
-                it "deletes newly created files if the initialization of a new file fails" do
-                    create_logfile "file0.1.log" do
-                        create_logfile_stream "stream0",
-                                              metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
-                        write_logfile_sample base_time + 3, base_time + 30, 3
-                    end
-                    error_class = Class.new(RuntimeError)
-                    flexmock(File).new_instances.should_receive(:write).and_raise(error_class)
-                    _out, = capture_io do
-                        assert_raises(error_class) do
-                            normalize.normalize([logfile_pathname("file0.0.log"), logfile_pathname("file0.1.log")])
-                        end
-                    end
-                    normalized_dir = logfile_pathname("normalized")
-                    refute (normalized_dir + "task0::port.0.log").exist?
-                end
             end
 
             describe "#normalize_logfile" do
@@ -232,8 +215,12 @@ module Syskit::Log
                 end
                 it "handles truncated files" do
                     create_logfile "file0.0.log", truncate: 1 do
-                        create_logfile_stream "stream0",
-                                              metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
+                        create_logfile_stream(
+                            "stream0", metadata: {
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port"
+                            }
+                        )
                         write_logfile_sample base_time + 3, base_time + 30, 3
                         write_logfile_sample base_time + 4, base_time + 40, 4
                     end
@@ -250,57 +237,11 @@ module Syskit::Log
                         logfile_pathname("normalized"), reporter: reporter
                     )
                     stream = open_logfile_stream(
-                        logfile_pathname("normalized", "task0::port.0.log"),
-                        "task0.port"
+                        ["normalized", "task0::port.0.log"], "task0.port"
                     )
                     assert_equal [[base_time + 3, base_time + 30, 3]],
                                  stream.samples.to_a
                 end
-            end
-
-            def logfile_pathname(*path)
-                return super unless /\.\d+\.log$/.match?(path.last)
-                return super unless compress?
-
-                super(*path[0..-2], path.last + ".zst")
-            end
-
-            def open_logfile_stream(path, stream_name, **kw)
-                return super unless compress?
-
-                Tempfile.open(["", ".log"]) do |temp_io|
-                    path = path.sub_ext(".log.zst") if path.extname != ".zst"
-
-                    temp_io.write Zstd.decompress(path.read)
-                    temp_io.flush
-                    temp_io.rewind
-                    return super(temp_io.path, stream_name, **kw)
-                end
-            end
-
-            def read_logfile(*name)
-                path = logfile_pathname(*name)
-                data = path.read
-                return data unless path.extname == ".zst"
-
-                Zstd.decompress(data)
-            end
-
-            def write_logfile(name, data)
-                path = logfile_pathname(name)
-                data = Zstd.compress(data) if path.extname == ".zst"
-                path.write data
-            end
-
-            def create_logfile(name, truncate: 0)
-                path = Pathname.new(super(name))
-                path.truncate(path.stat.size - truncate)
-                return path unless compress?
-
-                compressed = Zstd.compress(path.read)
-                path.sub_ext(".log.zst").write(compressed)
-                path.unlink
-                path
             end
         end
     end

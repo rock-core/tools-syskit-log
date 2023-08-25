@@ -20,6 +20,10 @@ module Syskit::Log
         end
         subject { RockStreamMatcher.new }
 
+        def compress?
+            false
+        end
+
         def assert_finds_streams(query, *stream_names)
             assert_equal stream_names, streams.find_all_streams(query).map(&:name)
         end

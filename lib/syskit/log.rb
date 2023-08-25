@@ -112,6 +112,7 @@ module Syskit
 
             out_path.unlink if out_path.exist?
             decompress(in_path, out_path, reporter: reporter)
+            out_path
         end
 
         # Decompress a zst-compressed file in a given output
@@ -119,15 +120,11 @@ module Syskit
             out_path.dirname.mkpath
 
             reporter.current = 0
-            Tempfile.open("", out_path.dirname.to_s) do |temp_io|
+            atomic_write(out_path) do |temp_io|
                 in_path.open do |compressed_io|
                     decompress_io(compressed_io, temp_io, reporter: reporter)
                 end
-                temp_io.close
-                File.rename(temp_io.path, out_path.to_s)
             end
-
-            out_path
         end
 
         def self.decompress_io(compressed_io, out_io, reporter: NullReporter.new)
@@ -136,6 +133,51 @@ module Syskit
                 out_io.write data
                 reporter.current = compressed_io.tell * 100 / compressed_io.size
             end
+        end
+
+        # Write a file atomically
+        #
+        # It lets us write into a temporary file and move the file in place on
+        # success
+        def self.atomic_write(out_path)
+            out_path.dirname.mkpath
+            Tempfile.open("", out_path.dirname.to_s) do |temp_io|
+                result = yield(temp_io)
+
+                temp_io.close
+                File.rename(temp_io.path, out_path.to_s)
+                result
+            end
+        end
+
+        # Compress a file in a given output using Zstd
+        def self.compress(
+            in_path, out_path, compute_digest: false, reporter: NullReporter.new
+        )
+            reporter.reset_progressbar "[:bar]", total: 1.0
+            reporter.current = 0
+            atomic_write(out_path) do |out_io|
+                in_path.open do |in_io|
+                    compress_io(
+                        in_io, out_io, reporter: reporter, compute_digest: compute_digest
+                    )
+                end
+            end
+        end
+
+        def self.compress_io(
+            in_io, out_io, compute_digest: false, reporter: NullReporter.new
+        )
+            buffer = +""
+            compressed_io = ZstdIO.new(out_io, read: false, write: true)
+            compressed_io = DigestIO.new(compressed_io) if compute_digest
+            while (data = in_io.read(1024**2, buffer))
+                compressed_io.write data
+                reporter.current = Float(in_io.tell) / in_io.size
+            end
+            compressed_io.string_digest if compute_digest
+        ensure
+            compressed_io&.close
         end
 
         def self.read_single_lazy_data_stream(logfile_path, minimal_index_path, index_dir)
