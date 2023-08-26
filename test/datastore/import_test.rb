@@ -198,7 +198,7 @@ module Syskit::Log
                     assert_equal mtime, log_path.stat.mtime
                     index_path = imported.cache_path + "roby-events.0.idx"
 
-                    assert (imported.cache_path + "roby.sql").exist?
+                    assert (imported.dataset_path + "roby.sql").exist?
                     assert index_path.exist?
 
                     index = Roby::DRoby::Logfile::Index.read(index_path)
@@ -218,7 +218,7 @@ module Syskit::Log
                     log_path = imported.dataset_path + "roby-events.0.log#{file_ext}"
                     assert_equal mtime, log_path.stat.mtime
 
-                    refute (imported.cache_path + "roby.sql").exist?
+                    refute (imported.dataset_path + "roby.sql").exist?
                     refute (imported.cache_path + "roby-events.0.idx").exist?
                 end
                 it "handles truncated Roby logs" do
@@ -238,7 +238,7 @@ module Syskit::Log
                     assert_equal mtime, log_path.stat.mtime
                     index_path = imported.cache_path + "roby-events.0.idx"
 
-                    assert (imported.cache_path + "roby.sql").exist?
+                    assert (imported.dataset_path + "roby.sql").exist?
 
                     unless compress?
                         assert (imported.cache_path + "roby-events.0.idx").exist?
