@@ -90,9 +90,23 @@ module Syskit::Log
             [store, set]
         end
 
+        # Full path to a directory inside the temporary log dir
+        #
+        # @return [Pathname]
+        def logdir_pathname(*path)
+            Pathname.new(logfile_path(*path))
+        end
+
+        # Full path to a file inside the temporary log dir
+        #
+        # The file name will have a .zst extension if we're testing compressed
+        # datasets (see {#compress?})
+        #
+        # @return [Pathname]
         def logfile_pathname(*path)
             raw = Pathname.new(logfile_path(*path))
-            return raw unless /-events\.log$|\.\d+\.log$/.match?(path.last)
+            return raw if path.empty?
+            return raw if raw.extname == ".idx"
             return raw unless compress?
 
             Pathname.new(logfile_path(*path[0..-2], path.last + ".zst"))

@@ -225,7 +225,7 @@ module Syskit::Log
                         write_logfile_sample base_time + 4, base_time + 40, 4
                     end
                     file0_path = logfile_pathname("file0.0.log")
-                    logfile_pathname("normalized").mkpath
+                    logdir_pathname("normalized").mkpath
                     reporter = flexmock(NullReporter.new)
                     flexmock(reporter).should_receive(:current).and_return(10)
                     ext = ".zst" if compress?
@@ -234,7 +234,7 @@ module Syskit::Log
                             .once
                     normalize.normalize_logfile(
                         file0_path,
-                        logfile_pathname("normalized"), reporter: reporter
+                        logdir_pathname("normalized"), reporter: reporter
                     )
                     stream = open_logfile_stream(
                         ["normalized", "task0::port.0.log"], "task0.port"
