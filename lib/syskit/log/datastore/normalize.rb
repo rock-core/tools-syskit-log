@@ -36,10 +36,12 @@ module Syskit::Log
                 attr_reader :path
                 attr_reader :stream_block
                 attr_reader :digest
+                attr_reader :stream_size
                 attr_reader :stream_block_pos
                 attr_reader :last_data_block_time
                 attr_reader :tell
                 attr_reader :interval_rt
+                attr_reader :interval_lg
 
                 WRITE_BLOCK_SIZE = 1024**2
 
@@ -50,10 +52,30 @@ module Syskit::Log
                     @wio = wio
                     @stream_block = stream_block
                     @stream_block_pos = stream_block_pos
+                    @stream_size = 0
                     @interval_rt = []
+                    @interval_lg = []
                     @digest = digest
                     @tell = wio.tell
                     @buffer = "".dup
+                end
+
+                def write_pocolog_minimal_index
+                    index_path = Syskit::Log.minimal_index_path(path)
+                    Syskit::Log.write_pocolog_minimal_index([index_stream_info], index_path)
+                end
+
+                def index_stream_info
+                    Pocolog::Format::Current::IndexStreamInfo.new(
+                        declaration_pos: stream_block_pos,
+                        index_pos: 0,
+                        base_time: 0,
+                        stream_size: stream_size,
+                        rt_min: interval_rt[0] || 0,
+                        rt_max: interval_rt[1] || 0,
+                        lg_min: interval_lg[0] || 0,
+                        lg_max: interval_lg[1] || 0
+                    )
                 end
 
                 def write(data)
@@ -87,12 +109,16 @@ module Syskit::Log
                 end
 
                 def add_data_block(rt_time, lg_time, raw_data, raw_payload)
+                    @stream_size += 1
+
                     write raw_data[0, 2]
                     write ZERO_BYTE
                     write raw_data[4..-1]
                     write raw_payload
                     @interval_rt[0] ||= rt_time
                     @interval_rt[1] = rt_time
+                    @interval_lg[0] ||= lg_time
+                    @interval_lg[1] = lg_time
                     @last_data_block_time = [rt_time, lg_time]
                 end
 
@@ -146,8 +172,10 @@ module Syskit::Log
                     raise
                 end
 
-                out_files.each_value(&:close)
                 out_files.each_value.map do |output|
+                    output.write_pocolog_minimal_index
+                    output.close
+
                     Dataset::IdentityEntry.new(
                         output.path, output.tell, output.string_digest
                     )
