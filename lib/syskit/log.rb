@@ -135,6 +135,17 @@ module Syskit
             end
         end
 
+        # Find an existing file at the given path, or at the compressed version of it
+        #
+        # @param [Pathname] path
+        # @return [Pathname,nil]
+        def self.find_path_plain_or_compressed(path)
+            return path if path.exist?
+
+            compressed_path = path.dirname + "#{path.basename}.zst"
+            compressed_path if compressed_path.exist?
+        end
+
         # Write a file atomically
         #
         # It lets us write into a temporary file and move the file in place on

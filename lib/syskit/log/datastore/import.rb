@@ -133,7 +133,18 @@ module Syskit::Log
 
             # Import Roby's info.yml information into the dataset metadata
             def import_roby_metadata(dataset, roby_info_yml_path)
-                begin roby_info = YAML.safe_load(roby_info_yml_path.read)
+                info_data =
+                    begin
+                        Syskit::Log.open_in_stream(roby_info_yml_path, &:read)
+                    rescue RuntimeError => e
+                        raise unless /zstd/.match?(e.message)
+
+                        warn "failed to load Roby metadata from #{roby_info_yml_path}"
+                        return
+                    end
+
+                begin
+                    roby_info = YAML.safe_load(info_data)
                 rescue Psych::SyntaxError
                     warn "failed to load Roby metadata from #{roby_info_yml_path}"
                     return
@@ -271,10 +282,12 @@ module Syskit::Log
                 dataset.write_dataset_identity_to_metadata_file(identity)
 
                 input_paths.reverse.each do |dir_path|
-                    roby_info_yml_path = (dir_path + "info.yml")
-                    if roby_info_yml_path.exist?
-                        import_roby_metadata(dataset, roby_info_yml_path)
-                    end
+                    info_yml_path = (dir_path + "info.yml")
+                    info_yml_path =
+                        Syskit::Log.find_path_plain_or_compressed(info_yml_path)
+                    next unless info_yml_path
+
+                    import_roby_metadata(dataset, info_yml_path)
                 end
 
                 dataset.timestamp # computes the timestamp

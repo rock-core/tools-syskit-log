@@ -99,10 +99,10 @@ module Syskit::Log
                         )
                     end
                     create_roby_logfile("test-events.log")
-                    FileUtils.touch logfile_pathname("test.txt")
-                    FileUtils.touch logfile_pathname("not_recognized_file")
-                    logfile_pathname("not_recognized_dir").mkpath
-                    FileUtils.touch logfile_pathname("not_recognized_dir", "test")
+                    logfile_pathname("test.txt").write("")
+                    logfile_pathname("not_recognized_file").write("")
+                    logdir_pathname("not_recognized_dir").mkpath
+                    logfile_pathname("not_recognized_dir", "test").write("")
                 end
 
                 def tty_reporter
@@ -149,7 +149,7 @@ module Syskit::Log
                 it "copies the text files" do
                     import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
                     assert logfile_pathname("test.txt").exist?
-                    assert (import_dir + "text" + "test.txt").exist?
+                    assert (import_dir + "text" + "test.txt#{file_ext}").exist?
                 end
                 it "copies the roby log files into roby-events.N.log" do
                     import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
@@ -159,19 +159,20 @@ module Syskit::Log
                 it "copies the unrecognized files" do
                     import_dir = import.normalize_dataset([logfile_pathname]).dataset_path
 
-                    assert logfile_pathname("not_recognized_file").exist?
-                    assert logfile_pathname("not_recognized_dir").exist?
-                    assert logfile_pathname("not_recognized_dir", "test").exist?
-
-                    assert (import_dir + "ignored" + "not_recognized_file").exist?
+                    assert(
+                        (import_dir + "ignored" + "not_recognized_file#{file_ext}")
+                        .exist?
+                    )
                     assert (import_dir + "ignored" + "not_recognized_dir").exist?
-                    assert (import_dir + "ignored" + "not_recognized_dir" + "test").exist?
+                    assert(
+                        import_dir
+                            .join("ignored", "not_recognized_dir", "test#{file_ext}")
+                            .exist?
+                    )
                 end
                 it "imports the Roby metadata" do
                     roby_metadata = Array[Hash["app_name" => "test"]]
-                    logfile_pathname("info.yml").open("w") do |io|
-                        YAML.dump(roby_metadata, io)
-                    end
+                    write_logfile("info.yml", YAML.dump(roby_metadata))
                     dataset = import.normalize_dataset([logfile_pathname])
                     assert_equal({ "roby:app_name" => Set["test"],
                                    "timestamp" => Set[0],
