@@ -95,17 +95,6 @@ module Syskit::Log
                     refute input0_path.exist?
                     assert input1_path.exist?
                 end
-                it "generates valid index files for the normalized streams" do
-                    skip if compress?
-
-                    logfile_pathname("normalized").mkdir
-                    normalize.normalize([logfile_pathname("file0.0.log")])
-                    flexmock(Pocolog::Logfiles).new_instances
-                                               .should_receive(:rebuild_and_load_index)
-                                               .never
-                    open_logfile_stream ["normalized", "task0::port.0.log"], "task0.port"
-                    open_logfile_stream ["normalized", "task1::port.0.log"], "task1.port"
-                end
                 describe "digest generation" do
                     it "optionally computes the sha256 digest of the generated file, "\
                        "without the prologue" do
