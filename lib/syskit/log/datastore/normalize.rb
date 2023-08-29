@@ -120,7 +120,8 @@ module Syskit::Log
                     /\.\d+\.log(?:\.zst)?$/.match(_1.basename.to_s).pre_match
                 end
 
-                result = logfile_groups.values.map do |files|
+                result = logfile_groups.map do |key, files|
+                    reporter.info "Normalizing group #{key}"
                     group_result = normalize_logfile_group(
                         files,
                         output_path: output_path, index_dir: index_dir, reporter: reporter
