@@ -33,15 +33,22 @@ module Syskit::Log
             #
             # Internal representation of the output of a normalization operation
             class Output
-                attr_reader :path, :stream_info, :digest, :stream_block_pos,
-                            :index_map, :last_data_block_time, :tell, :interval_rt
+                attr_reader :path
+                attr_reader :stream_block
+                attr_reader :digest
+                attr_reader :stream_block_pos
+                attr_reader :last_data_block_time
+                attr_reader :tell
+                attr_reader :interval_rt
 
                 WRITE_BLOCK_SIZE = 1024**2
 
-                def initialize(path, wio, stream_info, digest, stream_block_pos)
+                def initialize(
+                    path, wio, stream_block, digest, stream_block_pos
+                )
                     @path = path
                     @wio = wio
-                    @stream_info = stream_info
+                    @stream_block = stream_block
                     @stream_block_pos = stream_block_pos
                     @interval_rt = []
                     @digest = digest
@@ -347,9 +354,9 @@ module Syskit::Log
             end
 
             def create_or_reuse_out_io(
-                output_path, raw_header, stream_info, initial_blocks
+                output_path, raw_header, stream_block, initial_blocks
             )
-                basename = Streams.normalized_filename(stream_info.metadata)
+                basename = Streams.normalized_filename(stream_block.metadata)
                 ext = ".zst" if compress?
                 out_file_path = output_path + "#{basename}.0.log#{ext}"
 
@@ -358,9 +365,9 @@ module Syskit::Log
                 if (existing = out_files[out_file_path])
                     # This is a file we've already seen, reuse its info
                     # and do some consistency checks
-                    if existing.stream_info.type != stream_info.type
+                    if existing.stream_block.type != stream_block.type
                         raise InvalidFollowupStream,
-                              "multi-IO stream #{stream_info.name} is not consistent: "\
+                              "multi-IO stream #{stream_block.name} is not consistent: "\
                               "type mismatch"
                     end
                     # Note: normalize_logfile is checking that the files follow
@@ -368,10 +375,10 @@ module Syskit::Log
                     return existing
                 end
 
-                raw_payload = stream_info.encode
+                raw_payload = stream_block.encode
                 raw_header[4, 4] = [raw_payload.size].pack("V")
                 initialize_out_file(
-                    out_file_path, stream_info, raw_header, raw_payload, initial_blocks
+                    out_file_path, stream_block, raw_header, raw_payload, initial_blocks
                 )
             end
 
@@ -381,7 +388,7 @@ module Syskit::Log
             #
             # @return [Output]
             def initialize_out_file(
-                out_file_path, stream_info, raw_header, raw_payload, initial_blocks
+                out_file_path, stream_block, raw_header, raw_payload, initial_blocks
             )
                 wio = Syskit::Log.open_out_stream(out_file_path)
 
@@ -389,7 +396,9 @@ module Syskit::Log
                 digest = Digest::SHA256.new
                 wio = DigestIO.new(wio, digest)
 
-                output = Output.new(out_file_path, wio, stream_info, digest, wio.tell)
+                output = Output.new(
+                    out_file_path, wio, stream_block, digest, wio.tell
+                )
                 output.write initial_blocks
                 output.write raw_header[0, 2]
                 output.write ZERO_BYTE
