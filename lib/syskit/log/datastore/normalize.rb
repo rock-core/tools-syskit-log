@@ -8,13 +8,11 @@ module Syskit::Log
         def self.normalize(
             paths,
             output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
-            index_dir: output_path, delete_input: false,
-            compress: false
+            delete_input: false, compress: false
         )
             Normalize.new(compress: compress).normalize(
                 paths,
-                output_path: output_path, reporter: reporter,
-                index_dir: index_dir, delete_input: delete_input
+                output_path: output_path, reporter: reporter, delete_input: delete_input
             )
         end
 
@@ -47,7 +45,6 @@ module Syskit::Log
                     @stream_block_pos = stream_block_pos
                     @interval_rt = []
                     @digest = digest
-                    @index_map = []
                     @tell = wio.tell
                     @buffer = "".dup
                 end
@@ -83,7 +80,6 @@ module Syskit::Log
                 end
 
                 def add_data_block(rt_time, lg_time, raw_data, raw_payload)
-                    @index_map << (@tell + @buffer.size) << lg_time
                     write raw_data[0, 2]
                     write ZERO_BYTE
                     write raw_data[4..-1]
@@ -111,11 +107,9 @@ module Syskit::Log
             def normalize(
                 paths,
                 output_path: paths.first.dirname + "normalized",
-                index_dir: output_path, reporter: NullReporter.new,
-                delete_input: false
+                reporter: NullReporter.new, delete_input: false
             )
                 output_path.mkpath
-                index_dir.mkpath
                 logfile_groups = paths.group_by do
                     /\.\d+\.log(?:\.zst)?$/.match(_1.basename.to_s).pre_match
                 end
@@ -123,8 +117,7 @@ module Syskit::Log
                 result = logfile_groups.map do |key, files|
                     reporter.info "Normalizing group #{key}"
                     group_result = normalize_logfile_group(
-                        files,
-                        output_path: output_path, index_dir: index_dir, reporter: reporter
+                        files, output_path: output_path, reporter: reporter
                     )
 
                     files.each(&:unlink) if delete_input
@@ -135,7 +128,7 @@ module Syskit::Log
             end
 
             def normalize_logfile_group(
-                files, output_path:, index_dir:, reporter: NullReporter.new
+                files, output_path:, reporter: NullReporter.new
             )
                 files.each do |logfile_path|
                     normalize_logfile(logfile_path, output_path, reporter: reporter)
@@ -145,10 +138,6 @@ module Syskit::Log
                     )
                     raise
                 end
-
-                # When compressed, we don't have a "plain" logfile to use with the
-                # index ... it makes little sense to write the index
-                write_pending_pocolog_indexes(index_dir) unless compress?
 
                 out_files.each_value(&:close)
                 out_files.each_value.map do |output|
@@ -165,29 +154,6 @@ module Syskit::Log
             ensure
                 out_files.each_value { _1.close unless _1.closed? }
                 out_files.clear
-            end
-
-            def write_pending_pocolog_indexes(index_dir)
-                indexes = []
-                # Now write the indexes
-                out_files.each_value do |output|
-                    block_stream = output.create_block_stream
-                    raw_stream_info = Pocolog::IndexBuilderStreamInfo.new(
-                        output.stream_block_pos, output.index_map
-                    )
-                    stream_info = Pocolog.create_index_from_raw_info(
-                        block_stream, [raw_stream_info], interval_rt: [output.interval_rt]
-                    )
-                    index_path = default_index_pathname(output.path, index_dir: index_dir)
-                    indexes << index_path
-                    index_path.open("w") do |io|
-                        Pocolog::Format::Current
-                            .write_index(io, block_stream.io, stream_info)
-                    end
-                end
-            rescue Exception # rubocop:disable Lint/RescueException
-                indexes.map { _1.unlink if _1.exist? }
-                raise
             end
 
             def default_index_pathname(logfile_path, index_dir:)
