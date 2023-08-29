@@ -116,10 +116,7 @@ module Syskit::Log
                 end
 
                 it "normalizes the pocolog logfiles" do
-                    expected_normalize_args = hsh(
-                        output_path: @output_path + "pocolog",
-                        index_dir: @cache_path + "pocolog"
-                    )
+                    expected_normalize_args = hsh(output_path: @output_path + "pocolog")
 
                     flexmock(Syskit::Log::Datastore)
                         .should_receive(:normalize)

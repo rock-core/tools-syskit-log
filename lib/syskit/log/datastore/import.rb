@@ -101,8 +101,8 @@ module Syskit::Log
                 final_core_dir = datastore.core_path_of(dataset_digest)
                 FileUtils.mv dataset.dataset_path, final_core_dir
 
+                final_cache_dir = datastore.cache_path_of(dataset_digest)
                 if dataset.cache_path.exist?
-                    final_cache_dir = datastore.cache_path_of(dataset_digest)
                     FileUtils.mv dataset.cache_path, final_cache_dir
                 end
 
@@ -233,7 +233,6 @@ module Syskit::Log
 
                 out_pocolog_dir = (@output_path + "pocolog")
                 out_pocolog_dir.mkpath
-                out_pocolog_cache_dir = (@cache_path + "pocolog")
                 bytes_total = files.inject(0) { |s, p| s + p.size }
                 @reporter.reset_progressbar(
                     "|:bar| :current_byte/:total_byte :eta (:byte_rate/s)",
@@ -242,7 +241,7 @@ module Syskit::Log
 
                 entries = Syskit::Log::Datastore.normalize(
                     files,
-                    output_path: out_pocolog_dir, index_dir: out_pocolog_cache_dir,
+                    output_path: out_pocolog_dir,
                     delete_input: delete_input, compress: @compress, reporter: @reporter
                 )
                 entries.each { |e| e.path = identity_path(e.path) }
