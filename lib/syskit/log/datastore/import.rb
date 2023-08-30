@@ -70,7 +70,7 @@ module Syskit::Log
                 info_path = (path + BASENAME_IMPORT_TAG)
                 return unless info_path.exist?
 
-                info = YAML.safe_load(info_path.read, [Time])
+                info = YAML.safe_load(info_path.read, permitted_classes: [Time])
                 [info["digest"], info["time"]]
             end
 
