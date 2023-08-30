@@ -221,11 +221,23 @@ module Syskit
         #
         # These index files are very small and can therefore be saved along with the
         # core data, making getting a new dataset a lot more agile
-        def self.generate_pocolog_minimal_index(logfile_path, index_path)
-            logfile_io = open_in_stream(logfile_path)
+        def self.generate_pocolog_minimal_index(
+            logfile_io, index_path, compute_digest: false
+        )
             block_stream = Pocolog::BlockStream.new(logfile_io)
             block_stream.read_prologue
-            stream_info = Pocolog.file_index_builder(block_stream)
+
+            if compute_digest
+                digest_io = DigestIO.new(logfile_io)
+                block_stream = Pocolog::BlockStream.new(digest_io)
+            end
+
+            stream_info = Pocolog.file_index_builder(block_stream, skip_payload: false)
+            write_pocolog_minimal_index(stream_info, index_path)
+            digest_io&.digest
+        end
+
+        def self.write_pocolog_minimal_index(stream_info, index_path)
             index_path.open("w") do |index_io|
                 Pocolog::Format::Current.write_index_header(index_io, 0, Time.now, 1)
                 Pocolog::Format::Current.write_index_stream_info(
@@ -246,6 +258,14 @@ module Syskit
                 logfile_path.to_s, index_dir: cache_path.to_s
             )
             Pathname(index_path)
+        end
+
+        def self.minimal_index_path(logfile_path)
+            basename = logfile_path.basename(".zst").to_s
+            index = Pocolog::Logfiles.default_index_filename(
+                basename, index_dir: logfile_path.dirname.to_s
+            )
+            Pathname(index)
         end
     end
 end

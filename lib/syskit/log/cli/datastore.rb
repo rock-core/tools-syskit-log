@@ -710,6 +710,18 @@ module Syskit::Log
                 end
             end
 
+            desc "validate [QUERY]", "validate that the given datasets "\
+                                     "match their expected identity"
+            def validate(*query)
+                store = open_store
+                reporter = create_reporter
+
+                resolve_datasets(store, *query, validate: false).each do |ds|
+                    reporter.info "validating #{ds.digest}"
+                    ds.validate_identity_metadata
+                end
+            end
+
             desc "repair [QUERY]", "verify and repair the given datasets"
             option "dry_run", type: :boolean, default: false
             def repair(*query)
@@ -727,6 +739,32 @@ module Syskit::Log
                             to: new_ds.digest,
                             doc: "created by 'syskit ds repair'"
                         )
+                    end
+                end
+            end
+
+            desc "compression ID", "compress or decompress the given dataset"
+            option "add", type: :boolean, default: false
+            option "remove", type: :boolean, default: false
+            def compression(*query)
+                store = open_store
+                create_reporter
+
+                if options[:add] && options[:remove]
+                    raise ArgumentError, "choose either --add or --remove, not both"
+                elsif !options[:add] && !options[:remove]
+                    raise ArgumentError, "choose either --add or --remove"
+                end
+
+                require "syskit/log/datastore/compression"
+
+                resolve_datasets(store, *query).each do |ds|
+                    if options[:add]
+                        Syskit::Log::Datastore::Compression
+                            .compress_dataset(ds, reporter: reporter)
+                    elsif options[:remove]
+                        Syskit::Log::Datastore::Compression
+                            .decompress_dataset(ds, reporter: reporter)
                     end
                 end
             end
