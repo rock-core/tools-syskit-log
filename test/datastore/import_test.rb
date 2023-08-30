@@ -116,10 +116,7 @@ module Syskit::Log
                 end
 
                 it "normalizes the pocolog logfiles" do
-                    expected_normalize_args = hsh(
-                        output_path: @output_path + "pocolog",
-                        index_dir: @cache_path + "pocolog"
-                    )
+                    expected_normalize_args = hsh(output_path: @output_path + "pocolog")
 
                     flexmock(Syskit::Log::Datastore)
                         .should_receive(:normalize)
@@ -129,6 +126,20 @@ module Syskit::Log
                     expected_file =
                         dataset.dataset_path + "pocolog" + "task0::port.0.log#{file_ext}"
                     assert expected_file.exist?
+                end
+                it "generates valid minimal indexes" do
+                    dataset = import.normalize_dataset([logfile_pathname])
+
+                    pocolog_path = Syskit::Log.find_path_plain_or_compressed(
+                        dataset.dataset_path + "pocolog" + "task0::port.0.log"
+                    )
+                    index_path = dataset.dataset_path + "pocolog" + "task0::port.0.idx"
+                    assert index_path.exist?
+
+                    # This relies on the validation of the stream block
+                    Syskit::Log.read_single_lazy_data_stream(
+                        pocolog_path, index_path, Pathname("")
+                    )
                 end
                 it "calculates the dataset digest" do
                     dataset = import.normalize_dataset([logfile_pathname])

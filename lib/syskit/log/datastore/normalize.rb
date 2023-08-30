@@ -8,13 +8,11 @@ module Syskit::Log
         def self.normalize(
             paths,
             output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
-            index_dir: output_path, delete_input: false,
-            compress: false
+            delete_input: false, compress: false
         )
             Normalize.new(compress: compress).normalize(
                 paths,
-                output_path: output_path, reporter: reporter,
-                index_dir: index_dir, delete_input: delete_input
+                output_path: output_path, reporter: reporter, delete_input: delete_input
             )
         end
 
@@ -35,21 +33,49 @@ module Syskit::Log
             #
             # Internal representation of the output of a normalization operation
             class Output
-                attr_reader :path, :stream_info, :digest, :stream_block_pos,
-                            :index_map, :last_data_block_time, :tell, :interval_rt
+                attr_reader :path
+                attr_reader :stream_block
+                attr_reader :digest
+                attr_reader :stream_size
+                attr_reader :stream_block_pos
+                attr_reader :last_data_block_time
+                attr_reader :tell
+                attr_reader :interval_rt
+                attr_reader :interval_lg
 
                 WRITE_BLOCK_SIZE = 1024**2
 
-                def initialize(path, wio, stream_info, digest, stream_block_pos)
+                def initialize(
+                    path, wio, stream_block, digest, stream_block_pos
+                )
                     @path = path
                     @wio = wio
-                    @stream_info = stream_info
+                    @stream_block = stream_block
                     @stream_block_pos = stream_block_pos
+                    @stream_size = 0
                     @interval_rt = []
+                    @interval_lg = []
                     @digest = digest
-                    @index_map = []
                     @tell = wio.tell
                     @buffer = "".dup
+                end
+
+                def write_pocolog_minimal_index
+                    index_path = Syskit::Log.minimal_index_path(path)
+                    Syskit::Log.write_pocolog_minimal_index([index_stream_info], index_path)
+                end
+
+                def index_stream_info
+                    Pocolog::Format::Current::IndexStreamInfo.new(
+                        declaration_pos: stream_block_pos,
+                        index_pos: 0,
+                        base_time: 0,
+                        stream_size: stream_size,
+                        rt_min: interval_rt[0] || 0,
+                        rt_max: interval_rt[1] || 0,
+                        lg_min: interval_lg[0] || 0,
+                        lg_max: interval_lg[1] || 0
+                    )
                 end
 
                 def write(data)
@@ -83,13 +109,16 @@ module Syskit::Log
                 end
 
                 def add_data_block(rt_time, lg_time, raw_data, raw_payload)
-                    @index_map << (@tell + @buffer.size) << lg_time
+                    @stream_size += 1
+
                     write raw_data[0, 2]
                     write ZERO_BYTE
                     write raw_data[4..-1]
                     write raw_payload
                     @interval_rt[0] ||= rt_time
                     @interval_rt[1] = rt_time
+                    @interval_lg[0] ||= lg_time
+                    @interval_lg[1] = lg_time
                     @last_data_block_time = [rt_time, lg_time]
                 end
 
@@ -111,19 +140,17 @@ module Syskit::Log
             def normalize(
                 paths,
                 output_path: paths.first.dirname + "normalized",
-                index_dir: output_path, reporter: NullReporter.new,
-                delete_input: false
+                reporter: NullReporter.new, delete_input: false
             )
                 output_path.mkpath
-                index_dir.mkpath
                 logfile_groups = paths.group_by do
                     /\.\d+\.log(?:\.zst)?$/.match(_1.basename.to_s).pre_match
                 end
 
-                result = logfile_groups.values.map do |files|
+                result = logfile_groups.map do |key, files|
+                    reporter.info "Normalizing group #{key}"
                     group_result = normalize_logfile_group(
-                        files,
-                        output_path: output_path, index_dir: index_dir, reporter: reporter
+                        files, output_path: output_path, reporter: reporter
                     )
 
                     files.each(&:unlink) if delete_input
@@ -134,7 +161,7 @@ module Syskit::Log
             end
 
             def normalize_logfile_group(
-                files, output_path:, index_dir:, reporter: NullReporter.new
+                files, output_path:, reporter: NullReporter.new
             )
                 files.each do |logfile_path|
                     normalize_logfile(logfile_path, output_path, reporter: reporter)
@@ -145,12 +172,10 @@ module Syskit::Log
                     raise
                 end
 
-                # When compressed, we don't have a "plain" logfile to use with the
-                # index ... it makes little sense to write the index
-                write_pending_pocolog_indexes(index_dir) unless compress?
-
-                out_files.each_value(&:close)
                 out_files.each_value.map do |output|
+                    output.write_pocolog_minimal_index
+                    output.close
+
                     Dataset::IdentityEntry.new(
                         output.path, output.tell, output.string_digest
                     )
@@ -164,29 +189,6 @@ module Syskit::Log
             ensure
                 out_files.each_value { _1.close unless _1.closed? }
                 out_files.clear
-            end
-
-            def write_pending_pocolog_indexes(index_dir)
-                indexes = []
-                # Now write the indexes
-                out_files.each_value do |output|
-                    block_stream = output.create_block_stream
-                    raw_stream_info = Pocolog::IndexBuilderStreamInfo.new(
-                        output.stream_block_pos, output.index_map
-                    )
-                    stream_info = Pocolog.create_index_from_raw_info(
-                        block_stream, [raw_stream_info], interval_rt: [output.interval_rt]
-                    )
-                    index_path = default_index_pathname(output.path, index_dir: index_dir)
-                    indexes << index_path
-                    index_path.open("w") do |io|
-                        Pocolog::Format::Current
-                            .write_index(io, block_stream.io, stream_info)
-                    end
-                end
-            rescue Exception # rubocop:disable Lint/RescueException
-                indexes.map { _1.unlink if _1.exist? }
-                raise
             end
 
             def default_index_pathname(logfile_path, index_dir:)
@@ -380,9 +382,9 @@ module Syskit::Log
             end
 
             def create_or_reuse_out_io(
-                output_path, raw_header, stream_info, initial_blocks
+                output_path, raw_header, stream_block, initial_blocks
             )
-                basename = Streams.normalized_filename(stream_info.metadata)
+                basename = Streams.normalized_filename(stream_block.metadata)
                 ext = ".zst" if compress?
                 out_file_path = output_path + "#{basename}.0.log#{ext}"
 
@@ -391,9 +393,9 @@ module Syskit::Log
                 if (existing = out_files[out_file_path])
                     # This is a file we've already seen, reuse its info
                     # and do some consistency checks
-                    if existing.stream_info.type != stream_info.type
+                    if existing.stream_block.type != stream_block.type
                         raise InvalidFollowupStream,
-                              "multi-IO stream #{stream_info.name} is not consistent: "\
+                              "multi-IO stream #{stream_block.name} is not consistent: "\
                               "type mismatch"
                     end
                     # Note: normalize_logfile is checking that the files follow
@@ -401,10 +403,10 @@ module Syskit::Log
                     return existing
                 end
 
-                raw_payload = stream_info.encode
+                raw_payload = stream_block.encode
                 raw_header[4, 4] = [raw_payload.size].pack("V")
                 initialize_out_file(
-                    out_file_path, stream_info, raw_header, raw_payload, initial_blocks
+                    out_file_path, stream_block, raw_header, raw_payload, initial_blocks
                 )
             end
 
@@ -414,7 +416,7 @@ module Syskit::Log
             #
             # @return [Output]
             def initialize_out_file(
-                out_file_path, stream_info, raw_header, raw_payload, initial_blocks
+                out_file_path, stream_block, raw_header, raw_payload, initial_blocks
             )
                 wio = Syskit::Log.open_out_stream(out_file_path)
 
@@ -422,7 +424,9 @@ module Syskit::Log
                 digest = Digest::SHA256.new
                 wio = DigestIO.new(wio, digest)
 
-                output = Output.new(out_file_path, wio, stream_info, digest, wio.tell)
+                output = Output.new(
+                    out_file_path, wio, stream_block, digest, wio.tell
+                )
                 output.write initial_blocks
                 output.write raw_header[0, 2]
                 output.write ZERO_BYTE

@@ -243,17 +243,24 @@ module Syskit
                 block_stream = Pocolog::BlockStream.new(digest_io)
             end
 
-            stream_info = Pocolog.file_index_builder(block_stream, skip_payload: false)
-            write_pocolog_minimal_index(stream_info, index_path)
-            digest_io&.digest
+            streams_info = Pocolog.file_index_builder(block_stream, skip_payload: false)
+            index_streams_info = streams_info.map do |info|
+                Pocolog::Format::Current.index_stream_info(info, 0)
+            end
+            write_pocolog_minimal_index(index_streams_info, index_path)
         end
 
-        def self.write_pocolog_minimal_index(stream_info, index_path)
+        # Write a pocolog file's minimal index
+        #
+        # @param [Array<Pocolog::IndexStreamInfo>] index_stream_info index-specific stream
+        #   information
+        # @param [Pathname] index_path path to the file that should be written
+        def self.write_pocolog_minimal_index(index_stream_info, index_path)
             index_path.open("w") do |index_io|
                 Pocolog::Format::Current.write_index_header(index_io, 0, Time.now, 1)
-                Pocolog::Format::Current.write_index_stream_info(
-                    index_io, stream_info
-                )
+                index_stream_info.each do
+                    index_io.write(_1.marshal)
+                end
             end
         end
 
@@ -271,6 +278,11 @@ module Syskit
             Pathname(index_path)
         end
 
+        # Return the path of the minimal index for a given pocolog file
+        #
+        # @param [Pathname] logfile_path the path to the log file (possibly
+        #   compressed)
+        # @return [Pathname]
         def self.minimal_index_path(logfile_path)
             basename = logfile_path.basename(".zst").to_s
             index = Pocolog::Logfiles.default_index_filename(
