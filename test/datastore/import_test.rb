@@ -212,6 +212,7 @@ module Syskit::Log
 
                     assert (imported.dataset_path + "roby.sql").exist?
                     assert index_path.exist?
+                    assert imported.roby_sql_index_path.exist?
 
                     index = Roby::DRoby::Logfile::Index.read(index_path)
                     assert index.valid_for?(log_path)
