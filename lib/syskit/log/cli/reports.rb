@@ -126,6 +126,9 @@ module Syskit
 
                 desc "html TEMPLATE DATASET [OUTPUT]",
                      "render this template to HTML using data from the given dataset"
+                option :timeout,
+                       type: :numeric, default: 600,
+                       desc: "execution timeout in seconds for each cell"
                 def html(template, dataset_digest, output = nil, log: nil)
                     description =
                         Syskit::Log::Reports::ReportDescription
@@ -137,7 +140,9 @@ module Syskit
                             (output || Pathname.pwd) /
                             "#{default_output_name(dataset_digest)}.html"
                     end
-                    description.to_html(Pathname.new(output), log: log)
+                    description.to_html(
+                        Pathname.new(output), log: log, timeout: options[:timeout]
+                    )
                 end
 
                 desc "render-notebooks REPORT DATASET [OUTPUT]",

@@ -67,13 +67,15 @@ module Syskit
                 # @param [Pathname,String] output path to the generated HTML
                 #
                 # @raise EmptyReport if this report does not have any notebooks
-                def to_html(output, log: nil)
+                def to_html(output, log: nil, timeout: 600)
                     json = to_json
                     redirect = { out: log.to_s, err: log.to_s } if log
 
                     IO.popen(
                         ["jupyter-nbconvert", "--execute", "--allow-errors", "--stdin",
-                         "--output=#{output}", "--no-input"], "w", **(redirect || {})
+                         "--output=#{output}", "--no-input",
+                         "--ExecutePreprocessor.timeout=#{timeout}"], "w",
+                        **(redirect || {})
                     ) do |io|
                         io.write JSON.dump(json)
                     end
