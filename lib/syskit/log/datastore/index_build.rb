@@ -78,13 +78,19 @@ module Syskit::Log
             def rebuild_roby_index(force: false, reporter: NullReporter.new)
                 dataset.cache_path.mkpath
                 event_logs = Syskit::Log.logfiles_in_dir(dataset.dataset_path)
-                event_logs = event_logs.find_all do |roby_log_path|
+                event_logs = event_logs.map do |roby_log_path|
+                    roby_log_path = Syskit::Log.decompressed(
+                        roby_log_path, dataset.cache_path
+                    )
                     rebuild_roby_own_index(
                         roby_log_path, force: force, reporter: reporter
                     )
+                    roby_log_path
                 end
 
-                rebuild_roby_sql_index(event_logs, force: force, reporter: reporter)
+                rebuild_roby_sql_index(
+                    event_logs.compact, force: force, reporter: reporter
+                )
             end
 
             # @api private
@@ -126,7 +132,7 @@ module Syskit::Log
             def rebuild_roby_sql_index(
                 roby_log_paths, force: false, reporter: NullReporter.new
             )
-                roby_index_path = dataset.cache_path + "roby.sql"
+                roby_index_path = dataset.roby_sql_index_path
                 if roby_index_path.exist?
                     return unless force
 
@@ -135,6 +141,9 @@ module Syskit::Log
 
                 index = RobySQLIndex::Index.create(roby_index_path)
                 roby_log_paths.each { |p| index.add_roby_log(p, reporter: reporter) }
+            rescue Exception
+                roby_index_path&.unlink
+                raise
             end
         end
     end
