@@ -700,10 +700,10 @@ module Syskit::Log
             #
             # @return [Pathname]
             def roby_sql_index_path
-                p = dataset_path + "roby.sql"
+                p = cache_path + "roby.sql"
                 return p if p.exist?
 
-                cache_path + "roby.sql"
+                dataset_path + "roby.sql"
             end
 
             # The Roby SQL index

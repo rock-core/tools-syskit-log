@@ -132,9 +132,9 @@ module Syskit::Log
             # @api private
             #
             # Builds the cache folder for the given dataset
-            class CacheRebuild
+            class RobyCacheRebuild
                 def self.detect(datastore, dataset)
-                    return if datastore.cache_path_of(dataset.digest).exist?
+                    return if dataset.roby_sql_index_path.exist?
 
                     new(datastore, dataset)
                 end
@@ -149,9 +149,9 @@ module Syskit::Log
                 end
 
                 def apply(reporter)
-                    Syskit::Log::Datastore.index_build(
-                        @datastore, @dataset, reporter: reporter
-                    )
+                    index_build =
+                        Syskit::Log::Datastore::IndexBuild.new(@datastore, @dataset)
+                    index_build.rebuild_roby_index(reporter: reporter)
                     @dataset
                 end
             end
@@ -186,7 +186,7 @@ module Syskit::Log
                 AddRobyLogsToIdentity,
 
                 # Must be after everything that repairs the identity
-                CacheRebuild,
+                RobyCacheRebuild,
                 ComputeTimestamp
             ].freeze
         end
