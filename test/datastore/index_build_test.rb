@@ -161,7 +161,7 @@ module Syskit::Log
                     reporter.should_receive(:warn)
                             .with("  roby-events.0.log is in an obsolete "\
                                   "Roby log file format, skipping")
-                            .once
+                            .twice
 
                     index_build.rebuild_roby_index(reporter: reporter)
                 end

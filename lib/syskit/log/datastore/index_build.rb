@@ -140,8 +140,13 @@ module Syskit::Log
                 end
 
                 index = RobySQLIndex::Index.create(roby_index_path)
-                roby_log_paths.each { |p| index.add_roby_log(p, reporter: reporter) }
-            rescue Exception
+                roby_log_paths.each do |p|
+                    index.add_roby_log(p, reporter: reporter)
+                rescue Roby::DRoby::Logfile::InvalidFormatVersion
+                    reporter.warn "  #{p.basename} is in an obsolete "\
+                                  "Roby log file format, skipping"
+                end
+            rescue Exception # rubocop:disable Lint/RescueException
                 roby_index_path&.unlink
                 raise
             end
