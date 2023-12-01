@@ -8,6 +8,8 @@ Add `tools/syskit-log` in `autoproj/manifest`
 
 ## Usage
 
+See [the rock-and-syskit page](https://www.rock-robotics.org/rock-and-syskit/log_management/)
+
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at https://github.com/rock-core/tools-syskit-log.

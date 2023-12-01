@@ -8,6 +8,7 @@ require "syskit/log"
 require "syskit/log/datastore/normalize"
 require "syskit/log/datastore/import"
 require "syskit/log/datastore/index_build"
+require "syskit/log/cli/reports"
 require "tty-progressbar"
 require "tty-prompt"
 require "pocolog/cli/null_reporter"
@@ -18,6 +19,9 @@ module Syskit::Log
         # CLI entrypoint for `syskit ds` (a.k.a. syskit datastore)
         class Datastore < Thor # rubocop:disable Metrics/ClassLength
             namespace "datastore"
+
+            desc "reports", "Generation of HTML reports using Jupyter notebooks"
+            subcommand "reports", Reports
 
             class_option :silent, type: :boolean, default: false
             class_option :colors, type: :boolean, default: TTY::Color.color?
