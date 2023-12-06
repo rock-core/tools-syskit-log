@@ -181,6 +181,8 @@ module Syskit::Log
             option :robot, aliases: "r", type: :string,
                            desc: "the robot configuration to load"
             option :controller, aliases: "c", type: :boolean, default: false
+            option :set, type: :string, repeatable: true,
+                         desc: "configuration variables to set, as path.to.key=value"
             def start(*args)
                 streams, script_paths =
                     start_resolve_streams_and_scripts(args)
@@ -188,6 +190,11 @@ module Syskit::Log
                 setup_common
                 setup_roby_for_running(run_controllers: options[:controller])
                 app.single if options[:single]
+
+                options[:set].each do |s|
+                    app.argv_set << s
+                    Roby::Application.apply_conf_from_argv(s)
+                end
 
                 app.on_require(user: true) do
                     script_paths.each { |p| require p.to_s }
