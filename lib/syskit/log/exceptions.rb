@@ -29,13 +29,15 @@ module Syskit::Log
         def pretty_print(pp)
             if stream.type.name == port.type.name
                 pp.text "definition of #{stream.type.name} seem to have changed between the current system and the log streams"
+                pp.text " while trying to replay stream #{stream.name} as port #{port}"
                 pp.breakable
                 pp.text "the log stream definition is"
                 pp.breakable
-                stream.type.pretty_print(pp)
+                stream.type.pretty_print(pp, true)
+                pp.breakable
                 pp.text "the expected port type is"
                 pp.breakable
-                port.type.pretty_print(pp)
+                port.type.pretty_print(pp, true)
             end
         end
     end

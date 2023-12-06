@@ -297,6 +297,7 @@ module Syskit::Log
         def to_deployment_group(
             load_models: true,
             skip_tasks_without_models: true,
+            skip_incompatible_types: false,
             raise_on_missing_task_models: false,
             loader: Roby.app.default_loader
         )
@@ -305,7 +306,9 @@ module Syskit::Log
                       skip_tasks_without_models: skip_tasks_without_models,
                       raise_on_missing_task_models: raise_on_missing_task_models,
                       loader: loader) do |task_streams|
-                group.use_pocolog_task(task_streams)
+                group.use_pocolog_task(
+                    task_streams, skip_incompatible_types: skip_incompatible_types
+                )
             end
             group
         end

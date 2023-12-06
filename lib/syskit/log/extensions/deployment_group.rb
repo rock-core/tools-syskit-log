@@ -7,14 +7,18 @@ module Syskit::Log
         module DeploymentGroup
             # Expose a given set of streams as a task context in Syskit
             def use_pocolog_task(
-                streams, name: streams.task_name, model: streams.replay_model,
-                allow_missing: true, on: "pocolog", process_managers: Syskit.conf
+                streams,
+                name: streams.task_name, model: streams.replay_model,
+                allow_missing: true, skip_incompatible_types: false,
+                on: "pocolog", process_managers: Syskit.conf
             )
                 # Verify the process manager's availability
                 process_managers.process_server_config_for(on)
 
                 deployment_model = Deployment.for_streams(
-                    streams, name: name, model: model, allow_missing: allow_missing
+                    streams,
+                    name: name, model: model, allow_missing: allow_missing,
+                    skip_incompatible_types: skip_incompatible_types
                 )
 
                 configured_deployment =

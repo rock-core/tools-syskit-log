@@ -181,6 +181,7 @@ module Syskit::Log
             option :robot, aliases: "r", type: :string,
                            desc: "the robot configuration to load"
             option :controller, aliases: "c", type: :boolean, default: false
+            option :skip_incompatible_types, type: :boolean, default: false
             option :set, type: :string, repeatable: true,
                          desc: "configuration variables to set, as path.to.key=value"
             def start(*args)
@@ -208,8 +209,10 @@ module Syskit::Log
                     Syskit::Log.streams = streams
                     if script_paths.empty?
                         # Load the default script
-                        Syskit::Log::Plugin
-                            .override_all_deployments_by_replay_streams(streams)
+                        Syskit::Log::Plugin.override_all_deployments_by_replay_streams(
+                            streams,
+                            skip_incompatible_types: options[:skip_incompatible_types]
+                        )
                     end
                     app.run
                 ensure
