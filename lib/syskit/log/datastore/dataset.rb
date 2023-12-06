@@ -685,8 +685,13 @@ module Syskit::Log
             # this dataset
             #
             # @return [Streams]
-            def streams
-                Streams.new(each_pocolog_lazy_stream.to_a)
+            def streams(from: nil, to: nil)
+                streams = each_pocolog_lazy_stream.map do |s|
+                    s = s.from_logical_time(from) if from
+                    s = s.to_logical_time(to) if to
+                    s
+                end
+                Streams.new(streams)
             end
 
             # Access to the Roby log information, such as tasks or events

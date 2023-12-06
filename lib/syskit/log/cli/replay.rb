@@ -23,7 +23,7 @@ module Syskit::Log
                     app.using "syskit-log"
                 end
 
-                def start_resolve_streams_and_scripts(args)
+                def start_resolve_streams_and_scripts(args, from: nil, to: nil)
                     hash, rest =
                         args.partition { Datastore::Dataset.valid_encoded_digest?(_1) }
                     raise "cannot give more than one dataset" if hash.size > 1
@@ -38,17 +38,18 @@ module Syskit::Log
                     [dataset_hash, paths]
                 end
 
-                    if dataset_hash
-                        return Datastore.default.get(dataset_hash).streams, script_paths
-                    end
+                def start_resolve_streams_from_hash(dataset_hash, from: nil, to: nil)
+                    dataset = Datastore.default.get(dataset_hash)
+                    dataset.streams(from: from, to: to)
+                end
 
                 def start_resolve_streams_from_paths(dataset_paths, from: nil, to: nil)
                     streams = Syskit::Log::Streams.new
                     dataset_paths.each do |p|
                         if p.directory?
-                            streams.add_dir(p)
+                            streams.add_dir(p, from: from, to: to)
                         else
-                            streams.add_file(p)
+                            streams.add_file(p, from: from, to: to)
                         end
                     end
                     streams
@@ -172,6 +173,13 @@ module Syskit::Log
                         end
                     end
                 end
+
+                def parse_date_and_time(string)
+                    return unless string
+                    return Time.at(Integer(string)) if /^\d+\.?\d+$/.match?(string)
+
+                    Time.parse(string)
+                end
             end
 
             desc "start [SCRIPTS] [DATASETS]",
@@ -184,9 +192,13 @@ module Syskit::Log
             option :skip_incompatible_types, type: :boolean, default: false
             option :set, type: :string, repeatable: true,
                          desc: "configuration variables to set, as path.to.key=value"
+            option :from, type: :string, desc: "start replay at this date & time"
+            option :to, type: :string, desc: "end replay at this date & time"
             def start(*args)
+                from = parse_date_and_time(options[:from]) if options[:from]
+                to = parse_date_and_time(options[:to]) if options[:to]
                 streams, script_paths =
-                    start_resolve_streams_and_scripts(args)
+                    start_resolve_streams_and_scripts(args, from: from, to: to)
 
                 setup_common
                 setup_roby_for_running(run_controllers: options[:controller])
@@ -205,6 +217,7 @@ module Syskit::Log
                 app.public_logs = true
                 app.public_log_server = true
                 app.setup
+
                 begin
                     Syskit::Log.streams = streams
                     if script_paths.empty?

@@ -86,7 +86,12 @@ module Syskit::Log
                 Syskit::Log.decompressed(path, index_dir).to_s,
                 index_dir: index_dir
             )
-            @pocolog_stream = file.streams.first
+            s = file.streams.first
+            unless empty?
+                s = s.from_logical_time(interval_lg[0])
+                s = s.to_logical_time(interval_lg[1])
+            end
+            @pocolog_stream = s
         end
 
         # Return an object that allows to enumerate this stream's samples
@@ -100,12 +105,24 @@ module Syskit::Log
 
         # Return a data stream that starts at the given time
         def from_logical_time(time)
-            syskit_eager_load.from_logical_time(time)
+            return self if empty?
+
+            s = dup
+            s.restrict_logical_interval!(time, interval_lg[1])
+            s
         end
 
         # Return a data stream that starts at the given time
         def to_logical_time(time)
-            syskit_eager_load.to_logical_time(time)
+            return self if empty?
+
+            s = dup
+            s.restrict_logical_interval!(interval_lg[0], time)
+            s
+        end
+
+        def restrict_logical_interval!(from, to)
+            @interval_lg = [from, to]
         end
 
         # Enumerate the stream's samples, not converting the values to their Ruby equivalent

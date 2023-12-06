@@ -102,26 +102,29 @@ module Syskit::Log
                 subject.add_dir(logfile_pathname)
             end
             it "adds files that match the .NUM.log pattern" do
+                flexmock(subject)
                 create_logfile("test0.0.log") {}
                 create_logfile("test1.0.log") {}
                 create_logfile("test2.0.log") {}
-                flexmock(subject).should_receive(:add_file_group)
-                                 .with([logfile_pathname + "test0.0.log"]).once
-                flexmock(subject).should_receive(:add_file_group)
-                                 .with([logfile_pathname + "test1.0.log"]).once
-                flexmock(subject).should_receive(:add_file_group)
-                                 .with([logfile_pathname + "test2.0.log"]).once
+                subject.should_receive(:add_file_group)
+                       .with([logfile_pathname + "test0.0.log"], from: nil, to: nil).once
+                subject.should_receive(:add_file_group)
+                       .with([logfile_pathname + "test1.0.log"], from: nil, to: nil).once
+                subject.should_receive(:add_file_group)
+                       .with([logfile_pathname + "test2.0.log"], from: nil, to: nil).once
                 subject.add_dir(logfile_pathname)
             end
 
             it "opens files that belong together, together" do
+                flexmock(subject)
                 create_logfile("test0.0.log") {}
                 create_logfile("test0.1.log") {}
                 create_logfile("test1.0.log") {}
-                flexmock(subject).should_receive(:add_file_group)
-                                 .with([logfile_pathname + "test0.0.log", logfile_pathname + "test0.1.log"]).once
-                flexmock(subject).should_receive(:add_file_group)
-                                 .with([logfile_pathname + "test1.0.log"]).once
+                subject.should_receive(:add_file_group)
+                       .with([logfile_pathname + "test0.0.log",
+                              logfile_pathname + "test0.1.log"], from: nil, to: nil).once
+                subject.should_receive(:add_file_group)
+                       .with([logfile_pathname + "test1.0.log"], from: nil, to: nil).once
                 subject.add_dir(logfile_pathname)
             end
         end

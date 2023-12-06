@@ -161,9 +161,9 @@ module Syskit::Log
         end
 
         # Load all log files from a directory
-        def add_dir(path)
+        def add_dir(path, from: nil, to: nil)
             make_file_groups_in_dir(path).each do |files|
-                add_file_group(files)
+                add_file_group(files, from: from, to: to)
             end
         end
 
@@ -202,9 +202,11 @@ module Syskit::Log
         # I.e. each file is part of the same general datastream
         #
         # @raise Errno::ENOENT if the path does not exist
-        def add_file_group(group)
+        def add_file_group(group, from: nil, to: nil)
             file = Pocolog::Logfiles.new(*group.map(&:open), registry)
             file.streams.each do |s|
+                s = s.from_logical_time(from) if from
+                s = s.to_logical_time(to) if to
                 add_stream(s)
             end
         end
@@ -249,8 +251,8 @@ module Syskit::Log
         end
 
         # Load the streams from a log file
-        def add_file(file)
-            add_file_group([file])
+        def add_file(file, from: nil, to: nil)
+            add_file_group([file], from: from, to: to)
         end
 
         # Add a new stream
