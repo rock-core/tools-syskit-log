@@ -24,8 +24,30 @@ module Syskit::Log
                 end
 
                 def start_resolve_streams_and_scripts(args, from: nil, to: nil)
-                    hash, rest =
-                        args.partition { Datastore::Dataset.valid_encoded_digest?(_1) }
+                    dataset_hash, paths = start_args_partition_dataset_and_paths(args)
+                    script_paths, dataset_paths =
+                        paths.partition { |p| p.extname == ".rb" }
+
+                    if dataset_hash && !dataset_paths.empty?
+                        raise "cannot give dataset paths and hash at the same time"
+                    end
+
+                    streams =
+                        if dataset_hash
+                            start_resolve_streams_from_hash(
+                                dataset_hash, from: from, to: to
+                            )
+                        else
+                            start_resolve_streams_from_paths(
+                                dataset_paths, from: from, to: to
+                            )
+                        end
+
+                    [streams, script_paths]
+                end
+
+                def start_args_partition_dataset_and_paths(args)
+                    hash, rest = args.partition { _1.match?(/^[0-9a-f]+$/) }
                     raise "cannot give more than one dataset" if hash.size > 1
 
                     dataset_hash = hash.first
