@@ -994,6 +994,8 @@ module Syskit::Log
                 end
 
                 roby_log_path = roby_logs.first
+                roby_log_path =
+                    Syskit::Log.decompressed(roby_log_path, dataset.cache_path)
                 exec("roby-log", mode, roby_log_path.to_s,
                      "--index-path", dataset.roby_index_path(roby_log_path).to_s,
                      *args)
