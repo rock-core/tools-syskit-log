@@ -249,6 +249,9 @@ module Syskit::Log
                             skip_incompatible_types: options[:skip_incompatible_types]
                         )
                     end
+                    app.execution_engine.each_cycle do
+                        app.execution_engine.pocolog_replay_manager.process_in_realtime(1)
+                    end
                     app.run
                 ensure
                     Syskit::Log.streams = nil
