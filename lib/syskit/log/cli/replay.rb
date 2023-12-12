@@ -216,6 +216,13 @@ module Syskit::Log
                          desc: "configuration variables to set, as path.to.key=value"
             option :from, type: :string, desc: "start replay at this date & time"
             option :to, type: :string, desc: "end replay at this date & time"
+            option :log,
+                   type: :string,
+                   repeatable: true,
+                   desc: <<~TXT
+                       configuration specification for text loggers. SPEC is of the form
+                       path/to/a/module:LEVEL[:FILE][,path/to/another]
+                   TXT
             def start(*args)
                 from = parse_date_and_time(options[:from]) if options[:from]
                 to = parse_date_and_time(options[:to]) if options[:to]
@@ -229,6 +236,13 @@ module Syskit::Log
                 options[:set].each do |s|
                     app.argv_set << s
                     Roby::Application.apply_conf_from_argv(s)
+                end
+
+                options[:log].each do |spec_list|
+                    spec_list.split(",").each do |spec|
+                        mod, level, file = spec.split(":")
+                        Roby.app.log_setup(mod, level, file)
+                    end
                 end
 
                 app.on_setup(user: true) do
