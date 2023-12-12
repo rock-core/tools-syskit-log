@@ -231,8 +231,10 @@ module Syskit::Log
                     Roby::Application.apply_conf_from_argv(s)
                 end
 
-                app.on_require(user: true) do
-                    script_paths.each { |p| require p.to_s }
+                app.on_setup(user: true) do
+                    app.on_require(user: true) do
+                        script_paths.each { |p| require p.to_s }
+                    end
                 end
 
                 app.public_shell_interface = true
