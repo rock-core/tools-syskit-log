@@ -278,6 +278,21 @@ module Syskit::Log
             TaskStreams.new(streams)
         end
 
+        def each_task_name
+            return enum_for(__method__) unless block_given?
+
+            seen = Set.new
+            each_stream do |s|
+                next unless (name = s.metadata["rock_task_name"])
+
+                yield("#{name}_task") if seen.add?(name)
+            end
+        end
+
+        def methods(*)
+            super + each_task_name.to_a.sort
+        end
+
         def respond_to_missing?(m, include_private = false)
             MetaRuby::DSLs.has_through_method_missing?(
                 self, m,
