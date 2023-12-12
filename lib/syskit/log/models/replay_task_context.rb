@@ -43,6 +43,7 @@ module Syskit
                     if plain_model
                         submodel.instance_variable_set :@plain_task_context, plain_model
                         submodel.copy_services_from_plain_model(plain_model)
+                        submodel.copy_arguments_from_plain_model(plain_model)
                     else
                         submodel.instance_variable_set(
                             :@plain_task_context, Syskit::TaskContext
@@ -64,6 +65,16 @@ module Syskit
                     end
                     plain_model.each_dynamic_service do |name, srv|
                         dynamic_services[name] = srv.attach(self)
+                    end
+                end
+
+                # @api private
+                #
+                # Copy the argument definitions of a task model (in this case, expected to
+                # be the replay model's {#plain_task_context}) onto this model
+                def copy_arguments_from_plain_model(plain_model)
+                    plain_model.each_argument do |_name, arg|
+                        argument arg.name, doc: arg.doc, default: arg.default
                     end
                 end
 
