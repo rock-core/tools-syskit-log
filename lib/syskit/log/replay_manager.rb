@@ -37,6 +37,9 @@ module Syskit::Log
         # base_real_time == {#base_logical_time}
         attr_reader :base_logical_time
 
+        # The name of the last stream whose sample has been replayed
+        attr_reader :last_replayed_stream_name
+
         DispatchInfo = Struct.new :deployments, :syskit_stream do
             def in_use?
                 !deployments.empty?
@@ -64,6 +67,10 @@ module Syskit::Log
         # Time of the last sample in the aligner
         def end_time
             stream_aligner.interval_lg[1]
+        end
+
+        def sample_index
+            stream_aligner.sample_index
         end
 
         OutputLog = Struct.new :block_stream, :index_as_buffer, :sample
@@ -192,6 +199,12 @@ module Syskit::Log
             dispatch(stream_index, time) if stream_index
         end
 
+        # Process the next sample, and feed it to the relevant deployment(s)
+        def step_back
+            stream_index, time = stream_aligner.step_back
+            dispatch(stream_index, time) if stream_index
+        end
+
         # Whether we're doing realtime replay
         def running?
             @handler_id
@@ -265,6 +278,7 @@ module Syskit::Log
         def dispatch(stream_index, time)
             @time = time
             pocolog_stream = stream_aligner.streams[stream_index]
+            @last_replayed_stream_name = pocolog_stream.name
             info = @dispatch_info.fetch(pocolog_stream)
 
             stream, position = stream_aligner.sample_info(stream_index)
@@ -304,12 +318,21 @@ module Syskit::Log
             payload_raw[0, 8] = [time.tv_sec, time.tv_usec].pack("VV")
         end
 
+        def rewind
+            @stream_aligner.rewind
+            reset_replay_base_times
+        end
+
         # @api private
         #
         # Resets the reference times used to manage the realtime replay
         def reset_replay_base_times
             @base_real_time = Time.now
             @base_logical_time = time || start_time
+        end
+
+        def size_in_samples
+            @stream_aligner.size
         end
     end
 end
