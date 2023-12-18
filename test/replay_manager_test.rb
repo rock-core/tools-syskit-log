@@ -179,7 +179,9 @@ module Syskit::Log
                            .and_return { realtime += 1 }
                     subject.should_receive(:dispatch).once.with(0, Time.at(1))
                            .and_return { realtime += 1 }
-                    subject.process_in_realtime(1, limit_real_time: realtime + 1.1)
+                    subject.process_in_realtime(
+                        1, limit_real_time: realtime + 1.1, max_duration_s: 10
+                    )
                 end
 
                 it "applies the speed to the sample limit" do
@@ -190,21 +192,39 @@ module Syskit::Log
                            .and_return { realtime += 1 }
                     subject.should_receive(:dispatch).once.with(0, Time.at(1))
                            .and_return { realtime += 1 }
-                    subject.process_in_realtime(2, limit_real_time: realtime + 0.55)
+                    subject.process_in_realtime(
+                        2, limit_real_time: realtime + 0.55, max_duration_s: 10
+                    )
+                end
+
+                it "returns after max_duration_s seconds regardles "\
+                   "of the realtime limit" do
+                    subject.should_receive(:sleep)
+                    realtime = subject.base_real_time
+                    flexmock(Time).should_receive(:now).and_return { realtime }
+                    subject.should_receive(:dispatch).once.with(0, Time.at(0))
+                           .and_return { realtime += 1 }
+                    subject.process_in_realtime(
+                        2, limit_real_time: realtime + 0.55, max_duration_s: 0.1
+                    )
                 end
 
                 it "returns true if there are samples left to play" do
                     subject.should_receive(:sleep)
                     realtime = subject.base_real_time
                     flexmock(Time).should_receive(:now).and_return { realtime }
-                    assert subject.process_in_realtime(1, limit_real_time: realtime + 1.1)
+                    assert subject.process_in_realtime(
+                        1, limit_real_time: realtime + 1.1, max_duration_s: 10
+                    )
                 end
 
                 it "returns false on eof" do
                     subject.should_receive(:sleep)
                     realtime = subject.base_real_time
                     flexmock(Time).should_receive(:now).and_return { realtime }
-                    assert !subject.process_in_realtime(1, limit_real_time: realtime + 2.1)
+                    assert !subject.process_in_realtime(
+                        1, limit_real_time: realtime + 2.1, max_duration_s: 10
+                    )
                 end
 
                 it "sleeps between samples" do
@@ -215,7 +235,9 @@ module Syskit::Log
                            .and_return { realtime += 1 }
                     subject.should_receive(:dispatch).with(0, Time.at(1)).globally.ordered
                            .and_return { realtime += 1 }
-                    subject.process_in_realtime(1, limit_real_time: realtime + 1.1)
+                    subject.process_in_realtime(
+                        1, limit_real_time: realtime + 1.1, max_duration_s: 10
+                    )
                 end
 
                 it "applies the replay speed to the sleeping times" do
@@ -224,7 +246,9 @@ module Syskit::Log
                     subject.should_receive(:dispatch)
                     subject.should_receive(:sleep).explicitly.with(0.5).once.globally.ordered
                            .and_return { realtime += 0.5 }
-                    subject.process_in_realtime(2, limit_real_time: realtime + 0.55)
+                    subject.process_in_realtime(
+                        2, limit_real_time: realtime + 0.55, max_duration_s: 10
+                    )
                 end
 
                 it "does not sleep if the required sleep time is below MIN_TIME_DIFF_TO_SLEEP" do
@@ -232,7 +256,9 @@ module Syskit::Log
                     flexmock(Time).should_receive(:now).and_return { realtime }
                     subject.should_receive(:dispatch)
                     subject.should_receive(:sleep).explicitly.never
-                    subject.process_in_realtime(1000, limit_real_time: realtime + 0.0011)
+                    subject.process_in_realtime(
+                        1000, limit_real_time: realtime + 0.0011, max_duration_s: 10
+                    )
                 end
             end
         end

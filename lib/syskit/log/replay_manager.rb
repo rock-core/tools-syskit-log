@@ -248,14 +248,16 @@ module Syskit::Log
         # Play samples required by the current execution engine's time
         def process_in_realtime(
             replay_speed,
-            limit_real_time: end_of_current_engine_cycle
+            limit_real_time: end_of_current_engine_cycle,
+            max_duration_s: 0.1
         )
             return unless base_logical_time
 
             limit_logical_time = base_logical_time +
                                  (limit_real_time - base_real_time) * replay_speed
 
-            loop do
+            deadline = Time.now + max_duration_s
+            while Time.now < deadline
                 stream_index, time = stream_aligner.step
                 return false unless stream_index
 
