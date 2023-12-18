@@ -212,10 +212,20 @@ module Syskit::Log
                            desc: "the robot configuration to load"
             option :controller, aliases: "c", type: :boolean, default: false
             option :skip_incompatible_types, type: :boolean, default: false
+            option :ui, type: :boolean, default: false
+            option :speed, type: :numeric, default: 1,
+                           desc: "speed at which to start the replay"
+            option :play,
+                   type: :boolean, default: nil,
+                   desc: "whether the system should start playing right away. false in "\
+                         "UI mode, true otherwise"
             option :set, type: :string, repeatable: true,
                          desc: "configuration variables to set, as path.to.key=value"
             option :from, type: :string, desc: "start replay at this date & time"
             option :to, type: :string, desc: "end replay at this date & time"
+            option :quit_when_done,
+                   type: :boolean, default: false,
+                   desc: "quit when the replay reaches the 'to' time"
             option :log,
                    type: :string,
                    repeatable: true,
@@ -228,51 +238,13 @@ module Syskit::Log
                 to = parse_date_and_time(options[:to]) if options[:to]
                 streams, script_paths =
                     start_resolve_streams_and_scripts(args, from: from, to: to)
-
-                setup_common
-                setup_roby_for_running(run_controllers: options[:controller])
-                app.single if options[:single]
-
-                options[:set].each do |s|
-                    app.argv_set << s
-                    Roby::Application.apply_conf_from_argv(s)
+                if options[:quit_when_done] && !to
+                    raise "need --to to use --quit-when-done"
                 end
 
-                options[:log].each do |spec_list|
-                    spec_list.split(",").each do |spec|
-                        mod, level, file = spec.split(":")
-                        Roby.app.log_setup(mod, level, file)
-                    end
-                end
-
-                app.on_setup(user: true) do
-                    app.on_require(user: true) do
-                        script_paths.each { |p| require p.to_s }
-                    end
-                end
-
-                app.public_shell_interface = true
-                app.public_logs = true
-                app.public_log_server = true
-                app.setup
-
-                begin
-                    Syskit::Log.streams = streams
-                    if script_paths.empty?
-                        # Load the default script
-                        Syskit::Log::Plugin.override_all_deployments_by_replay_streams(
-                            streams,
-                            skip_incompatible_types: options[:skip_incompatible_types]
-                        )
-                    end
-                    app.execution_engine.each_cycle do
-                        app.execution_engine.pocolog_replay_manager.process_in_realtime(1)
-                    end
-                    app.run
-                ensure
-                    Syskit::Log.streams = nil
-                    app.cleanup
-                end
+                start_setup_app(script_paths)
+                start_setup_ui if options[:ui]
+                start_replay(streams, from, to)
             end
         end
     end
