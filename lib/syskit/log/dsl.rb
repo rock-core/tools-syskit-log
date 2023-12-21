@@ -5,6 +5,9 @@ require "syskit/log/daru"
 require "syskit/log/datastore"
 require "syskit/log/dsl/maps"
 require "syskit/log/dsl/summary"
+require "syskit/log/dsl/path_builder"
+require "syskit/log/dsl/alignment_builder"
+require "syskit/log/dsl/export_to_single_file"
 
 module Syskit
     module Log
@@ -779,6 +782,42 @@ module Syskit
 
             def raw_html(html)
                 RawHTML.new(html)
+            end
+
+            # Export streams from the dataset into a new multi-stream log file
+            #
+            # @param [Array] streams an array of objects that can be converted to
+            #   samples using {#samples_of}
+            # @yield a {DSL::AlignmentBuilder} object used to describe the streams to be
+            #   saved
+            def export_to_single_file(path, *streams)
+                log_file = Pocolog::Logfiles.create(path.to_s)
+                return if streams.empty?
+
+                interval_start, interval_end = streams.map(&:interval_lg).transpose
+                interval_start = interval_start.min
+                interval_end = interval_end.max
+                interval_start = [interval_start, @interval[0]].max if @interval[0]
+                interval_end = [interval_end, @interval[1]].min if @interval[1]
+
+                samples = streams.map do |s|
+                    samples_of(s, from: interval_start, to: interval_end)
+                end
+
+                builders = streams.map { |s| DSL::AlignmentBuilder.new(s.type) }
+                yield(*builders)
+
+                log_file_streams =
+                    DSL.export_to_single_file_create_output_streams(log_file, builders)
+                joint_stream = Pocolog::StreamAligner.new(false, *samples)
+                DSL.export_to_single_file_process(
+                    builders, log_file_streams, joint_stream
+                )
+            rescue ::Exception # rubocop:disable Lint/RescueException
+                path.unlink
+                raise
+            ensure
+                log_file&.close
             end
         end
     end
