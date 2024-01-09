@@ -56,6 +56,7 @@ module Syskit::Log
                 @metadata = nil
                 @lazy_data_streams = nil
                 @datastore = datastore
+                @upgrade_ops_for_target = {}
             end
 
             def timestamp
@@ -661,6 +662,98 @@ module Syskit::Log
                     loader: loader,
                     &block
                 )
+            end
+
+            # Try converting the given value to the target using pocolog upgrade mechanisms
+            #
+            # "Upgrade" in this context is the mechanism through which data can be updated
+            # when types have changed over time, and/or because of change of architecture
+            # (for types that would have architecture-dependent features).
+            #
+            # Without any specific setup, the system will be able to handle change of layout
+            # (i.e. removal of fields, change of types providing the field new/old types
+            # are compatible, change of order of fields).
+            #
+            # For more complex upgrades, one has to provide custom conversion handlers. These
+            # handlers are Ruby files that register conversions on a
+            # {Pocolog::Upgrade::ConversionRegistry} object. See the rock-and-syskit
+            # documentation for more details
+            #
+            # @param [Typelib::Type] value the value to upgrade
+            # @param [Typelib::Type,Class<Typelib::Type>] target the conversion target,
+            #    either as a value or as a Typelib type.
+            # @return [Typelib::Type]
+            # @raise [Pocolog::Upgrade::InvalidCast] if the conversion is not possible
+            def upgrade_value_to(value, target, reference_time: interval_lg.first)
+                ops = upgrade_ops_for_target(value, target, reference_time)
+                return value if ops.identity?
+
+                target_value = upgrade_resolve_target_value(target)
+                ops.call(target_value, value)
+                target_value
+            end
+
+            # @private
+            #
+            # Calculate and caches the operations needed to upgrade the given value to
+            # `target`.
+            #
+            # @param [Typelib::Type] value the value to upgrade
+            # @param [Typelib::Type,Class<Typelib::Type>] target the conversion target,
+            #    either as a value or as a Typelib type.
+            # @return [Pocolog::Upgrade::Ops::Identity]
+            # @raise [Pocolog::Upgrade::InvalidCast] if the conversion is not possible
+            def upgrade_ops_for_target(value, target, reference_time)
+                unless datastore
+                    raise ArgumentError,
+                          "upgrade feature not available for datasets without "\
+                          "an associated datastore"
+                end
+
+                target_type = upgrade_resolve_target_type(target)
+                cache_key = [value.class, target_type, reference_time]
+
+                @upgrade_ops_for_target[cache_key] ||=
+                    Pocolog::Upgrade.compute(
+                        reference_time, value.class, target_type,
+                        datastore.upgrade_converter_registry
+                    )
+            end
+
+            # @private
+            #
+            # Resolve the target argument given to the upgrade_* methods to return
+            # the target value
+            #
+            # @param [Typelib::Type,Class<Typelib::Type>] target
+            # @return [Typelib::Type]
+            # @raise ArgumentError if the target argument is invalid
+            def upgrade_resolve_target_value(target)
+                if target.kind_of?(Typelib::Type)
+                    target
+                elsif target.kind_of?(Class) && target <= Typelib::Type
+                    target.new
+                else
+                    raise ArgumentError, "#{target} is not a valid upgrade target"
+                end
+            end
+
+            # @private
+            #
+            # Resolve the target argument given to the upgrade_* methods to return
+            # the target type
+            #
+            # @param [Typelib::Type,Class<Typelib::Type>] target
+            # @return [Class<Typelib::Type>]
+            # @raise ArgumentError if the target argument is invalid
+            def upgrade_resolve_target_type(target)
+                if target.kind_of?(Typelib::Type)
+                    target.class
+                elsif target.kind_of?(Class) && target <= Typelib::Type
+                    target
+                else
+                    raise ArgumentError, "#{target} is not a valid upgrade target"
+                end
             end
         end
     end

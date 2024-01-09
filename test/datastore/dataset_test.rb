@@ -43,7 +43,7 @@ module Syskit::Log
                 (dataset_path + "text").mkpath
                 (dataset_path + "ignored").mkpath
                 @cache_path = store.cache_path_of("dataset")
-                @dataset = Dataset.new(dataset_path, cache: cache_path)
+                @dataset = Dataset.new(dataset_path, cache: cache_path, datastore: store)
 
                 move_logfile_path (dataset_path + "pocolog").to_s
                 create_logfile "task0::port.0.log" do
@@ -663,6 +663,57 @@ module Syskit::Log
                     )
                     assert_equal Time.utc(2021, 7, 4, 1, 5).tv_sec,
                                  ds.compute_timestamp
+                end
+            end
+
+            describe "#upgrade_value_to" do
+                it "upgrades a value to a target given as type" do
+                    cxx = Typelib::CXXRegistry.new
+                    int32 = cxx.get("/int32_t").from_ruby(32)
+                    int64_t = cxx.get("/int64_t")
+                    result = @dataset.upgrade_value_to(int32, int64_t)
+                    assert_equal 32, result.to_ruby
+                end
+
+                it "upgrades a value to a target given as value" do
+                    cxx = Typelib::CXXRegistry.new
+                    int32 = cxx.get("/int32_t").from_ruby(32)
+                    int64 = cxx.get("/int64_t").new
+                    result = @dataset.upgrade_value_to(int32, int64)
+                    assert_same int64, result
+                    assert_equal 32, result.to_ruby
+                end
+
+                it "uses the custom converters registered on the datastore" do
+                    cxx = Typelib::CXXRegistry.new
+                    int32_t = cxx.get("/int32_t")
+                    int64_t = cxx.get("/int64_t")
+                    @store.upgrade_converter_registry
+                          .add(Time.at(10), int32_t, int64_t) do |to, from|
+                              int64 = Typelib.from_ruby(from.to_ruby * 2, int64_t)
+                              Typelib.copy(to, int64)
+                          end
+
+                    result = @dataset.upgrade_value_to(
+                        int32_t.from_ruby(32), int64_t, reference_time: Time.at(9)
+                    )
+                    assert_equal 64, result.to_ruby
+                end
+
+                it "uses the given reference time to build the conversion" do
+                    cxx = Typelib::CXXRegistry.new
+                    int32_t = cxx.get("/int32_t")
+                    int64_t = cxx.get("/int64_t")
+                    @store.upgrade_converter_registry
+                          .add(Time.at(10), int32_t, int64_t) do |to, from|
+                              int64 = Typelib.from_ruby(from.to_ruby * 2, int64_t)
+                              Typelib.copy(to, int64)
+                          end
+
+                    result = @dataset.upgrade_value_to(
+                        int32_t.from_ruby(32), int64_t, reference_time: Time.at(11)
+                    )
+                    assert_equal 32, result.to_ruby
                 end
             end
         end
