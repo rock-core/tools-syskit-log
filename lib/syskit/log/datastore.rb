@@ -188,7 +188,7 @@ module Syskit::Log
 
             dataset = Dataset.new(
                 core_path_of(digest),
-                digest: digest, cache: cache_path_of(digest)
+                digest: digest, cache: cache_path_of(digest), datastore: self
             )
             if validate == :weak
                 dataset.weak_validate_identity_metadata

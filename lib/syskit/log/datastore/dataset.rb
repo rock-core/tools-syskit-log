@@ -44,12 +44,18 @@ module Syskit::Log
             # If this dataset is part of a store, the digest in the store
             attr_reader :digest
 
-            def initialize(path, digest: nil, cache: path)
+            # The datastore this dataset is part of
+            #
+            # @return [Datastore.nil]
+            attr_reader :datastore
+
+            def initialize(path, digest: nil, cache: path, datastore: nil)
                 @digest = digest
                 @dataset_path = path.realpath
                 @cache_path = cache
                 @metadata = nil
                 @lazy_data_streams = nil
+                @datastore = datastore
             end
 
             def timestamp

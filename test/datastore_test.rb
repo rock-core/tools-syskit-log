@@ -145,6 +145,11 @@ module Syskit::Log
                 assert_equal dataset_path, dataset.dataset_path
             end
 
+            it "associates the returned dataset with itself" do
+                dataset = datastore.get(digest)
+                assert_same datastore, dataset.datastore
+            end
+
             it "raises ArgumentError if the dataset does not exist" do
                 assert_raises(ArgumentError) do
                     datastore.get(DatasetIdentity.string_digest("does_not_exist"))
