@@ -16,8 +16,19 @@ module Syskit::Log
         # @return [Pathname]
         attr_reader :datastore_path
 
+        # The path to the datastore config file
+        #
+        # The file itself might be missing
+        #
+        # @return [Pathname]
+        # @see config_load
+        attr_reader :config_path
+
         def initialize(datastore_path)
             @datastore_path = datastore_path.realpath
+            @config_path = @datastore_path / "config.yml"
+
+            config_load
         end
 
         # Whether there is a default datastore defined
@@ -49,6 +60,16 @@ module Syskit::Log
         end
 
         class AmbiguousShortDigest < ArgumentError; end
+
+        # Load the datastore config path
+        def config_load
+            return unless config_path.exist?
+            return unless (config = YAML.safe_load(config_path.read))
+
+            if (path = config["upgrade_handlers_path"])
+                @upgrade_handlers_path = Pathname(path)
+            end
+        end
 
         # Finds the dataset that matches the given shortened digest
         #

@@ -128,6 +128,17 @@ module Syskit::Log
             end
         end
 
+        describe "#config_load" do
+            it "does nothing if the config file does not exist" do
+                @datastore.config_load
+            end
+
+            it "does nothing if the config file is empty" do
+                (@datastore_path / "config.yml").write("")
+                @datastore.config_load
+            end
+        end
+
         describe "#get" do
             attr_reader :digest, :dataset_path
             before do
