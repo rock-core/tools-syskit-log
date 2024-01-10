@@ -804,7 +804,9 @@ module Syskit
                     samples_of(s, from: interval_start, to: interval_end)
                 end
 
-                builders = streams.map { |s| DSL::AlignmentBuilder.new(s.type) }
+                builders = streams.map do |s|
+                    DSL::AlignmentBuilder.new(s.type, s.metadata)
+                end
                 yield(*builders)
 
                 log_file_streams =

@@ -482,6 +482,17 @@ module Syskit
                     assert_equal expected, stream.samples.to_a
                 end
 
+                it "copies the stream metadata" do
+                    port = @context.task_test_task.port_test_port
+                    @context.export_to_single_file @exported_path, port do |f|
+                        f.add("whole_stream")
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    stream = logfile.stream("whole_stream")
+                    assert_equal port.metadata, stream.metadata
+                end
+
                 it "aligns different streams" do
                     port_a = @context.task_test_task.port_test_port
                     port_b = @context.task_test1_task.port_test_port

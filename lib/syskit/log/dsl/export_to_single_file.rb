@@ -13,7 +13,9 @@ module Syskit
             def self.export_to_single_file_create_output_streams(logfile, builders)
                 builders.map do |b|
                     b.each_output_stream.map do |output_stream|
-                        logfile.create_stream(output_stream.name, output_stream.type)
+                        logfile.create_stream(
+                            output_stream.name, output_stream.type, output_stream.metadata
+                        )
                     end
                 end
             end

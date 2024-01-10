@@ -6,8 +6,29 @@ module Syskit
             # Representation of a transformation from a stream that is being aligned
             # into a processed stream
             class AlignmentBuilder
-                def initialize(type)
+                # AlignmentBuilder-specific PathBuilder that allows to change metadata
+                class PathBuilder < DSL::PathBuilder
+                    def initialize(
+                        type, metadata, name = "", path = ::Typelib::Path.new([]),
+                        transform = nil
+                    )
+                        super(type, name, path, transform)
+
+                        @metadata = metadata
+                    end
+
+                    def __metadata
+                        @metadata
+                    end
+
+                    def __new(type, name, path, transform = nil)
+                        PathBuilder.new(type, @metadata, name, path, transform)
+                    end
+                end
+
+                def initialize(type, metadata)
                     @type = type
+                    @metadata = metadata
                     @output_streams = {}
                 end
 
@@ -17,10 +38,11 @@ module Syskit
                 #
                 # @return [ResolvedField]
                 def resolve_output_stream
-                    builder = PathBuilder.new(@type)
+                    builder = PathBuilder.new(@type, @metadata)
                     builder = yield(builder) if block_given?
                     OutputStream.new(builder.__name, builder.__path,
                                      builder.__type,
+                                     builder.__metadata,
                                      builder.__transform)
                 end
 
@@ -54,7 +76,7 @@ module Syskit
                     resolved
                 end
 
-                OutputStream = Struct.new :name, :path, :type, :transform do
+                OutputStream = Struct.new :name, :path, :type, :metadata, :transform do
                     def resolve(_time, value)
                         v = path.resolve(value).first.to_ruby
                         transform ? transform.call(v) : v
