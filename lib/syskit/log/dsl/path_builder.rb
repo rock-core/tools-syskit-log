@@ -40,14 +40,16 @@ module Syskit
                         @type <= ::Typelib::EnumType
                 end
 
+                def __new(type, name, path, transform)
+                    PathBuilder.new(type, name, path, transform)
+                end
+
                 def transform(to:, &block)
                     if @transform
                         raise ArgumentError, "there is already a transform block"
                     end
 
-                    ::Syskit::Log::Daru::PathBuilder.new(
-                        to, @name, @path, block, nil
-                    )
+                    __new(to, @name, @path, block)
                 end
 
                 def respond_to?(m)
@@ -81,9 +83,7 @@ module Syskit
                 def __resolve_compound_call(field_name)
                     path = @path.dup
                     path.push_call(:raw_get, field_name)
-                    ::Syskit::Log::Daru::PathBuilder.new(
-                        @type[field_name], "#{@name}.#{field_name}", path
-                    )
+                    __new(@type[field_name], "#{@name}.#{field_name}", path)
                 end
 
                 def __validate_compound_call(field_name, args, kw)
@@ -130,8 +130,7 @@ module Syskit
                 def __resolve_sequence_call(index)
                     path = @path.dup
                     path.push_call(:raw_get, index)
-                    ::Syskit::Log::Daru::PathBuilder
-                        .new(@type.deference, "#{@name}[#{index}]", path)
+                    __new(@type.deference, "#{@name}[#{index}]", path)
                 end
             end
         end
