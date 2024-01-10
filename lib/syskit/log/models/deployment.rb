@@ -136,11 +136,12 @@ module Syskit::Log
                     raise ArgumentError,
                           "#{self} deploys #{task_model} but the stream mapping "\
                           "is for #{port.component_model}"
-                elsif port.type != stream.type
-                    raise MismatchingType.new(stream, port)
                 end
 
-                streams_to_port[stream] = port
+                ops = stream.upgrade_ops_for_target(port.type)
+                streams_to_port[stream] = [ops, port]
+            rescue Pocolog::Upgrade::InvalidCast => e
+                raise MismatchingType.new(stream, port), e.message, e.backtrace
             end
 
             # Enumerate the declared stream-to-port mappings

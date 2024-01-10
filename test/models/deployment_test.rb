@@ -9,7 +9,7 @@ module Syskit::Log
 
             before do
                 double_t = Roby.app.default_loader.registry.get "/double"
-                mismatch_t = Typelib::Registry.new.create_numeric "/double", 4, :sint
+                mismatch_t = Typelib::Registry.new.create_compound("/double")
 
                 create_logfile "test.0.log" do
                     create_logfile_stream "/port0", type: double_t,
@@ -82,8 +82,11 @@ module Syskit::Log
                         replay_task_m = Syskit::Log::ReplayTaskContext.model_for(task_m.orogen_model)
                         deployment_m = Syskit::Log::Deployment.for_streams(TaskStreams.new, model: task_m, name: "task")
                         deployment_m.add_stream(port_stream = streams.find_port_by_name("object0"))
-                        assert_equal Hash[port_stream => replay_task_m.object0_port],
-                                     deployment_m.streams_to_port
+
+                        assert_equal [port_stream], deployment_m.streams_to_port.keys
+                        ops, port = deployment_m.streams_to_port[port_stream]
+                        assert_kind_of Pocolog::Upgrade::Ops::Identity, ops
+                        assert_equal replay_task_m.object0_port, port
                     end
                 end
 

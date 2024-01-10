@@ -216,18 +216,20 @@ module Syskit
             compressed_io&.close
         end
 
-        def self.read_single_lazy_data_stream(logfile_path, minimal_index_path, index_dir)
+        def self.read_single_lazy_data_stream(
+            logfile_path, minimal_index_path, index_dir, upgrader: nil
+        )
             open_in_stream(logfile_path) do |file_io|
                 minimal_index_path.open do |index_io|
                     read_single_lazy_data_stream_from_io(
-                        file_io, index_io, logfile_path, index_dir
+                        file_io, index_io, logfile_path, index_dir, upgrader: upgrader
                     )
                 end
             end
         end
 
         def self.read_single_lazy_data_stream_from_io(
-            file_io, index_io, logfile_path, index_dir
+            file_io, index_io, logfile_path, index_dir, upgrader: nil
         )
             stream_info = Pocolog::Format::Current.read_minimal_info(
                 index_io, file_io, validate: false
@@ -249,7 +251,8 @@ module Syskit
                 stream_block.metadata,
                 interval_rt,
                 interval_lg,
-                index_stream_info.stream_size
+                index_stream_info.stream_size,
+                upgrader: upgrader
             )
         end
 

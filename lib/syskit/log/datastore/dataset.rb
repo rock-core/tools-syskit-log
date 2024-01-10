@@ -549,7 +549,7 @@ module Syskit::Log
                     end
 
                     Syskit::Log.read_single_lazy_data_stream(
-                        logfile_path, index_path, cache_path + "pocolog"
+                        logfile_path, index_path, cache_path + "pocolog", upgrader: self
                     )
                 end
             end
@@ -685,7 +685,9 @@ module Syskit::Log
             # @return [Typelib::Type]
             # @raise [Pocolog::Upgrade::InvalidCast] if the conversion is not possible
             def upgrade_value_to(value, target, reference_time: interval_lg.first)
-                ops = upgrade_ops_for_target(value, target, reference_time)
+                ops = upgrade_ops_for_target(
+                    value.class, target, reference_time: reference_time
+                )
                 return value if ops.identity?
 
                 target_value = upgrade_resolve_target_value(target)
@@ -698,12 +700,12 @@ module Syskit::Log
             # Calculate and caches the operations needed to upgrade the given value to
             # `target`.
             #
-            # @param [Typelib::Type] value the value to upgrade
+            # @param [Typelib::Type] log_type the type to upgrade
             # @param [Typelib::Type,Class<Typelib::Type>] target the conversion target,
             #    either as a value or as a Typelib type.
             # @return [Pocolog::Upgrade::Ops::Identity]
             # @raise [Pocolog::Upgrade::InvalidCast] if the conversion is not possible
-            def upgrade_ops_for_target(value, target, reference_time)
+            def upgrade_ops_for_target(log_type, target, reference_time: interval_lg.first)
                 unless datastore
                     raise ArgumentError,
                           "upgrade feature not available for datasets without "\
@@ -711,11 +713,11 @@ module Syskit::Log
                 end
 
                 target_type = upgrade_resolve_target_type(target)
-                cache_key = [value.class, target_type, reference_time]
+                cache_key = [log_type, target_type, reference_time]
 
                 @upgrade_ops_for_target[cache_key] ||=
                     Pocolog::Upgrade.compute(
-                        reference_time, value.class, target_type,
+                        reference_time, log_type, target_type,
                         datastore.upgrade_converter_registry
                     )
             end

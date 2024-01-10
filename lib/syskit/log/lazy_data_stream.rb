@@ -46,7 +46,12 @@ module Syskit::Log
         # The logical-time interval
         attr_reader :interval_lg
 
-        def initialize(path, index_dir, name, type, metadata, interval_rt, interval_lg, size)
+        # @param [#upgrade_ops_for_target] upgrader an object that allows to update a value
+        #   to its current local representation
+        def initialize(
+            path, index_dir, name, type, metadata, interval_rt, interval_lg, size,
+            upgrader: nil
+        )
             @path = path
             @index_dir = index_dir
             @name = name
@@ -56,6 +61,7 @@ module Syskit::Log
             @interval_lg = interval_lg
             @size = size
             @pocolog_stream = nil
+            @upgrader = upgrader
         end
 
         def task_name
@@ -92,6 +98,10 @@ module Syskit::Log
                 s = s.to_logical_time(interval_lg[1])
             end
             @pocolog_stream = s
+        end
+
+        def upgrade_ops_for_target(target)
+            @upgrader.upgrade_ops_for_target(type, target)
         end
 
         # Return an object that allows to enumerate this stream's samples
