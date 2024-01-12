@@ -420,10 +420,10 @@ module Syskit
             describe "#export_to_single_file" do
                 before do
                     now_nsec = Time.now
-                    now = Time.at(now_nsec.tv_sec, now_nsec.tv_usec)
+                    @now = now = Time.at(now_nsec.tv_sec, now_nsec.tv_usec)
 
                     registry = Typelib::CXXRegistry.new
-                    compound_t = registry.create_compound "/C" do |b|
+                    @compound_t = compound_t = registry.create_compound "/C" do |b|
                         b.d = "/double"
                         b.i = "/int"
                     end
@@ -461,7 +461,7 @@ module Syskit
                 end
 
                 it "creates a valid empty file if given no streams at all" do
-                    @context.export_to_single_file(@exported_path) do |f|
+                    @context.export_to_single_file(@exported_path, upgrade: false) do |f|
                         f.add_logical_time
                         f.add(&:d)
                     end
@@ -472,7 +472,9 @@ module Syskit
 
                 it "copies a single stream" do
                     port = @context.task_test_task.port_test_port
-                    @context.export_to_single_file @exported_path, port do |f|
+                    @context.export_to_single_file(
+                        @exported_path, port, upgrade: false
+                    ) do |f|
                         f.add("whole_stream")
                     end
 
@@ -484,7 +486,9 @@ module Syskit
 
                 it "copies the stream metadata" do
                     port = @context.task_test_task.port_test_port
-                    @context.export_to_single_file @exported_path, port do |f|
+                    @context.export_to_single_file(
+                        @exported_path, port, upgrade: false
+                    ) do |f|
                         f.add("whole_stream")
                     end
 
@@ -497,7 +501,7 @@ module Syskit
                     port_a = @context.task_test_task.port_test_port
                     port_b = @context.task_test1_task.port_test_port
                     @context.export_to_single_file(
-                        @exported_path, port_a, port_b
+                        @exported_path, port_a, port_b, upgrade: false
                     ) do |a, b|
                         a.add("a")
                         b.add("b")
@@ -515,7 +519,9 @@ module Syskit
 
                 it "allows to select subfields" do
                     port = @context.task_test_task.port_test_port
-                    @context.export_to_single_file @exported_path, port do |f|
+                    @context.export_to_single_file(
+                        @exported_path, port, upgrade: false
+                    ) do |f|
                         f.add("subfield", &:d)
                     end
 
@@ -530,7 +536,9 @@ module Syskit
                     port = @context.task_test_task.port_test_port
                     registry = Typelib::CXXRegistry.new
                     string_t = registry.get("/std/string")
-                    @context.export_to_single_file @exported_path, port do |f|
+                    @context.export_to_single_file(
+                        @exported_path, port, upgrade: false
+                    ) do |f|
                         f.add("transformed") do |s|
                             s.transform(to: string_t) { |c| c.d.to_s }
                         end
@@ -541,6 +549,36 @@ module Syskit
                     assert_equal "/std/string", stream.type.name
                     assert_equal port.samples.map { |_rt, lg, s| [lg, lg, s.d.to_s] },
                                  stream.samples.to_a
+                end
+
+                it "upgrades samples to their latest if required" do
+                    upgraded_registry = Typelib::CXXRegistry.new
+                    upgraded_compound_t = upgraded_registry.create_compound "/D" do |b|
+                        b.d = "/std/string"
+                    end
+                    flexmock(Roby.app.default_loader)
+                        .should_receive(:resolve_type)
+                        .with("/C").and_return(upgraded_compound_t)
+                    @context
+                        .datastore
+                        .upgrade_converter_registry
+                        .add(@now + 1, @compound_t, upgraded_compound_t) do |to, from|
+                            to.d = (from.d * 2).to_s
+                        end
+
+                    port = @context.task_test_task.port_test_port
+                    @context.export_to_single_file(@exported_path, port) do |f|
+                        f.add("upgraded")
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    stream = logfile.stream("upgraded")
+                    assert_equal "/D", stream.type.name
+                    expected = port.samples.map do |_rt, lg, s|
+                        s = upgraded_compound_t.new(d: (s.d * 2).to_s)
+                        [lg, lg, s]
+                    end
+                    assert_equal expected, stream.samples.to_a
                 end
             end
 
