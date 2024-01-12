@@ -417,6 +417,133 @@ module Syskit
                 end
             end
 
+            describe "#export_to_single_file" do
+                before do
+                    now_nsec = Time.now
+                    now = Time.at(now_nsec.tv_sec, now_nsec.tv_usec)
+
+                    registry = Typelib::CXXRegistry.new
+                    compound_t = registry.create_compound "/C" do |b|
+                        b.d = "/double"
+                        b.i = "/int"
+                    end
+                    create_dataset "exists" do
+                        create_logfile "test.0.log" do
+                            create_logfile_stream(
+                                "test", type: compound_t, metadata: {
+                                    "rock_task_name" => "task_test",
+                                    "rock_task_object_name" => "port_test",
+                                    "rock_stream_type" => "port"
+                                }
+                            )
+                            write_logfile_sample now, now, { d: 0.1, i: 1 }
+                            write_logfile_sample now + 10, now + 1, { d: 0.2, i: 2 }
+                        end
+
+                        create_logfile "test1.0.log" do
+                            create_logfile_stream(
+                                "test", type: compound_t, metadata: {
+                                    "rock_task_name" => "task_test1",
+                                    "rock_task_object_name" => "port_test",
+                                    "rock_stream_type" => "port"
+                                }
+                            )
+                            write_logfile_sample now, now + 0.1, { d: 0.15, i: 3 }
+                            write_logfile_sample now + 10, now + 0.9, { d: 0.25, i: 4 }
+                        end
+                    end
+
+                    @context = make_context
+                    @context.datastore_select @datastore_path
+                    @context.dataset_select
+
+                    @exported_path = @root_path + "output.0.log"
+                end
+
+                it "creates a valid empty file if given no streams at all" do
+                    @context.export_to_single_file(@exported_path) do |f|
+                        f.add_logical_time
+                        f.add(&:d)
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    assert logfile.each_stream.empty?
+                end
+
+                it "copies a single stream" do
+                    port = @context.task_test_task.port_test_port
+                    @context.export_to_single_file @exported_path, port do |f|
+                        f.add("whole_stream")
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    stream = logfile.stream("whole_stream")
+                    expected = port.samples.map { |_rt, lg, s| [lg, lg, s] }
+                    assert_equal expected, stream.samples.to_a
+                end
+
+                it "copies the stream metadata" do
+                    port = @context.task_test_task.port_test_port
+                    @context.export_to_single_file @exported_path, port do |f|
+                        f.add("whole_stream")
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    stream = logfile.stream("whole_stream")
+                    assert_equal port.metadata, stream.metadata
+                end
+
+                it "aligns different streams" do
+                    port_a = @context.task_test_task.port_test_port
+                    port_b = @context.task_test1_task.port_test_port
+                    @context.export_to_single_file(
+                        @exported_path, port_a, port_b
+                    ) do |a, b|
+                        a.add("a")
+                        b.add("b")
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    result = logfile.raw_each.to_a
+                    expected =
+                        (port_a.raw_each.map { |_, time, sample| [0, time, sample] } +
+                         port_b.raw_each.map { |_, time, sample| [1, time, sample] })
+                        .sort_by { |_, time, _| time }
+
+                    assert_equal expected, result
+                end
+
+                it "allows to select subfields" do
+                    port = @context.task_test_task.port_test_port
+                    @context.export_to_single_file @exported_path, port do |f|
+                        f.add("subfield", &:d)
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    stream = logfile.stream("subfield")
+                    assert_equal "/double", stream.type.name
+                    assert_equal port.samples.map { |_rt, lg, s| [lg, lg, s.d] },
+                                 stream.samples.to_a
+                end
+
+                it "allows to perform arbitrary transformations" do
+                    port = @context.task_test_task.port_test_port
+                    registry = Typelib::CXXRegistry.new
+                    string_t = registry.get("/std/string")
+                    @context.export_to_single_file @exported_path, port do |f|
+                        f.add("transformed") do |s|
+                            s.transform(to: string_t) { |c| c.d.to_s }
+                        end
+                    end
+
+                    logfile = Pocolog::Logfiles.open(@exported_path.to_s)
+                    stream = logfile.stream("transformed")
+                    assert_equal "/std/string", stream.type.name
+                    assert_equal port.samples.map { |_rt, lg, s| [lg, lg, s.d.to_s] },
+                                 stream.samples.to_a
+                end
+            end
+
             def make_context
                 context = Object.new
                 context.extend DSL
