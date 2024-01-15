@@ -19,12 +19,16 @@ module Syskit::Log
                 streams,
                 name: streams.task_name,
                 model: streams.replay_model,
-                allow_missing: true
+                allow_missing: true, skip_incompatible_types: false
             )
                 deployment_model = new_submodel(name: "Deployment::Pocolog::#{name}") do
                     task name, model.orogen_model
                 end
-                deployment_model.add_streams_from(streams, allow_missing: allow_missing)
+                deployment_model.add_streams_from(
+                    streams,
+                    allow_missing: allow_missing,
+                    skip_incompatible_types: skip_incompatible_types
+                )
                 deployment_model
             end
 
@@ -79,10 +83,17 @@ module Syskit::Log
             #
             #   Note that this does not affect the error raised if a task's
             #   output is connected with no associated stream
-            def add_streams_from(streams, allow_missing: true)
+            def add_streams_from(
+                streams, allow_missing: true, skip_incompatible_types: false
+            )
                 task_model.each_output_port do |p|
                     if (p_stream = streams.find_port_by_name(p.name))
-                        add_stream(p_stream, p)
+                        begin
+                            add_stream(p_stream, p)
+                        rescue MismatchingType
+                            raise unless skip_incompatible_types
+                        end
+
                         next
                     end
 

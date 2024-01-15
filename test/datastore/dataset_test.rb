@@ -60,6 +60,54 @@ module Syskit::Log
                 root_path.rmtree
             end
 
+            describe "#read" do
+                it "reads a file from the dataset" do
+                    dataset_open("text", "somefile", mode: "w") do |f|
+                        f.write("content")
+                    end
+                    assert_equal "content", @dataset.read("text", "somefile")
+                    if compress?
+                        # Make sure the decompressed file is in the right place if there
+                        # is compression
+                        assert_equal "content",
+                                     (@dataset.cache_path / "text" / "somefile").read
+                    end
+                end
+
+                it "handles files in the root folder" do
+                    dataset_open("text", "somefile", mode: "w") { |f| f.write("content") }
+                    assert_equal "content", @dataset.read("text", "somefile")
+                end
+            end
+
+            describe "#glob" do
+                before do
+                    (dataset_path + "test").mkpath
+                end
+
+                it "finds an uncompressed file" do
+                    dataset_open("test", "ab", mode: "w", compress: false) { |io| }
+                    expected = dataset_pathname("test", "ab", compress: false)
+                    assert_equal [expected], @dataset.glob("test", "a?").to_a
+                end
+
+                it "finds a compressed file" do
+                    dataset_open("test", "ab", mode: "w", compress: true) { |io| }
+                    expected = dataset_pathname("test", "ab", compress: true)
+                    assert_equal [expected], @dataset.glob("test", "a?").to_a
+                end
+
+                it "returns only once a path when using globs at the end of the path" do
+                    dataset_open("test", "ab", mode: "w", compress: true) { |io| }
+                    dataset_open("test", "bb", mode: "w", compress: false) { |io| }
+                    expected_a = dataset_pathname("test", "ab", compress: true)
+                    expected_b = dataset_pathname("test", "bb", compress: false)
+
+                    assert_equal Set[expected_a, expected_b],
+                                 @dataset.glob("test", "*").to_set
+                end
+            end
+
             describe "#digest_from_path" do
                 it "returns the path's base name if it is a valid SHA256 digest" do
                     digest = Digest::SHA256.hexdigest("TEST")

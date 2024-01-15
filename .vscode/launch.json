@@ -20,5 +20,6 @@
             "env": {
                 "SYSKIT_LOG_TEST_COMPRESS": "1"
             }
-        }]
+        }
+    ]
 }

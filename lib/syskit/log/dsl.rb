@@ -542,7 +542,7 @@ module Syskit
 
             # Render a timeline of the given tasks, restricted to the current
             # interval
-            def roby_task_timeline(*tasks)
+            def roby_task_timeline(*tasks, time_domain: nil)
                 tasks = tasks.flat_map do |t|
                     if t.respond_to?(:each_task)
                         t.each_task.to_a
@@ -551,13 +551,15 @@ module Syskit
                     end
                 end
 
+                scale = { domain: time_domain } if time_domain
+
                 data = roby_vega_task_timeline_data(*tasks)
                 Vega.lite
                     .data(data)
                     .mark(type: "bar")
                     .encoding(y: { field: "task", type: "ordinal" },
                               x: { field: "start", type: "quantitative",
-                                   scale: { zero: false } },
+                                   scale: { zero: false }.merge(scale || {}) },
                               x2: { field: "stop" },
                               color: { field: "model" })
             end
@@ -682,14 +684,23 @@ module Syskit
                     end
 
                 color =
-                    if color
+                    if color.respond_to?(:to_hash)
+                        { color: color }
+                    elsif color
                         { color: { datum: color.to_s } }
                     else
                         {}
                     end
 
+                mark =
+                    if mark.respond_to?(:to_hash)
+                        mark
+                    else
+                        { type: mark, tooltip: true }
+                    end
+
                 Vega.lite
-                    .mark(type: mark)
+                    .mark(mark)
                     .encoding(
                         x: { field: x, type: "quantitative", scale: { zero: false } },
                         y: { field: y, type: "quantitative", scale: { zero: false } },

@@ -21,6 +21,10 @@ module Syskit::Log
             ReplayTaskContext.model_for(orogen_model.task_model)
         end
 
+        def log_port?(*)
+            false
+        end
+
         def replay_manager
             execution_engine.pocolog_replay_manager
         end

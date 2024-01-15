@@ -37,19 +37,26 @@ module Syskit::Log
         # base_real_time == {#base_logical_time}
         attr_reader :base_logical_time
 
+        # The name of the last stream whose sample has been replayed
+        attr_reader :last_replayed_stream_name
+
         DispatchInfo = Struct.new :deployments, :syskit_stream do
             def in_use?
                 !deployments.empty?
             end
         end
 
-        def initialize(execution_engine)
+        def initialize(
+            execution_engine, log_file: File.join(Roby.app.log_dir, "replay.0.log")
+        )
             @execution_engine = execution_engine
             @handler_id = nil
             @stream_aligner = Pocolog::StreamAligner.new(false)
 
             @stream_syskit_to_pocolog = {}
             @dispatch_info = {}
+            @log_file = Pocolog::Logfiles.create(log_file)
+            @log_streams = {}
         end
 
         # Time of the first sample in the aligner
@@ -60,6 +67,24 @@ module Syskit::Log
         # Time of the last sample in the aligner
         def end_time
             stream_aligner.interval_lg[1]
+        end
+
+        def sample_index
+            stream_aligner.sample_index
+        end
+
+        OutputLog = Struct.new :block_stream, :index_as_buffer, :sample
+
+        # Add the given stream to the replay log
+        #
+        # @param [Pocolog::DataStream] in_stream the replayed stream
+        # @return [Pocolog::OutputLog] information about the stream in the output log
+        def add_log_stream(stream)
+            output_stream =
+                @log_file.create_stream(stream.name, stream.type, stream.metadata)
+            OutputLog.new(stream.logfile.block_stream.dup,
+                          [output_stream.index].pack("v"),
+                          output_stream.type.new)
         end
 
         # Return the deployment tasks that are "interested by" a given stream
@@ -89,13 +114,18 @@ module Syskit::Log
                 new_streams << pocolog if new
             end
 
+            new_streams.each do |pocolog|
+                @log_streams[pocolog] ||= add_log_stream(pocolog)
+            end
+
             if stream_aligner.add_streams(*new_streams)
                 _, @time = stream_aligner.step_back
+                reset_replay_base_times
             else
                 reset_replay_base_times
+                seek(@initial_seek) if @initial_seek
                 @time = stream_aligner.eof? ? end_time : start_time
             end
-            reset_replay_base_times
         end
 
         # @api private
@@ -151,6 +181,11 @@ module Syskit::Log
 
         # Seek to the given time or sample index
         def seek(time_or_index)
+            if stream_aligner.empty?
+                @initial_seek = time_or_index
+                return
+            end
+
             stream_index, time = stream_aligner.seek(time_or_index, false)
             return unless stream_index
 
@@ -161,6 +196,12 @@ module Syskit::Log
         # Process the next sample, and feed it to the relevant deployment(s)
         def step
             stream_index, time = stream_aligner.step
+            dispatch(stream_index, time) if stream_index
+        end
+
+        # Process the next sample, and feed it to the relevant deployment(s)
+        def step_back
+            stream_index, time = stream_aligner.step_back
             dispatch(stream_index, time) if stream_index
         end
 
@@ -207,14 +248,16 @@ module Syskit::Log
         # Play samples required by the current execution engine's time
         def process_in_realtime(
             replay_speed,
-            limit_real_time: end_of_current_engine_cycle
+            limit_real_time: end_of_current_engine_cycle,
+            max_duration_s: 0.1
         )
             return unless base_logical_time
 
             limit_logical_time = base_logical_time +
                                  (limit_real_time - base_real_time) * replay_speed
 
-            loop do
+            deadline = Time.now + max_duration_s
+            while Time.now < deadline
                 stream_index, time = stream_aligner.step
                 return false unless stream_index
 
@@ -237,12 +280,49 @@ module Syskit::Log
         def dispatch(stream_index, time)
             @time = time
             pocolog_stream = stream_aligner.streams[stream_index]
+            @last_replayed_stream_name = pocolog_stream.name
             info = @dispatch_info.fetch(pocolog_stream)
 
-            sample = stream_aligner.single_data(stream_index)
+            stream, position = stream_aligner.sample_info(stream_index)
+            sample = log_read_sample(stream, position)
             info.deployments.each do |task|
                 task.process_sample(info.syskit_stream, time, sample)
             end
+        end
+
+        # Read a sample as indicated by the stream aligner
+        #
+        # This is reimplemented from pocolog to copy the raw data to the output
+        # logs without having to re-marshal it
+        def log_read_sample(stream, position)
+            input = @log_streams[stream]
+            block_pos = stream.stream_index.file_position_by_sample_number(position)
+            bs = input.block_stream
+            bs.seek(block_pos)
+            _, block_raw, payload_raw = bs.read_block_raw
+            log_update_stream_index(block_raw, input.index_as_buffer)
+            log_update_realtime(payload_raw, Time.now)
+            @log_file.io.write(block_raw)
+            @log_file.io.write(payload_raw)
+
+            input.sample.from_buffer_direct(
+                payload_raw[Pocolog::Format::Current::DATA_BLOCK_HEADER_SIZE,
+                            payload_raw.size]
+            )
+            input.sample
+        end
+
+        def log_update_stream_index(block_raw, index_as_buffer)
+            block_raw[2, 2] = index_as_buffer
+        end
+
+        def log_update_realtime(payload_raw, time)
+            payload_raw[0, 8] = [time.tv_sec, time.tv_usec].pack("VV")
+        end
+
+        def rewind
+            @stream_aligner.rewind
+            reset_replay_base_times
         end
 
         # @api private
@@ -251,6 +331,10 @@ module Syskit::Log
         def reset_replay_base_times
             @base_real_time = Time.now
             @base_logical_time = time || start_time
+        end
+
+        def size_in_samples
+            @stream_aligner.size
         end
     end
 end

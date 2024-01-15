@@ -161,9 +161,9 @@ module Syskit::Log
         end
 
         # Load all log files from a directory
-        def add_dir(path)
+        def add_dir(path, from: nil, to: nil)
             make_file_groups_in_dir(path).each do |files|
-                add_file_group(files)
+                add_file_group(files, from: from, to: to)
             end
         end
 
@@ -202,9 +202,11 @@ module Syskit::Log
         # I.e. each file is part of the same general datastream
         #
         # @raise Errno::ENOENT if the path does not exist
-        def add_file_group(group)
+        def add_file_group(group, from: nil, to: nil)
             file = Pocolog::Logfiles.new(*group.map(&:open), registry)
             file.streams.each do |s|
+                s = s.from_logical_time(from) if from
+                s = s.to_logical_time(to) if to
                 add_stream(s)
             end
         end
@@ -249,8 +251,8 @@ module Syskit::Log
         end
 
         # Load the streams from a log file
-        def add_file(file)
-            add_file_group([file])
+        def add_file(file, from: nil, to: nil)
+            add_file_group([file], from: from, to: to)
         end
 
         # Add a new stream
@@ -276,6 +278,21 @@ module Syskit::Log
             TaskStreams.new(streams)
         end
 
+        def each_task_name
+            return enum_for(__method__) unless block_given?
+
+            seen = Set.new
+            each_stream do |s|
+                next unless (name = s.metadata["rock_task_name"])
+
+                yield("#{name}_task") if seen.add?(name)
+            end
+        end
+
+        def methods(*)
+            super + each_task_name.to_a.sort
+        end
+
         def respond_to_missing?(m, include_private = false)
             MetaRuby::DSLs.has_through_method_missing?(
                 self, m,
@@ -297,6 +314,7 @@ module Syskit::Log
         def to_deployment_group(
             load_models: true,
             skip_tasks_without_models: true,
+            skip_incompatible_types: false,
             raise_on_missing_task_models: false,
             loader: Roby.app.default_loader
         )
@@ -305,7 +323,9 @@ module Syskit::Log
                       skip_tasks_without_models: skip_tasks_without_models,
                       raise_on_missing_task_models: raise_on_missing_task_models,
                       loader: loader) do |task_streams|
-                group.use_pocolog_task(task_streams)
+                group.use_pocolog_task(
+                    task_streams, skip_incompatible_types: skip_incompatible_types
+                )
             end
             group
         end

@@ -928,7 +928,7 @@ module Syskit::Log
                 show_task_objects(streams, name_field_size)
             end
 
-            desc "pocolog DATASET DATASTREAM [roby-log arguments]",
+            desc "pocolog DATASET DATASTREAM [pocolog arguments]",
                  "execute pocolog on a stream file from a given dataset"
             def pocolog(dataset, datastream, *args, **kw)
                 store = open_store
@@ -994,6 +994,8 @@ module Syskit::Log
                 end
 
                 roby_log_path = roby_logs.first
+                roby_log_path =
+                    Syskit::Log.decompressed(roby_log_path, dataset.cache_path)
                 exec("roby-log", mode, roby_log_path.to_s,
                      "--index-path", dataset.roby_index_path(roby_log_path).to_s,
                      *args)

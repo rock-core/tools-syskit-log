@@ -338,6 +338,38 @@ module Syskit::Log
                 end
             end
 
+            def read(*path)
+                # Resolve if the file is compressed and path does not contain the .zst
+                unless (resolved_path = glob(*path).first)
+                    raise Errno::ENOENT, "#{dataset_path.join(*path)} does not exist"
+                end
+
+                Syskit::Log
+                    .decompressed(resolved_path, cache_path.join(*path[0..-2]))
+                    .read
+            end
+
+            def glob(*glob)
+                return enum_for(:glob, *glob) unless block_given?
+
+                found = Set.new
+
+                full = dataset_path.join(*glob)
+                Pathname.glob(full) do |path|
+                    found << path
+                    yield(path)
+                end
+
+                dirname = full.dirname
+                basename = full.basename.to_s
+                glob_with_compression = dirname / "#{basename}.zst"
+                Pathname.glob(glob_with_compression) do |path|
+                    next unless found.add?(path)
+
+                    yield(path)
+                end
+            end
+
             # Fully validate the dataset's identity metadata
             def validate_identity_metadata
                 precomputed = read_dataset_identity_from_metadata_file
@@ -685,8 +717,13 @@ module Syskit::Log
             # this dataset
             #
             # @return [Streams]
-            def streams
-                Streams.new(each_pocolog_lazy_stream.to_a)
+            def streams(from: nil, to: nil)
+                streams = each_pocolog_lazy_stream.map do |s|
+                    s = s.from_logical_time(from) if from
+                    s = s.to_logical_time(to) if to
+                    s
+                end
+                Streams.new(streams)
             end
 
             # Access to the Roby log information, such as tasks or events
