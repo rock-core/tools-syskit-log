@@ -103,7 +103,7 @@ module Syskit::Log
             syskit_eager_load.samples
         end
 
-        # Return a data stream that starts at the given time
+        # Return a data stream that starts at the given time (inclusive)
         def from_logical_time(time)
             return self if empty?
 
@@ -112,7 +112,7 @@ module Syskit::Log
             s
         end
 
-        # Return a data stream that starts at the given time
+        # Return a data stream that ends at the given time (inclusive)
         def to_logical_time(time)
             return self if empty?
 
