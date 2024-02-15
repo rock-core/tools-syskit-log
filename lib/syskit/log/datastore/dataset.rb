@@ -324,18 +324,11 @@ module Syskit::Log
 
             # Enumerate the file's in a dataset that are considered 'important',
             # that is are part of the dataset's identity
-            def each_important_file
+            def each_important_file(&block)
                 return enum_for(__method__) unless block_given?
 
-                ["", ".zst"].each do |ext|
-                    Pathname.glob(dataset_path + "pocolog" + "*.*.log#{ext}") do |path|
-                        yield(path)
-                    end
-
-                    Pathname.glob(dataset_path + "roby-events.*.log#{ext}") do |path|
-                        yield(path)
-                    end
-                end
+                glob("pocolog", "*.*.log", &block)
+                glob("roby-events.*.log", &block)
             end
 
             def read(*path)
@@ -612,16 +605,10 @@ module Syskit::Log
                       "no pocolog file for stream #{name} (expected #{path})"
             end
 
-            def each_pocolog_path
+            def each_pocolog_path(&block)
                 return enum_for(__method__) unless block_given?
 
-                Pathname.glob(dataset_path + "pocolog" + "*.log") do |logfile_path|
-                    yield(logfile_path)
-                end
-
-                Pathname.glob(dataset_path + "pocolog" + "*.log.zst") do |logfile_path|
-                    yield(logfile_path)
-                end
+                glob("pocolog", "*.0.log", &block)
             end
 
             # Enumerate the pocolog streams available in this dataset
