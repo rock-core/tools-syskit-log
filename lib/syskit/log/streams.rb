@@ -207,7 +207,7 @@ module Syskit::Log
             file.streams.each do |s|
                 s = s.from_logical_time(from) if from
                 s = s.to_logical_time(to) if to
-                add_stream(s)
+                add_stream(LazyDataStream.from_pocolog_stream(s))
             end
         end
 

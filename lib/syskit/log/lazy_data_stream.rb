@@ -50,7 +50,7 @@ module Syskit::Log
         #   to its current local representation
         def initialize(
             path, index_dir, name, type, metadata, interval_rt, interval_lg, size,
-            upgrader: nil
+            upgrader: nil, pocolog_stream: nil
         )
             @path = path
             @index_dir = index_dir
@@ -60,8 +60,14 @@ module Syskit::Log
             @interval_rt = interval_rt
             @interval_lg = interval_lg
             @size = size
-            @pocolog_stream = nil
-            @upgrader = upgrader
+            @pocolog_stream = pocolog_stream
+            @upgrader = upgrader || Datastore::Dataset
+        end
+
+        def self.from_pocolog_stream(stream)
+            new(nil, nil, stream.name, stream.type, stream.metadata,
+                stream.interval_rt, stream.interval_lg, stream.size,
+                pocolog_stream: stream)
         end
 
         def task_name
@@ -101,7 +107,9 @@ module Syskit::Log
         end
 
         def upgrade_ops_for_target(target)
-            @upgrader.upgrade_ops_for_target(type, target)
+            @upgrader.upgrade_ops_for_target(
+                type, target, reference_time: interval_lg.first
+            )
         end
 
         # Return an object that allows to enumerate this stream's samples

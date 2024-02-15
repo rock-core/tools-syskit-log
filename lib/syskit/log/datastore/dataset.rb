@@ -705,21 +705,36 @@ module Syskit::Log
             #    either as a value or as a Typelib type.
             # @return [Pocolog::Upgrade::Ops::Identity]
             # @raise [Pocolog::Upgrade::InvalidCast] if the conversion is not possible
-            def upgrade_ops_for_target(log_type, target, reference_time: interval_lg.first)
-                unless datastore
-                    raise ArgumentError,
-                          "upgrade feature not available for datasets without "\
-                          "an associated datastore"
-                end
-
-                target_type = upgrade_resolve_target_type(target)
+            def upgrade_ops_for_target(
+                log_type, target, reference_time: interval_lg.first
+            )
+                target_type = self.class.upgrade_resolve_target_type(target)
                 cache_key = [log_type, target_type, reference_time]
 
-                @upgrade_ops_for_target[cache_key] ||=
-                    Pocolog::Upgrade.compute(
-                        reference_time, log_type, target_type,
-                        datastore.upgrade_converter_registry
-                    )
+                @upgrade_ops_for_target[cache_key] ||= self.class.upgrade_ops_for_target(
+                    log_type, target_type,
+                    reference_time: reference_time,
+                    upgrade_registry: datastore&.upgrade_converter_registry
+                )
+            end
+
+            def self.upgrade_ops_for_target(
+                log_type, target, reference_time:, upgrade_registry: nil
+            )
+                target_type = upgrade_resolve_target_type(target)
+                upgrade_ops_for_target_type(
+                    log_type, target_type,
+                    reference_time: reference_time, upgrade_registry: upgrade_registry
+                )
+            end
+
+            def self.upgrade_ops_for_target_type(
+                log_type, target_type, reference_time:, upgrade_registry: nil
+            )
+                Pocolog::Upgrade.compute(
+                    reference_time, log_type, target_type,
+                    upgrade_registry || Pocolog::Upgrade::ConverterRegistry.new
+                )
             end
 
             # @private
@@ -748,7 +763,7 @@ module Syskit::Log
             # @param [Typelib::Type,Class<Typelib::Type>] target
             # @return [Class<Typelib::Type>]
             # @raise ArgumentError if the target argument is invalid
-            def upgrade_resolve_target_type(target)
+            def self.upgrade_resolve_target_type(target)
                 if target.kind_of?(Typelib::Type)
                     target.class
                 elsif target.kind_of?(Class) && target <= Typelib::Type
