@@ -333,9 +333,9 @@ module Syskit::Log
 
             def read(*path)
                 # Resolve if the file is compressed and path does not contain the .zst
-                unless (resolved_path = glob(*path).first)
-                    raise Errno::ENOENT, "#{dataset_path.join(*path)} does not exist"
-                end
+                full_path = dataset_path.join(*path)
+                resolved_path = Syskit::Log.find_path_plain_or_compressed(full_path)
+                raise Errno::ENOENT, "#{full_path} does not exist" unless resolved_path
 
                 Syskit::Log
                     .decompressed(resolved_path, cache_path.join(*path[0..-2]))
@@ -595,11 +595,10 @@ module Syskit::Log
             end
 
             def pocolog_path(name)
-                path = dataset_path + "pocolog" + "#{name}.0.log"
-                return path if path.exist?
-
-                path = path.sub_ext(".log.zst")
-                return Syskit::Log.decompressed(path, cache_path) if path.exist?
+                path = Syskit::Log.find_path_plain_or_compressed(
+                    dataset_path / "pocolog" / "#{name}.0.log"
+                )
+                return Syskit::Log.decompressed(path, cache_path) if path
 
                 raise ArgumentError,
                       "no pocolog file for stream #{name} (expected #{path})"
