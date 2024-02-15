@@ -147,4 +147,21 @@ module Syskit::Log
             assert_equal "something\n", decompressed.read
         end
     end
+
+    describe ".roby_metadata_time_to_seconds" do
+        it "parses correctly a plain timestamp" do
+            time = Syskit::Log.parse_roby_metadata_time("20241020-1224")
+            assert_equal "20241020-1224", time.strftime("%Y%m%d-%H%M")
+        end
+
+        it "handles leading zeroes" do
+            time = Syskit::Log.parse_roby_metadata_time("20240120-1224")
+            assert_equal "20240120-1224", time.strftime("%Y%m%d-%H%M")
+        end
+
+        it "ignores the disambiguation suffix" do
+            time = Syskit::Log.parse_roby_metadata_time("20240120-1224.1")
+            assert_equal "20240120-1224", time.strftime("%Y%m%d-%H%M")
+        end
+    end
 end

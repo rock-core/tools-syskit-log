@@ -290,5 +290,14 @@ module Syskit
             )
             Pathname(index)
         end
+
+        def self.parse_roby_metadata_time(roby_time)
+            year = roby_time[0, 4]
+            month = roby_time[4, 2]
+            day = roby_time[6, 2]
+            hh = roby_time[9, 2]
+            mm = roby_time[11, 2]
+            Time.utc(*[year, month, day, hh, mm].map { |v| Integer(v, 10) })
+        end
     end
 end
