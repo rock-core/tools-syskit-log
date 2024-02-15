@@ -252,9 +252,8 @@ module Syskit::Log
                 resolved_path = Syskit::Log.find_path_plain_or_compressed(full_path)
                 raise Errno::ENOENT, "#{full_path} does not exist" unless resolved_path
 
-                Syskit::Log
-                    .decompressed(resolved_path, cache_path.join(*path[0..-2]))
-                    .read
+                Syskit::Log.decompressed(resolved_path, cache_path.join(*path[0..-2]))
+                           .read
             end
 
             # Look for files (compressed or uncompressed) within the dataset
@@ -685,9 +684,7 @@ module Syskit::Log
             # @return [Typelib::Type]
             # @raise [Pocolog::Upgrade::InvalidCast] if the conversion is not possible
             def upgrade_value_to(value, target, reference_time: interval_lg.first)
-                ops = upgrade_ops_for_target(
-                    value.class, target, reference_time: reference_time
-                )
+                ops = upgrade_ops_for_target(value.class, target, reference_time: reference_time)
                 return value if ops.identity?
 
                 target_value = upgrade_resolve_target_value(target)
