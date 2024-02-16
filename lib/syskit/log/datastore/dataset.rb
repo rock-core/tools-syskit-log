@@ -13,23 +13,11 @@ module Syskit::Log
             LAYOUT_VERSION = 1
 
             class InvalidPath < ArgumentError; end
-            class InvalidDigest < ArgumentError; end
             class InvalidIdentityMetadata < ArgumentError; end
             class InvalidLayoutVersion < InvalidIdentityMetadata; end
 
             class MultipleValues < ArgumentError; end
             class NoValue < ArgumentError; end
-
-            # The way we encode digests into strings
-            #
-            # Make sure you change {ENCODED_DIGEST_LENGTH} and
-            # {validate_encoded_sha2} if you change this
-            DIGEST_ENCODING_METHOD = :hexdigest
-
-            # Length in characters of the digests once encoded in text form
-            #
-            # We're encoding a sha256 digest in hex, so that's 64 characters
-            ENCODED_DIGEST_LENGTH = 64
 
             # The basename of the file that contains identifying metadata
             #
@@ -95,27 +83,6 @@ module Syskit::Log
                 (path + BASENAME_IDENTITY_METADATA).exist?
             end
 
-            # @overload digest(string)
-            #   Computes the digest of a string
-            #
-            # @overload digest
-            #   Returns a Digest object that can be used to digest data
-            def self.digest(string = nil)
-                digest = Digest::SHA256.new
-                digest.update(string) if string
-                digest
-            end
-
-            # @overload string_digest(digest)
-            #   Computes the string representation of a digest
-            #
-            # @overload string_digest(string)
-            #   Computes the string representation of a string's digest
-            def self.string_digest(object)
-                object = digest(object) if object.respond_to?(:to_str)
-                object.send(DIGEST_ENCODING_METHOD)
-            end
-
             # Return the digest from the dataset's path
             #
             # @param [Pathname] path the dataset path
@@ -124,7 +91,7 @@ module Syskit::Log
             def digest_from_path
                 digest = dataset_path.basename.to_s
                 begin
-                    self.class.validate_encoded_sha2(digest)
+                    DatasetIdentity.validate_encoded_digest(digest)
                 rescue InvalidDigest => e
                     raise InvalidPath,
                           "#{dataset_path}'s name does not look like a valid "\
@@ -162,64 +129,6 @@ module Syskit::Log
                     identity_path = path.dirname + path.basename(".zst")
                     IdentityEntry.new(identity_path, io.tell, sha2)
                 end
-            end
-
-            def self.validate_encoded_short_digest(digest)
-                if digest.length > ENCODED_DIGEST_LENGTH
-                    raise InvalidDigest,
-                          "#{digest} does not look like a valid SHA2 short digest "\
-                          "encoded with #{DIGEST_ENCODING_METHOD}. Expected at most "\
-                          "#{ENCODED_DIGEST_LENGTH} characters but got #{digest.length}"
-                elsif digest !~ /^[0-9a-f]+$/
-                    raise InvalidDigest,
-                          "#{digest} does not look like a valid SHA2 digest encoded "\
-                          "with #{DIGEST_ENCODING_METHOD}. "\
-                          "Expected characters in 0-9a-zA-Z+"
-                end
-                digest
-            end
-
-            # Validate that the given digest is a valid dataset ID
-            #
-            # See {valid_encoded_digest?} to for a true/false check
-            #
-            # @param [String]
-            # @raise [InvalidDigest]
-            def self.validate_encoded_digest(digest)
-                validate_encoded_sha2(digest)
-            end
-
-            # @api private
-            #
-            # Implementation of {.validate_encoded_digest} for SHA2 hashes
-            def self.validate_encoded_sha2(sha2)
-                if sha2.length != ENCODED_DIGEST_LENGTH
-                    raise InvalidDigest,
-                          "#{sha2} does not look like a valid SHA2 digest encoded "\
-                          "with #{DIGEST_ENCODING_METHOD}. Expected "\
-                          "#{ENCODED_DIGEST_LENGTH} characters but got #{sha2.length}"
-                elsif sha2 !~ /^[0-9a-f]+$/
-                    raise InvalidDigest,
-                          "#{sha2} does not look like a valid SHA2 digest encoded "\
-                          "with #{DIGEST_ENCODING_METHOD}. "\
-                          "Expected characters in 0-9a-zA-Z+/"
-                end
-                sha2
-            end
-
-            # Checks if the given digest is a valid dataset ID
-            #
-            # @see validate_encoded_digest
-            def self.valid_encoded_digest?(digest)
-                valid_encoded_sha2?(digest)
-            end
-
-            # @api private
-            #
-            # Implementation of {.valid_encoded_digest?} for SHA2 hashes
-            def self.valid_encoded_sha2?(sha2)
-                sha2.length == ENCODED_DIGEST_LENGTH &&
-                    /^[0-9a-f]+$/.match?(sha2)
             end
 
             # Return the path to the file containing identity metadata
@@ -267,7 +176,7 @@ module Syskit::Log
                     end
 
                     begin
-                        self.class.validate_encoded_sha2(path_info["sha2"])
+                        DatasetIdentity.validate_encoded_digest(path_info["sha2"])
                     rescue InvalidDigest => e
                         raise InvalidIdentityMetadata,
                               "value of field 'sha2' in #{metadata_path} does "\
@@ -291,11 +200,7 @@ module Syskit::Log
             #
             # Compute the encoded SHA2 digest of a file
             def compute_file_sha2(io)
-                digest = Dataset.digest
-                while (block = io.read(1024 * 1024))
-                    digest.update(block)
-                end
-                Dataset.string_digest(digest)
+                DatasetIdentity.compute_file_digest(io)
             end
 
             # Compute a dataset digest based on the identity metadata
@@ -314,7 +219,7 @@ module Syskit::Log
                     .sort_by { |path, _| path }
                     .map { |path, size, sha2| "#{sha2} #{size} #{path}" }
                     .join('\n')
-                Dataset.string_digest(dataset_digest_data)
+                DatasetIdentity.string_digest(dataset_digest_data)
             end
 
             # Enumerate the file's in a dataset that are considered 'important',
@@ -398,7 +303,7 @@ module Syskit::Log
                 # Verify the identity's format itself
                 dataset_identity.each do |entry|
                     Integer(entry.size)
-                    self.class.validate_encoded_sha2(entry.sha2)
+                    DatasetIdentity.validate_encoded_digest(entry.sha2)
                 end
 
                 important_files = each_important_file.to_set
@@ -447,7 +352,7 @@ module Syskit::Log
                         raise InvalidIdentityMetadata,
                               "#{entry.size} is not a valid file size"
                     end
-                    sha2 = begin self.class.validate_encoded_sha2(entry.sha2)
+                    sha2 = begin DatasetIdentity.validate_encoded_digest(entry.sha2)
                            rescue InvalidDigest
                                raise InvalidIdentityMetadata,
                                      "#{entry.sha2} is not a valid digest"

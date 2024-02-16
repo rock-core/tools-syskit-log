@@ -26,7 +26,7 @@ module Syskit::Log
         end
 
         def string_digest
-            Datastore::Dataset.string_digest(@digest)
+            DatasetIdentity.string_digest(@digest)
         end
     end
 end
