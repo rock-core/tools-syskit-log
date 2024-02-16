@@ -29,7 +29,7 @@ module Syskit::Log
                 Syskit::Log.logger.level = Logger::WARN
             end
 
-            def self.common_behavior # rubocop:disable Metrics/AbcSize
+            def self.common_behavior # rubocop:disable Metrics/AbcSize,Metrics/MethodLength
                 describe "#add_stream" do
                     describe "error cases" do
                         attr_reader :deployment_m, :task_m
@@ -38,20 +38,29 @@ module Syskit::Log
                                 input_port "in", "/double"
                                 output_port "out", "/double"
                             end
-                            @deployment_m = Syskit::Log::Deployment.for_streams(TaskStreams.new, model: task_m, name: "task")
+                            @deployment_m =
+                                Syskit::Log::Deployment
+                                .for_streams(TaskStreams.new, model: task_m, name: "task")
                         end
 
-                        it "raises ArgumentError if the port is not a port of the deployment's task model" do
+                        it "raises ArgumentError if the port is not a port "\
+                           "of the deployment's task model" do
                             other_task_m = Syskit::TaskContext.new_submodel do
                                 output_port "out", "/double"
                             end
                             assert_raises(ArgumentError) do
-                                deployment_m.add_stream(streams.find_task_by_name("object0"), other_task_m.out_port)
+                                deployment_m.add_stream(
+                                    streams.find_task_by_name("object0"),
+                                    other_task_m.out_port
+                                )
                             end
                         end
-                        it "raises MismatchingType if the stream and port have different types" do
+                        it "raises MismatchingType if the stream and port "\
+                           "have different types" do
                             streams = @all_streams.task_with_mismatching_type_task
-                            replay_task_m = Syskit::Log::ReplayTaskContext.model_for(task_m.orogen_model)
+                            replay_task_m =
+                                Syskit::Log::ReplayTaskContext
+                                .model_for(task_m.orogen_model)
                             assert_raises(MismatchingType) do
                                 deployment_m.add_stream(
                                     streams.find_port_by_name("port_with_mismatching_type"),
