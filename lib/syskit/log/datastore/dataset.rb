@@ -354,25 +354,9 @@ module Syskit::Log
             #
             # @yieldparam [Pathname] a file that matches the given glob. The file
             #   might be compressed whether the glob includes .zst files or not
-            def glob(*glob)
-                return enum_for(:glob, *glob) unless block_given?
-
-                found = Set.new
-
+            def glob(*glob, &block)
                 full = dataset_path.join(*glob)
-                Pathname.glob(full) do |path|
-                    found << path
-                    yield(path)
-                end
-
-                dirname = full.dirname
-                basename = full.basename.to_s
-                glob_with_compression = dirname / "#{basename}.zst"
-                Pathname.glob(glob_with_compression) do |path|
-                    next unless found.add?(path)
-
-                    yield(path)
-                end
+                Syskit::Log.glob(full, &block)
             end
 
             # Fully validate the dataset's identity metadata
