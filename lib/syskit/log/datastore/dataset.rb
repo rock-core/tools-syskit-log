@@ -326,6 +326,14 @@ module Syskit::Log
                 glob("roby-events.*.log", &block)
             end
 
+            # Read a compressed or uncompressed file whose path is relative to
+            # {#dataset_path}
+            #
+            # @param [Array<String>] path path elements, joined together and
+            #   relative to {#dataset_path}. If the file is present as-is, its contents
+            #   are returned. Otherwise, the method looks for a compressed version of
+            #   the file and returns the uncompressed contents.
+            # @return [String]
             def read(*path)
                 # Resolve if the file is compressed and path does not contain the .zst
                 full_path = dataset_path.join(*path)
@@ -337,6 +345,15 @@ module Syskit::Log
                     .read
             end
 
+            # Look for files (compressed or uncompressed) within the dataset
+            #
+            # @param [Array<String>] glob globbing elements, joined together and
+            #   relative to {#dataset_path}. The glob should match an uncompressed
+            #   file. The method will then yield either the uncompressed file that
+            #   match, or compressed files ignoring the .zst extension.
+            #
+            # @yieldparam [Pathname] a file that matches the given glob. The file
+            #   might be compressed whether the glob includes .zst files or not
             def glob(*glob)
                 return enum_for(:glob, *glob) unless block_given?
 
