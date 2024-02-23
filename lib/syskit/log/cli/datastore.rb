@@ -418,8 +418,7 @@ module Syskit::Log
 
                     implicit, matchers = parse_query(*query)
                     if (digest = implicit.first)
-                        Syskit::Log::Datastore::Dataset
-                            .validate_encoded_short_digest(digest)
+                        DatasetIdentity.validate_encoded_short_digest(digest)
                         return [store.get(digest, **get_arguments)] if matchers.empty?
 
                         matchers["digest"] = /^#{digest}/

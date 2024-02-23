@@ -13,23 +13,11 @@ module Syskit::Log
             LAYOUT_VERSION = 1
 
             class InvalidPath < ArgumentError; end
-            class InvalidDigest < ArgumentError; end
             class InvalidIdentityMetadata < ArgumentError; end
             class InvalidLayoutVersion < InvalidIdentityMetadata; end
 
             class MultipleValues < ArgumentError; end
             class NoValue < ArgumentError; end
-
-            # The way we encode digests into strings
-            #
-            # Make sure you change {ENCODED_DIGEST_LENGTH} and
-            # {validate_encoded_sha2} if you change this
-            DIGEST_ENCODING_METHOD = :hexdigest
-
-            # Length in characters of the digests once encoded in text form
-            #
-            # We're encoding a sha256 digest in hex, so that's 64 characters
-            ENCODED_DIGEST_LENGTH = 64
 
             # The basename of the file that contains identifying metadata
             #
@@ -80,12 +68,7 @@ module Syskit::Log
             # Compute a timestamp representative of this dataset
             def compute_timestamp
                 roby_time = metadata_fetch_all("roby:time").min
-                year = roby_time[0, 4]
-                month = roby_time[4, 2]
-                day = roby_time[6, 2]
-                hh = roby_time[9, 2]
-                mm = roby_time[11, 2]
-                Time.utc(*[year, month, day, hh, mm].map { |v| Integer(v, 10) }).tv_sec
+                Syskit::Log.parse_roby_metadata_time(roby_time).tv_sec
             rescue NoValue
                 pocolog_timestamp =
                     each_pocolog_lazy_stream
@@ -100,27 +83,6 @@ module Syskit::Log
                 (path + BASENAME_IDENTITY_METADATA).exist?
             end
 
-            # @overload digest(string)
-            #   Computes the digest of a string
-            #
-            # @overload digest
-            #   Returns a Digest object that can be used to digest data
-            def self.digest(string = nil)
-                digest = Digest::SHA256.new
-                digest.update(string) if string
-                digest
-            end
-
-            # @overload string_digest(digest)
-            #   Computes the string representation of a digest
-            #
-            # @overload string_digest(string)
-            #   Computes the string representation of a string's digest
-            def self.string_digest(object)
-                object = digest(object) if object.respond_to?(:to_str)
-                object.send(DIGEST_ENCODING_METHOD)
-            end
-
             # Return the digest from the dataset's path
             #
             # @param [Pathname] path the dataset path
@@ -129,7 +91,7 @@ module Syskit::Log
             def digest_from_path
                 digest = dataset_path.basename.to_s
                 begin
-                    self.class.validate_encoded_sha2(digest)
+                    DatasetIdentity.validate_encoded_digest(digest)
                 rescue InvalidDigest => e
                     raise InvalidPath,
                           "#{dataset_path}'s name does not look like a valid "\
@@ -167,64 +129,6 @@ module Syskit::Log
                     identity_path = path.dirname + path.basename(".zst")
                     IdentityEntry.new(identity_path, io.tell, sha2)
                 end
-            end
-
-            def self.validate_encoded_short_digest(digest)
-                if digest.length > ENCODED_DIGEST_LENGTH
-                    raise InvalidDigest,
-                          "#{digest} does not look like a valid SHA2 short digest "\
-                          "encoded with #{DIGEST_ENCODING_METHOD}. Expected at most "\
-                          "#{ENCODED_DIGEST_LENGTH} characters but got #{digest.length}"
-                elsif digest !~ /^[0-9a-f]+$/
-                    raise InvalidDigest,
-                          "#{digest} does not look like a valid SHA2 digest encoded "\
-                          "with #{DIGEST_ENCODING_METHOD}. "\
-                          "Expected characters in 0-9a-zA-Z+"
-                end
-                digest
-            end
-
-            # Validate that the given digest is a valid dataset ID
-            #
-            # See {valid_encoded_digest?} to for a true/false check
-            #
-            # @param [String]
-            # @raise [InvalidDigest]
-            def self.validate_encoded_digest(digest)
-                validate_encoded_sha2(digest)
-            end
-
-            # @api private
-            #
-            # Implementation of {.validate_encoded_digest} for SHA2 hashes
-            def self.validate_encoded_sha2(sha2)
-                if sha2.length != ENCODED_DIGEST_LENGTH
-                    raise InvalidDigest,
-                          "#{sha2} does not look like a valid SHA2 digest encoded "\
-                          "with #{DIGEST_ENCODING_METHOD}. Expected "\
-                          "#{ENCODED_DIGEST_LENGTH} characters but got #{sha2.length}"
-                elsif sha2 !~ /^[0-9a-f]+$/
-                    raise InvalidDigest,
-                          "#{sha2} does not look like a valid SHA2 digest encoded "\
-                          "with #{DIGEST_ENCODING_METHOD}. "\
-                          "Expected characters in 0-9a-zA-Z+/"
-                end
-                sha2
-            end
-
-            # Checks if the given digest is a valid dataset ID
-            #
-            # @see validate_encoded_digest
-            def self.valid_encoded_digest?(digest)
-                valid_encoded_sha2?(digest)
-            end
-
-            # @api private
-            #
-            # Implementation of {.valid_encoded_digest?} for SHA2 hashes
-            def self.valid_encoded_sha2?(sha2)
-                sha2.length == ENCODED_DIGEST_LENGTH &&
-                    /^[0-9a-f]+$/.match?(sha2)
             end
 
             # Return the path to the file containing identity metadata
@@ -272,7 +176,7 @@ module Syskit::Log
                     end
 
                     begin
-                        self.class.validate_encoded_sha2(path_info["sha2"])
+                        DatasetIdentity.validate_encoded_digest(path_info["sha2"])
                     rescue InvalidDigest => e
                         raise InvalidIdentityMetadata,
                               "value of field 'sha2' in #{metadata_path} does "\
@@ -296,11 +200,7 @@ module Syskit::Log
             #
             # Compute the encoded SHA2 digest of a file
             def compute_file_sha2(io)
-                digest = Dataset.digest
-                while (block = io.read(1024 * 1024))
-                    digest.update(block)
-                end
-                Dataset.string_digest(digest)
+                DatasetIdentity.compute_file_digest(io)
             end
 
             # Compute a dataset digest based on the identity metadata
@@ -319,55 +219,49 @@ module Syskit::Log
                     .sort_by { |path, _| path }
                     .map { |path, size, sha2| "#{sha2} #{size} #{path}" }
                     .join('\n')
-                Dataset.string_digest(dataset_digest_data)
+                DatasetIdentity.string_digest(dataset_digest_data)
             end
 
             # Enumerate the file's in a dataset that are considered 'important',
             # that is are part of the dataset's identity
-            def each_important_file
+            def each_important_file(&block)
                 return enum_for(__method__) unless block_given?
 
-                ["", ".zst"].each do |ext|
-                    Pathname.glob(dataset_path + "pocolog" + "*.*.log#{ext}") do |path|
-                        yield(path)
-                    end
-
-                    Pathname.glob(dataset_path + "roby-events.*.log#{ext}") do |path|
-                        yield(path)
-                    end
-                end
+                glob("pocolog", "*.*.log", &block)
+                glob("roby-events.*.log", &block)
             end
 
+            # Read a compressed or uncompressed file whose path is relative to
+            # {#dataset_path}
+            #
+            # @param [Array<String>] path path elements, joined together and
+            #   relative to {#dataset_path}. If the file is present as-is, its contents
+            #   are returned. Otherwise, the method looks for a compressed version of
+            #   the file and returns the uncompressed contents.
+            # @return [String]
             def read(*path)
                 # Resolve if the file is compressed and path does not contain the .zst
-                unless (resolved_path = glob(*path).first)
-                    raise Errno::ENOENT, "#{dataset_path.join(*path)} does not exist"
-                end
+                full_path = dataset_path.join(*path)
+                resolved_path = Syskit::Log.find_path_plain_or_compressed(full_path)
+                raise Errno::ENOENT, "#{full_path} does not exist" unless resolved_path
 
                 Syskit::Log
                     .decompressed(resolved_path, cache_path.join(*path[0..-2]))
                     .read
             end
 
-            def glob(*glob)
-                return enum_for(:glob, *glob) unless block_given?
-
-                found = Set.new
-
+            # Look for files (compressed or uncompressed) within the dataset
+            #
+            # @param [Array<String>] glob globbing elements, joined together and
+            #   relative to {#dataset_path}. The glob should match an uncompressed
+            #   file. The method will then yield either the uncompressed file that
+            #   match, or compressed files ignoring the .zst extension.
+            #
+            # @yieldparam [Pathname] a file that matches the given glob. The file
+            #   might be compressed whether the glob includes .zst files or not
+            def glob(*glob, &block)
                 full = dataset_path.join(*glob)
-                Pathname.glob(full) do |path|
-                    found << path
-                    yield(path)
-                end
-
-                dirname = full.dirname
-                basename = full.basename.to_s
-                glob_with_compression = dirname / "#{basename}.zst"
-                Pathname.glob(glob_with_compression) do |path|
-                    next unless found.add?(path)
-
-                    yield(path)
-                end
+                Syskit::Log.glob(full, &block)
             end
 
             # Fully validate the dataset's identity metadata
@@ -409,7 +303,7 @@ module Syskit::Log
                 # Verify the identity's format itself
                 dataset_identity.each do |entry|
                     Integer(entry.size)
-                    self.class.validate_encoded_sha2(entry.sha2)
+                    DatasetIdentity.validate_encoded_digest(entry.sha2)
                 end
 
                 important_files = each_important_file.to_set
@@ -458,7 +352,7 @@ module Syskit::Log
                         raise InvalidIdentityMetadata,
                               "#{entry.size} is not a valid file size"
                     end
-                    sha2 = begin self.class.validate_encoded_sha2(entry.sha2)
+                    sha2 = begin DatasetIdentity.validate_encoded_digest(entry.sha2)
                            rescue InvalidDigest
                                raise InvalidIdentityMetadata,
                                      "#{entry.sha2} is not a valid digest"
@@ -602,26 +496,19 @@ module Syskit::Log
             end
 
             def pocolog_path(name)
-                path = dataset_path + "pocolog" + "#{name}.0.log"
-                return path if path.exist?
-
-                path = path.sub_ext(".log.zst")
-                return Syskit::Log.decompressed(path, cache_path) if path.exist?
+                path = Syskit::Log.find_path_plain_or_compressed(
+                    dataset_path / "pocolog" / "#{name}.0.log"
+                )
+                return Syskit::Log.decompressed(path, cache_path) if path
 
                 raise ArgumentError,
                       "no pocolog file for stream #{name} (expected #{path})"
             end
 
-            def each_pocolog_path
+            def each_pocolog_path(&block)
                 return enum_for(__method__) unless block_given?
 
-                Pathname.glob(dataset_path + "pocolog" + "*.log") do |logfile_path|
-                    yield(logfile_path)
-                end
-
-                Pathname.glob(dataset_path + "pocolog" + "*.log.zst") do |logfile_path|
-                    yield(logfile_path)
-                end
+                glob("pocolog", "*.0.log", &block)
             end
 
             # Enumerate the pocolog streams available in this dataset

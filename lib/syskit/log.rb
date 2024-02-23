@@ -146,6 +146,31 @@ module Syskit
             compressed_path if compressed_path.exist?
         end
 
+        # Glob the given path, finding matching files compressed or not
+        #
+        # @param [Pathname] glob the glob pattern. Compressed files will be matched
+        #   if their path matches without the .zst suffix
+        # @yieldparam [Pathname] path matching paths
+        def self.glob(glob)
+            return enum_for(:glob, glob) unless block_given?
+
+            found = Set.new
+
+            Pathname.glob(glob) do |path|
+                found << path
+                yield(path)
+            end
+
+            dirname = glob.dirname
+            basename = glob.basename.to_s
+            glob_with_compression = dirname / "#{basename}.zst"
+            Pathname.glob(glob_with_compression) do |path|
+                next unless found.add?(path)
+
+                yield(path)
+            end
+        end
+
         # Write a file atomically
         #
         # It lets us write into a temporary file and move the file in place on
@@ -289,6 +314,15 @@ module Syskit
                 basename, index_dir: logfile_path.dirname.to_s
             )
             Pathname(index)
+        end
+
+        def self.parse_roby_metadata_time(roby_time)
+            year = roby_time[0, 4]
+            month = roby_time[4, 2]
+            day = roby_time[6, 2]
+            hh = roby_time[9, 2]
+            mm = roby_time[11, 2]
+            Time.utc(*[year, month, day, hh, mm].map { |v| Integer(v, 10) })
         end
     end
 end

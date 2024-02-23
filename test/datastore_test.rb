@@ -91,12 +91,12 @@ module Syskit::Log
         describe "#has?" do
             attr_reader :digest
             before do
-                @digest = Datastore::Dataset.string_digest("exists")
+                @digest = DatasetIdentity.string_digest("exists")
                 (datastore_path + "core" + digest).mkpath
             end
 
             it "returns false if there is no folder with the dataset digest in the store" do
-                refute datastore.has?(Datastore::Dataset.string_digest("does_not_exist"))
+                refute datastore.has?(DatasetIdentity.string_digest("does_not_exist"))
             end
             it "returns true if there is a folder with the dataset digest in the store" do
                 assert datastore.has?(digest)
@@ -106,7 +106,7 @@ module Syskit::Log
         describe "#delete" do
             attr_reader :digest, :dataset_path, :cache_path
             before do
-                @digest = Datastore::Dataset.string_digest("exists")
+                @digest = DatasetIdentity.string_digest("exists")
                 @dataset_path = datastore.core_path_of(digest)
                 dataset_path.mkpath
                 @cache_path = datastore.cache_path_of(digest)
@@ -131,7 +131,7 @@ module Syskit::Log
         describe "#get" do
             attr_reader :digest, :dataset_path
             before do
-                @digest = Datastore::Dataset.string_digest("exists")
+                @digest = DatasetIdentity.string_digest("exists")
                 @dataset_path = datastore.core_path_of(digest)
                 dataset_path.mkpath
                 dataset = Datastore::Dataset.new(dataset_path)
@@ -147,7 +147,7 @@ module Syskit::Log
 
             it "raises ArgumentError if the dataset does not exist" do
                 assert_raises(ArgumentError) do
-                    datastore.get(Datastore::Dataset.string_digest("does_not_exist"))
+                    datastore.get(DatasetIdentity.string_digest("does_not_exist"))
                 end
             end
 
@@ -158,8 +158,8 @@ module Syskit::Log
             end
 
             it "handles redirections" do
-                root_digest = Datastore::Dataset.string_digest("root")
-                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                root_digest = DatasetIdentity.string_digest("root")
+                intermediate_digest = DatasetIdentity.string_digest("intermediate")
                 datastore.write_redirect(root_digest, to: intermediate_digest)
                 datastore.write_redirect(intermediate_digest, to: @digest)
 
@@ -167,8 +167,8 @@ module Syskit::Log
             end
 
             it "does not list redirections in the dataset digests by default" do
-                root_digest = Datastore::Dataset.string_digest("root")
-                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                root_digest = DatasetIdentity.string_digest("root")
+                intermediate_digest = DatasetIdentity.string_digest("intermediate")
                 datastore.write_redirect(root_digest, to: intermediate_digest)
                 datastore.write_redirect(intermediate_digest, to: @digest)
 
@@ -177,8 +177,8 @@ module Syskit::Log
             end
 
             it "optionally lists redirections in the dataset digests" do
-                root_digest = Datastore::Dataset.string_digest("root")
-                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                root_digest = DatasetIdentity.string_digest("root")
+                intermediate_digest = DatasetIdentity.string_digest("intermediate")
                 datastore.write_redirect(root_digest, to: intermediate_digest)
                 datastore.write_redirect(intermediate_digest, to: @digest)
 
@@ -188,8 +188,8 @@ module Syskit::Log
             end
 
             it "resolves a partial digest that is a redirection" do
-                root_digest = Datastore::Dataset.string_digest("root")
-                intermediate_digest = Datastore::Dataset.string_digest("intermediate")
+                root_digest = DatasetIdentity.string_digest("root")
+                intermediate_digest = DatasetIdentity.string_digest("intermediate")
                 datastore.write_redirect(root_digest, to: intermediate_digest)
                 datastore.write_redirect(intermediate_digest, to: @digest)
 
@@ -216,7 +216,7 @@ module Syskit::Log
 
             it "returns false if the path is not a file" do
                 path = make_tmppath
-                flexmock(Datastore::Dataset).should_receive(:valid_encoded_digest?).never
+                flexmock(DatasetIdentity).should_receive(:valid_encoded_digest?).never
                 assert_no_file_reading(path)
                 refute Datastore.redirect?(path)
             end
@@ -264,7 +264,7 @@ module Syskit::Log
             end
 
             def mock_digest_validity(str, value)
-                flexmock(Datastore::Dataset)
+                flexmock(DatasetIdentity)
                     .should_receive(:valid_encoded_digest?).once
                     .with(str.to_s)
                     .and_return(value)

@@ -477,7 +477,7 @@ a0fa <no description>
                 end
 
                 it "raises if the query is invalid" do
-                    assert_raises(Syskit::Log::Datastore::Dataset::InvalidDigest) do
+                    assert_raises(InvalidDigest) do
                         call_cli("list", "--store", datastore_path.to_s,
                                  "not_a_sha", silent: false)
                     end
@@ -621,7 +621,7 @@ a0fa <no description>
                 end
 
                 it "raises if the query is invalid" do
-                    assert_raises(Syskit::Log::Datastore::Dataset::InvalidDigest) do
+                    assert_raises(InvalidDigest) do
                         call_cli("metadata", "--store", datastore_path.to_s,
                                  "not_a_sha", "--get", silent: false)
                     end

@@ -147,4 +147,49 @@ module Syskit::Log
             assert_equal "something\n", decompressed.read
         end
     end
+
+    describe ".roby_metadata_time_to_seconds" do
+        it "parses correctly a plain timestamp" do
+            time = Syskit::Log.parse_roby_metadata_time("20241020-1224")
+            assert_equal "20241020-1224", time.strftime("%Y%m%d-%H%M")
+        end
+
+        it "handles leading zeroes" do
+            time = Syskit::Log.parse_roby_metadata_time("20240120-1224")
+            assert_equal "20240120-1224", time.strftime("%Y%m%d-%H%M")
+        end
+
+        it "ignores the disambiguation suffix" do
+            time = Syskit::Log.parse_roby_metadata_time("20240120-1224.1")
+            assert_equal "20240120-1224", time.strftime("%Y%m%d-%H%M")
+        end
+    end
+
+    describe ".glob" do
+        before do
+            @dataset_path = make_tmppath
+            (@dataset_path + "test").mkpath
+        end
+
+        it "finds an uncompressed file" do
+            (@dataset_path / "test" / "ab").write("")
+            assert_equal [@dataset_path / "test" / "ab"],
+                         Syskit::Log.glob(@dataset_path / "test" / "a?").to_a
+        end
+
+        it "finds a compressed file" do
+            (@dataset_path / "test" / "ab.zst").write("")
+            assert_equal [@dataset_path / "test" / "ab.zst"],
+                         Syskit::Log.glob(@dataset_path / "test" / "a?").to_a
+        end
+
+        it "returns only once a path when using globs at the end of the path" do
+            (@dataset_path / "test" / "ab.zst").write("")
+            (@dataset_path / "test" / "bb").write("")
+
+            assert_equal Set[@dataset_path / "test" / "ab.zst",
+                             @dataset_path / "test" / "bb"],
+                         Syskit::Log.glob(@dataset_path / "test" / "*").to_set
+        end
+    end
 end

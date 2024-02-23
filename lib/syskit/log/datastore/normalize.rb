@@ -123,7 +123,7 @@ module Syskit::Log
                 end
 
                 def string_digest
-                    Dataset.string_digest(@digest)
+                    DatasetIdentity.string_digest(@digest)
                 end
             end
 

@@ -100,12 +100,12 @@ module Syskit::Log
         # Test whether the file at the given path is a redirect file
         def self.redirect?(path)
             return unless path.file?
-            return unless Dataset.valid_encoded_digest?(path.basename.to_s)
+            return unless DatasetIdentity.valid_encoded_digest?(path.basename.to_s)
 
             return false unless (to = YAML.safe_load(path.read)["to"])
             return false unless to.respond_to?(:to_str)
 
-            Dataset.valid_encoded_digest?(to)
+            DatasetIdentity.valid_encoded_digest?(to)
         rescue Psych::SyntaxError, Psych::DisallowedClass # rubocop:disable Lint/SuppressedException
         end
 
@@ -299,4 +299,5 @@ module Syskit::Log
     end
 end
 
+require "syskit/log/datastore/dataset_identity"
 require "syskit/log/datastore/dataset"
