@@ -26,10 +26,57 @@ module Syskit
                     end
                 end
 
-                def initialize(type, metadata)
-                    @type = type
+                # @param [#upgrade_ops_for_target] upgrade_with return an object that
+                #   convert the stream type into its latest representation on the system
+                def initialize(type, metadata, upgrade_with: nil)
+                    @stream_type = type
                     @metadata = metadata
                     @output_streams = {}
+                    @upgrade = false
+                    @upgrade_with = upgrade_with
+                end
+
+                def type
+                    return @type if @type
+                    return (@type = @stream_type) unless upgrade?
+
+                    @type = Roby.app.default_loader.resolve_type(
+                        @stream_type.name
+                    )
+                end
+
+                # Controls whether the samples from this stream should be upgraded to
+                # their latest representation during processing, or left as-is
+                #
+                # @see upgrade?
+                def upgrade(flag)
+                    return if @upgrade == flag
+
+                    if @type
+                        raise "cannot change the upgrade flag, the stream type has "\
+                              "already been accessed"
+                    end
+
+                    @upgrade = flag
+                    self
+                end
+
+                # Whether the samples from this stream should be upgraded to
+                # their latest representation during processing, or left as-is
+                #
+                # @see upgrade=
+                def upgrade?
+                    @upgrade
+                end
+
+                def prepare_upgrade_if_needed
+                    return unless upgrade?
+
+                    unless @upgrade_with
+                        raise "cannot upgrade, no upgrade object provided"
+                    end
+
+                    @upgrade_ops = @upgrade_with.upgrade_ops_for_target(type)
                 end
 
                 # @api private
@@ -38,7 +85,7 @@ module Syskit
                 #
                 # @return [ResolvedField]
                 def resolve_output_stream
-                    builder = PathBuilder.new(@type, @metadata)
+                    builder = PathBuilder.new(type, @metadata)
                     builder = yield(builder) if block_given?
                     OutputStream.new(builder.__name, builder.__path,
                                      builder.__type,
@@ -52,6 +99,12 @@ module Syskit
 
                 def process(time, sample)
                     return enum_for(__method__, time, sample) unless block_given?
+
+                    if upgrade?
+                        upgraded_sample = type.new
+                        @upgrade_ops.call(upgraded_sample, sample)
+                        sample = upgraded_sample
+                    end
 
                     each_output_stream do |s|
                         yield [time, s.resolve(time, sample)]

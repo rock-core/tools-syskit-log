@@ -801,7 +801,10 @@ module Syskit
             #   samples using {#samples_of}
             # @yield a {DSL::AlignmentBuilder} object used to describe the streams to be
             #   saved
-            def export_to_single_file(path, *streams)
+            # @param [Boolean] upgrade if true, the data types are upgraded to their
+            #   latest representation. Set to false to keep them as-is. This can be
+            #   controlled by calling `.upgrade` on the streams in the block
+            def export_to_single_file(path, *streams, upgrade: true)
                 log_file = Pocolog::Logfiles.create(path.to_s)
                 return if streams.empty?
 
@@ -816,9 +819,11 @@ module Syskit
                 end
 
                 builders = streams.map do |s|
-                    DSL::AlignmentBuilder.new(s.type, s.metadata)
+                    DSL::AlignmentBuilder.new(s.type, s.metadata, upgrade_with: s)
                 end
+                builders.each { |b| b.upgrade(upgrade) }
                 yield(*builders)
+                builders.each(&:prepare_upgrade_if_needed)
 
                 log_file_streams =
                     DSL.export_to_single_file_create_output_streams(log_file, builders)

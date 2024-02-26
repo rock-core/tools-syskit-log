@@ -128,6 +128,66 @@ module Syskit::Log
             end
         end
 
+        describe "#config_load" do
+            it "does nothing if the config file does not exist" do
+                @datastore.config_load
+            end
+
+            it "does nothing if the config file is empty" do
+                (@datastore_path / "config.yml").write("")
+                @datastore.config_load
+            end
+
+            it "reads the upgrade handlers path" do
+                path = @datastore_path / "upgrades"
+                config = { "upgrade_handlers_path" => path.to_s }
+                apply_datastore_config(config)
+                assert_equal path, @datastore.upgrade_handlers_path
+            end
+        end
+
+        describe "#upgrade_converter_registry" do
+            it "returns an empty registry if there is no upgrader path defined" do
+                assert @datastore.upgrade_converter_registry.empty?
+            end
+
+            it "auto-loads handler scripts from the configured path" do
+                handlers_path = make_tmppath
+                config = { "upgrade_handlers_path" => handlers_path.to_s }
+                apply_datastore_config(config)
+
+                (handlers_path / "test.rb").write(<<~SCRIPT)
+                    registry = Typelib::CXXRegistry.new
+                    add(Time.now, registry.get("/int32_t"), registry.get("/int64_t")) {}
+                SCRIPT
+
+                registry = @datastore.upgrade_converter_registry
+                refute registry.empty?
+                c = registry.each_converter.to_a
+                assert_equal 1, c.size
+                assert_equal "/int32_t", c[0].from_type.name
+                assert_equal "/int64_t", c[0].to_type.name
+            end
+        end
+
+        describe "#load_upgrade_handlers_from" do
+            it "loads ruby scripts to fill the registry" do
+                handlers_path = make_tmppath
+                (handlers_path / "test.rb").write(<<~SCRIPT)
+                    registry = Typelib::CXXRegistry.new
+                    add(Time.now, registry.get("/int32_t"), registry.get("/int64_t")) {}
+                SCRIPT
+                @datastore.load_upgrade_handlers_from(handlers_path)
+
+                registry = @datastore.upgrade_converter_registry
+                refute registry.empty?
+                c = registry.each_converter.to_a
+                assert_equal 1, c.size
+                assert_equal "/int32_t", c[0].from_type.name
+                assert_equal "/int64_t", c[0].to_type.name
+            end
+        end
+
         describe "#get" do
             attr_reader :digest, :dataset_path
             before do
@@ -143,6 +203,11 @@ module Syskit::Log
                 dataset = datastore.get(digest)
                 assert_kind_of Datastore::Dataset, dataset
                 assert_equal dataset_path, dataset.dataset_path
+            end
+
+            it "associates the returned dataset with itself" do
+                dataset = datastore.get(digest)
+                assert_same datastore, dataset.datastore
             end
 
             it "raises ArgumentError if the dataset does not exist" do
@@ -348,6 +413,11 @@ module Syskit::Log
                     @datastore.find(query)
                 end
             end
+        end
+
+        def apply_datastore_config(config)
+            (@datastore_path / "config.yml").write(YAML.dump(config))
+            @datastore.config_load
         end
     end
 end

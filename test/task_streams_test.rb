@@ -150,7 +150,7 @@ module Syskit::Log
                 false
             end
 
-            task_streams_behavior(::Pocolog::DataStream)
+            task_streams_behavior(LazyDataStream)
 
             describe "#each_port_stream" do
                 it "enumerates the streams that are a task's port" do

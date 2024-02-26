@@ -16,8 +16,25 @@ module Syskit::Log
         # @return [Pathname]
         attr_reader :datastore_path
 
+        # The path to the datastore config file
+        #
+        # The file itself might be missing
+        #
+        # @return [Pathname]
+        # @see config_load
+        attr_reader :config_path
+
+        # Path to a list of files that define data upgrades
+        #
+        # @return [Pathname,nil]
+        attr_reader :upgrade_handlers_path
+
         def initialize(datastore_path)
             @datastore_path = datastore_path.realpath
+            @config_path = @datastore_path / "config.yml"
+            @upgrade_handlers_path = nil
+
+            config_load
         end
 
         # Whether there is a default datastore defined
@@ -49,6 +66,41 @@ module Syskit::Log
         end
 
         class AmbiguousShortDigest < ArgumentError; end
+
+        # Load the datastore config path
+        def config_load
+            return unless config_path.exist?
+            return unless (config = YAML.safe_load(config_path.read))
+
+            if (path = config["upgrade_handlers_path"])
+                @upgrade_handlers_path = Pathname(path)
+            end
+        end
+
+        # Return the registry that allows to upgrade data streams to their
+        # latest representation
+        #
+        # @return [Pocolog::Upgrade::ConverterRegistry]
+        def upgrade_converter_registry
+            return @upgrade_converter_registry if @upgrade_converter_registry
+
+            @upgrade_converter_registry = Pocolog::Upgrade::ConverterRegistry.new
+            return @upgrade_converter_registry unless @upgrade_handlers_path
+
+            load_upgrade_handlers_from(@upgrade_handlers_path)
+            @upgrade_converter_registry
+        end
+
+        # Load upgrade handlers that are within the given path
+        #
+        # Upgrade handlers are ruby scripts that are evaluated in the context of a
+        # {Pocolog::Upgrade::ConverterRegistry} object
+        def load_upgrade_handlers_from(path)
+            path.glob("*.rb").sort.each do |handler_path|
+                upgrade_converter_registry
+                    .instance_eval(handler_path.read, handler_path.to_s, 1)
+            end
+        end
 
         # Finds the dataset that matches the given shortened digest
         #
@@ -188,7 +240,7 @@ module Syskit::Log
 
             dataset = Dataset.new(
                 core_path_of(digest),
-                digest: digest, cache: cache_path_of(digest)
+                digest: digest, cache: cache_path_of(digest), datastore: self
             )
             if validate == :weak
                 dataset.weak_validate_identity_metadata

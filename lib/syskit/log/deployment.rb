@@ -40,10 +40,11 @@ module Syskit::Log
         def added_execution_agent_parent(executed_task, _info)
             super
             executed_task.start_event.on do
-                model.each_stream_mapping do |stream, model_port|
+                model.each_stream_mapping do |stream, (ops, model_port)|
                     orocos_port = model_port.bind(executed_task).to_orocos_port
                     unless orocos_port.name == "state"
-                        stream_to_port[stream] = orocos_port
+                        stream_to_port[stream] =
+                            [ops, orocos_port.new_sample, orocos_port]
                     end
                 end
             end
@@ -53,7 +54,11 @@ module Syskit::Log
         end
 
         def process_sample(stream, _time, sample)
-            stream_to_port[stream]&.write(sample)
+            ops, upgraded_sample, orocos_port = stream_to_port[stream]
+            return unless ops
+
+            ops.call(upgraded_sample, sample)
+            orocos_port.write(upgraded_sample)
         end
     end
 end
