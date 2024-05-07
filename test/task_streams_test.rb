@@ -256,5 +256,83 @@ module Syskit::Log
                 assert_equal "task.#{object_name}", stream_name
             end
         end
+
+        describe "#as_data_service" do
+            before do
+                _, dataset = import_logfiles
+
+                streams = Streams.from_dataset(dataset)
+                @subject = streams.find_task_by_name("task")
+            end
+
+            it "returns a service-oriented TaskStreams object" do
+                srv_m = Syskit::DataService.new_submodel do
+                    output_port "p", "/int32_t"
+                end
+                srv_streams = @subject.as_data_service(srv_m, "p" => "porta")
+                assert_equal "task.porta", srv_streams.p_port.name
+            end
+
+            it "enumerates the mapped ports" do
+                srv_m = Syskit::DataService.new_submodel do
+                    output_port "p1", "/int32_t"
+                    output_port "p2", "/int32_t"
+                end
+                srv_streams = @subject.as_data_service(
+                    srv_m, "p2" => "porta", "p1" => "portb"
+                )
+                mapped = srv_streams.each_port_stream.to_a.sort_by { _1 }
+                assert_equal 2, mapped.size
+
+                port_name, stream = mapped[0]
+                assert_equal "p1", port_name
+                assert_equal "task.portb", stream.name
+
+                port_name, stream = mapped[1]
+                assert_equal "p2", port_name
+                assert_equal "task.porta", stream.name
+            end
+
+            it "raises if a non-existent service port is mentionned" do
+                srv_m = Syskit::DataService.new_submodel do
+                    output_port "p", "/int32_t"
+                end
+                e = assert_raises(ArgumentError) do
+                    @subject.as_data_service(srv_m, "does_not_exist" => "porta")
+                end
+                assert_match(/does_not_exist/, e.message)
+            end
+
+            it "raises if a non-existent task port is mentionned" do
+                srv_m = Syskit::DataService.new_submodel do
+                    output_port "p", "/int32_t"
+                end
+                e = assert_raises(ArgumentError) do
+                    @subject.as_data_service(srv_m, "p" => "does_not_exist")
+                end
+                assert_match(/does_not_exist/, e.message)
+            end
+
+            it "returns a task streams that can be used as the service "\
+               "it represents" do
+                out_srv_m = Syskit::DataService.new_submodel do
+                    output_port "p", "/int32_t"
+                end
+                in_srv_m = Syskit::DataService.new_submodel do
+                    input_port "p", "/int32_t"
+                end
+                cmp_m = Syskit::Composition.new_submodel do
+                    add in_srv_m, as: "in"
+                    add out_srv_m, as: "out"
+                    out_child.connect_to in_child
+                end
+                srv_streams = @subject.as_data_service(out_srv_m, "p" => "portb")
+
+                cmp = cmp_m.use("out" => srv_streams).instanciate(plan)
+                out_port = cmp.out_child.portb_port
+                assert_equal [[cmp.in_child.p_port, {}]],
+                             out_port.enum_for(:each_concrete_connection).to_a
+            end
+        end
     end
 end

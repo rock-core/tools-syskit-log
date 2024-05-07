@@ -7,10 +7,15 @@ module Syskit::Log
     # It is returned from the main stream pool by
     # {Streams#find_task_by_name)
     class TaskStreams < Streams
-        def initialize(streams = [], task_name: nil)
+        def initialize(streams = [], task_name: nil, model: nil)
             super(streams)
             @task_name = task_name
             @orogen_model_name = nil
+
+            @model_to_task_mappings = Hash.new { |_h, k| k }
+            @task_to_model_mappings = Hash.new { |_h, k| k }
+            update_port_mappings(model) if model
+            @model = model
         end
 
         # Returns the task name for all streams in self
@@ -32,12 +37,23 @@ module Syskit::Log
         #
         # @raise (see orogen_model_name)
         def model
+            return @model if @model
+
             name = orogen_model_name
             unless (model = Syskit::TaskContext.find_model_from_orogen_name(name))
                 raise Unknown, "cannot find a Syskit model for '#{name}'"
             end
 
-            model
+            update_port_mappings(model)
+            @model = model
+        end
+
+        # @api private\
+        #
+        # Update the port mapping hashes after a model update
+        def update_port_mappings(model)
+            @model_to_task_mappings = model.port_mappings_for_task
+            @task_to_model_mappings = @model_to_task_mappings.invert
         end
 
         # Returns the replay task model for this streams
@@ -55,7 +71,7 @@ module Syskit::Log
             streams.each do |s|
                 if (s.metadata["rock_stream_type"] == "port") &&
                    (port_name = s.metadata["rock_task_object_name"])
-                    yield(port_name, s)
+                    yield(@task_to_model_mappings[port_name], s)
                 end
             end
         end
@@ -69,15 +85,16 @@ module Syskit::Log
 
             streams.each do |s|
                 if (s.metadata["rock_stream_type"] == "property") &&
-                   (port_name = s.metadata["rock_task_object_name"])
-                    yield(port_name, s)
+                   (property_name = s.metadata["rock_task_object_name"])
+                    yield(property_name, s)
                 end
             end
         end
 
         # Find a port stream that matches the given name
         def find_port_by_name(name)
-            objects = find_all_streams(RockStreamMatcher.new.ports.object_name(name))
+            task_name = @model_to_task_mappings[name]
+            objects = find_all_streams(RockStreamMatcher.new.ports.object_name(task_name))
             if objects.size > 1
                 raise Ambiguous, "there are multiple ports with the name #{name}"
             end
@@ -181,6 +198,43 @@ module Syskit::Log
 
         def as_plan
             to_instance_requirements.as_plan
+        end
+
+        def as_data_service(srv_m, service_to_component_port = {})
+            ds_streams = resolve_streams_for_service(srv_m, service_to_component_port)
+            task_m = Syskit::TaskContext.new_submodel do
+                srv_m.each_port do |p|
+                    component_name = service_to_component_port[p.name] || p.name
+                    if p.input?
+                        input_port component_name, p.type
+                    else
+                        output_port component_name, p.type
+                    end
+                end
+                provides srv_m, service_to_component_port, as: "replayed_service"
+            end
+            TaskStreams.new(ds_streams, model: task_m.replayed_service_srv)
+        end
+
+        # @api private
+        #
+        # Resolve the streams that will be used to 'provide' the given data service
+        def resolve_streams_for_service(srv_m, service_to_component_port)
+            service_to_component_port.each_key do |srv_name|
+                unless srv_m.find_port(srv_name)
+                    raise ArgumentError, "#{srv_name} is not a port of #{srv_m}"
+                end
+            end
+
+            srv_m.each_port.map do |p|
+                stream_name = service_to_component_port[p.name] || p.name
+                stream = find_port_by_name(stream_name)
+                unless stream
+                    raise ArgumentError,
+                          "cannot find stream #{stream_name} for service port #{p.name}"
+                end
+                stream
+            end
         end
     end
 end
