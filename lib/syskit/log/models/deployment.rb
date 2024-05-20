@@ -22,7 +22,7 @@ module Syskit::Log
                 allow_missing: true, skip_incompatible_types: false
             )
                 deployment_model = new_submodel(name: "Deployment::Pocolog::#{name}") do
-                    task name, model.orogen_model
+                    task name, model
                 end
                 deployment_model.add_streams_from(
                     streams,
@@ -63,10 +63,8 @@ module Syskit::Log
             def each_deployed_task_model
                 return enum_for(__method__) unless block_given?
 
-                super do |name, plain_task_model|
-                    syskit_model = Syskit::TaskContext
-                                   .model_for(plain_task_model.orogen_model)
-                    yield(name, syskit_model)
+                super do |name, replay_task_model|
+                    yield(name, replay_task_model.plain_task_model)
                 end
             end
 

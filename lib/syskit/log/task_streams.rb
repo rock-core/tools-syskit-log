@@ -58,7 +58,7 @@ module Syskit::Log
 
         # Returns the replay task model for this streams
         def replay_model
-            ReplayTaskContext.model_for(model.orogen_model)
+            ReplayTaskContext.for_plain_model(model.to_component_model)
         end
 
         # Enumerate the streams that are ports

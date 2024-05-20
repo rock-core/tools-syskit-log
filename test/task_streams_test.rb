@@ -257,6 +257,30 @@ module Syskit::Log
             end
         end
 
+        it "returns a task streams that is deployable" do
+            _, dataset = import_logfiles
+
+            streams = Streams.from_dataset(dataset)
+            task_streams = streams.find_task_by_name("task")
+            task_streams.streams.each do |s|
+                s.metadata["rock_task_model"] = "orogen::Model"
+            end
+            _ruby_task_m =
+                Syskit::RubyTaskContext
+                .new_submodel(orogen_model_name: "orogen::Model") do
+                    property "propertya", "/int"
+                    property "propertyb", "/int"
+                    output_port "porta", "/int"
+                    output_port "portb", "/int"
+                end
+
+            task = task_streams.to_instance_requirements
+                               .instanciate(plan)
+            group = task_streams.to_deployment_group
+            candidates = group.find_all_suitable_deployments_for(task)
+            assert_equal 1, candidates.size
+        end
+
         describe "#as_data_service" do
             before do
                 _, dataset = import_logfiles
@@ -332,6 +356,18 @@ module Syskit::Log
                 out_port = cmp.out_child.portb_port
                 assert_equal [[cmp.in_child.p_port, {}]],
                              out_port.enum_for(:each_concrete_connection).to_a
+            end
+
+            it "returns a task streams that is deployable" do
+                out_srv_m = Syskit::DataService.new_submodel do
+                    output_port "p", "/int32_t"
+                end
+                srv_streams = @subject.as_data_service(out_srv_m, "p" => "portb")
+                task = srv_streams.to_instance_requirements
+                                  .instanciate(plan)
+                                  .component
+                group = srv_streams.to_deployment_group
+                refute group.find_all_suitable_deployments_for(task).empty?
             end
         end
     end
