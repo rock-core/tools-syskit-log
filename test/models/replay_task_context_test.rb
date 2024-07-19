@@ -5,6 +5,22 @@ module Syskit::Log
     module Models
         describe ReplayTaskContext do
             subject { Syskit::Log::ReplayTaskContext }
+
+            describe "#fullfills?" do
+                describe "the root ReplayTaskContext" do
+                    it "fullfills Syskit::TaskContext" do
+                        assert(
+                            Syskit::Log::ReplayTaskContext.fullfills?(Syskit::TaskContext)
+                        )
+                    end
+
+                    it "does not fullfill any other model" do
+                        task_m = Syskit::TaskContext.new_submodel
+                        refute Syskit::Log::ReplayTaskContext.fullfills?(task_m)
+                    end
+                end
+            end
+
             describe "#model_for" do
                 attr_reader :task_m, :replay_task_m
                 before do
