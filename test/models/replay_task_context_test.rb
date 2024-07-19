@@ -52,7 +52,7 @@ module Syskit::Log
                 it "copies the data services from the plain task model" do
                     srv_m = Syskit::DataService.new_submodel
                     task_m.provides srv_m, as: "test"
-                    replay_task_m = subject.model_for(task_m.orogen_model)
+                    replay_task_m = subject.for_plain_model(task_m, register: false)
                     srv = replay_task_m.test_srv
                     refute_nil srv
                     assert_same srv_m, srv.model
@@ -69,7 +69,7 @@ module Syskit::Log
                         provides srv_m, as: name, "out" => "out_#{name}"
                     end
 
-                    replay_task_m = subject.model_for(task_m.orogen_model)
+                    replay_task_m = subject.for_plain_model(task_m, register: false)
                     replay_task_m = replay_task_m.specialize
                     replay_task_m.require_dynamic_service "test", as: "dyn"
                     srv = replay_task_m.dyn_srv
@@ -80,7 +80,7 @@ module Syskit::Log
             describe "#fullfills?" do
                 it "fullfills the plain task model" do
                     task_m = Syskit::TaskContext.new_submodel
-                    replay_task_m = subject.model_for(task_m.orogen_model)
+                    replay_task_m = subject.for_plain_model(task_m, register: false)
                     assert replay_task_m.fullfills?(task_m)
                 end
             end
