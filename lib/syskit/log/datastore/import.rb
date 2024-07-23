@@ -344,6 +344,7 @@ module Syskit::Log
                 in_reader&.close
                 index_io&.close
                 out_io.close if out_io && !out_io.closed?
+                @reporter.finish
             end
 
             # @api private
