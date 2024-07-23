@@ -14,7 +14,7 @@ module Syskit
         # the runtime handlers
         class ReplayTaskContext < TaskContext
             extend Models::ReplayTaskContext
-            @plain_task_context = Syskit::TaskContext
+            @plain_task_model = Syskit::TaskContext
         end
     end
 end

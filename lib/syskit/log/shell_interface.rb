@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
-require "roby/interface"
+begin
+    require "roby/interface/core"
+rescue LoadError
+    require "roby/interface"
+end
 
 module Syskit::Log
     # Definition of the syskit-specific interface commands

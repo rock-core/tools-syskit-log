@@ -15,6 +15,8 @@ module Syskit::Log
         include Pocolog::TestHelpers
 
         def setup
+            Syskit.conf.strict_model_for = true
+
             @pocolog_log_level = Pocolog.logger.level
             Pocolog.logger.level = Logger::WARN
             unless Roby.app.loaded_plugin?("syskit-log")
