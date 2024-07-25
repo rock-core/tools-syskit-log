@@ -17,14 +17,18 @@ module Syskit::Log
             attr_reader :streams_to_port
 
             # Define a deployment model that will manage the given streams
+            #
+            # @param [Class<Syskit::Component>] model the task model that is being
+            #   replayed. This is *not* the task model that will be used to replay
             def for_streams(
                 streams,
                 name: streams.task_name,
-                model: streams.replay_model,
+                model: streams.model.to_component_model,
                 allow_missing: true, skip_incompatible_types: false
             )
+                replay_model = Syskit::Log::ReplayTaskContext.for_plain_model(model)
                 deployment_model = new_submodel(name: "Deployment::Pocolog::#{name}") do
-                    task name, model
+                    task name, replay_model
                 end
                 deployment_model.add_streams_from(
                     streams,

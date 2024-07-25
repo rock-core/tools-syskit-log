@@ -18,6 +18,10 @@ module Syskit
 
                 # Define an replay model for the given existing task model
                 def for_plain_model(plain_model, register: true)
+                    if plain_model <= Syskit::Log::ReplayTaskContext
+                        raise ArgumentError, "#{plain_model} is already a replay model"
+                    end
+
                     if (model = find_model_by_orogen(plain_model.orogen_model))
                         return model
                     end
