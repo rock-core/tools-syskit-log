@@ -17,10 +17,6 @@ module Syskit::Log
             @stream_to_port = {}
         end
 
-        def deployed_model_by_orogen_model(orogen_model)
-            ReplayTaskContext.model_for(orogen_model.task_model)
-        end
-
         def log_port?(*)
             false
         end
