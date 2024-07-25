@@ -7,7 +7,9 @@ module Syskit::Log
             # Pocolog deployments only have a single task. This is it
             #
             # @return [Syskit::Models::TaskContext]
-            attr_reader :task_model
+            def task_model
+                @task_model ||= @task_name_to_syskit_model.each_value.first
+            end
 
             # Mappings from streams to ports
             #
@@ -53,10 +55,6 @@ module Syskit::Log
                 orogen_model = submodel.each_orogen_deployed_task_context_model.first
                 return unless orogen_model
 
-                submodel.instance_variable_set(
-                    :@task_model,
-                    Syskit::Log::ReplayTaskContext.model_for(orogen_model.task_model)
-                )
                 submodel.instance_variable_set :@streams_to_port, {}
             end
 
