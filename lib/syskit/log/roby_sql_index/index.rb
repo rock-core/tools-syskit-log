@@ -9,7 +9,7 @@ module Syskit
                 def self.open(path, dataset: nil)
                     raise ArgumentError, "#{path} does not exist" unless path.exist?
 
-                    uri = "sqlite://#{CGI.escape(path.to_s)}"
+                    uri = "sqlite://#{path}"
                     rom = ROM.container(:sql, uri) do |config|
                         Definitions.configure(config)
                     end
@@ -20,7 +20,7 @@ module Syskit
                 def self.create(path, dataset: nil)
                     raise ArgumentError, "#{path} already exists" if path.exist?
 
-                    uri = "sqlite://#{CGI.escape(path.to_s)}"
+                    uri = "sqlite://#{path}"
                     rom = ROM.container(:sql, uri) do |config|
                         Definitions.schema(config)
                         Definitions.configure(config)
