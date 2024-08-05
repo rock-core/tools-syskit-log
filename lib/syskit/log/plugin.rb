@@ -6,14 +6,17 @@ module Syskit::Log
     module Plugin
         def self.setup(app)
             Pocolog.logger = Syskit::Log.logger
-            manager =
-                if defined?(Runkit)
-                    Runkit::RubyTasks::ProcessManager.new(app.default_loader)
-                else
-                    Orocos::RubyTasks::ProcessManager.new(app.default_loader)
-                end
 
-            Syskit.conf.register_process_server("pocolog", manager, app.log_dir)
+            if Syskit.conf.respond_to?(:register_ruby_tasks_manager)
+                Syskit.conf.register_ruby_tasks_manager(
+                    "pocolog",
+                    loader: app.default_loader, log_dir: app.log_dir,
+                    logging_enabled: false
+                )
+            else
+                manager = Orocos::RubyTasks::ProcessManager.new(app.default_loader)
+                Syskit.conf.register_process_server("pocolog", manager, app.log_dir)
+            end
         end
 
         # This hooks into the network generation to deploy all tasks using
