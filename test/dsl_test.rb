@@ -5,6 +5,15 @@ require "syskit/log/dsl"
 require "daru"
 require "iruby"
 
+HAS_POLARS =
+    begin
+        require "polars"
+        true
+    rescue LoadError
+    end
+
+require "syskit/log/polars" if HAS_POLARS
+
 module Syskit
     module Log # :nodoc:
         describe DSL do
@@ -343,6 +352,82 @@ module Syskit
                     assert_equal [0.1, 0.2], frame["a"].to_a
                     assert_equal [0.1, 0.9], frame["b_time"].to_a
                     assert_equal [0.15, 0.25], frame["b"].to_a
+                end
+            end
+
+            describe "#to_polars_frame" do
+                before do
+                    skip "polars-ruby is not installed" unless HAS_POLARS
+
+                    now_nsec = Time.now
+                    now = Time.at(now_nsec.tv_sec, now_nsec.tv_usec)
+
+                    registry = Typelib::CXXRegistry.new
+                    compound_t = registry.create_compound "/C" do |b|
+                        b.d = "/double"
+                        b.i = "/int"
+                    end
+                    create_dataset "exists" do
+                        create_logfile "test.0.log" do
+                            create_logfile_stream(
+                                "test", type: compound_t, metadata: {
+                                    "rock_task_name" => "task_test",
+                                    "rock_task_object_name" => "port_test",
+                                    "rock_stream_type" => "port"
+                                }
+                            )
+                            write_logfile_sample now, now, { d: 0.1, i: 1 }
+                            write_logfile_sample now + 10, now + 1, { d: 0.2, i: 2 }
+                        end
+
+                        create_logfile "test1.0.log" do
+                            create_logfile_stream(
+                                "test", type: compound_t, metadata: {
+                                    "rock_task_name" => "task_test1",
+                                    "rock_task_object_name" => "port_test",
+                                    "rock_stream_type" => "port"
+                                }
+                            )
+                            write_logfile_sample now, now + 0.1, { d: 0.15, i: 3 }
+                            write_logfile_sample now + 10, now + 0.9, { d: 0.25, i: 4 }
+                        end
+                    end
+
+                    @context = make_context
+                    @context.datastore_select @datastore_path
+                    @context.dataset_select
+                end
+
+                it "creates a frame from a single stream" do
+                    port = @context.task_test_task.port_test_port
+                    frame = @context.to_polars_frame port do |f|
+                        f.add_logical_time
+                        f.add(&:d)
+                    end
+
+                    assert_equal [0, 1], frame["time"].to_a
+                    assert_equal [0.1, 0.2], frame[".d"].to_a
+                end
+
+                it "aligns different streams in a single frame" do
+                    port = @context.task_test_task.port_test_port
+                    port1 = @context.task_test1_task.port_test_port
+                    frame = @context.to_polars_frame port, port1 do |a, b|
+                        a.add_logical_time("a_time")
+                        a.add("a", &:d)
+                        b.add("b", &:d)
+                        b.add_logical_time("b_time")
+                    end
+
+                    expected = ::Polars::DataFrame.new({
+                        a_time: [0, 1],
+                        a: [0.1, 0.2],
+                        b: [0.15, 0.25],
+                        b_time: [0.1, 0.9]
+                    }, schema: nil) # schema for 2.7 compatibility
+                    diff = expected - frame
+                    max = (diff.max.row(0).to_a + diff.min.row(0).to_a).map(&:abs).max
+                    assert_operator max, :<, 1e-6
                 end
             end
 
