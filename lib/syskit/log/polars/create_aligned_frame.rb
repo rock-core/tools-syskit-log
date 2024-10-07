@@ -2,80 +2,112 @@
 
 module Syskit
     module Log
-        module Polars
-            def self.create_dataframe(builders, chunks)
-                series = builders.zip(chunks).flat_map do |b, b_chunks|
-                    b.create_series(b_chunks)
-                end
-                ::Polars::DataFrame.new(series)
-            end
-
-            CHUNK_SIZE = 10_000
+        module Polars # :nodoc:
+            CHUNK_SIZE = 8_192
 
             def self.create_aligned_frame(
-                center_time, builders, joint_stream, timeout: nil
+                center_time, builders, joint_stream, timeout: nil, chunk_size: CHUNK_SIZE
             )
-                current_row = Array.new(builders.size)
-                initialized = false
-
-                chunk = builders.map do |b|
-                    b.create_chunks(CHUNK_SIZE)
-                end
-
-                df = ::Polars::DataFrame.new(
-                    builders.flat_map { |b| b.create_series([]) }
+                state = CreateAlignedFrame.new(
+                    builders, timeout: timeout, chunk_size: chunk_size
                 )
-
-                row_count = 0
-                master_deadline = nil
                 joint_stream.raw_each do |index, time, sample|
-                    if row_count == CHUNK_SIZE
-                        chunk_df = create_dataframe(builders, chunk)
-                        df = df.vstack(chunk_df)
-                        row_count = 0
+                    trigger = state.update_current_samples(index, time, sample)
+                    state.push_current_samples if trigger
+                end
+
+                state.push_chunks
+                state.recenter_time_series(center_time)
+                state.df
+            end
+
+            # @api private
+            #
+            # Implementation of algorithm steps and state for
+            # {Polars.create_aligned_frame}
+            class CreateAlignedFrame
+                attr_reader :df
+
+                def initialize(builders, timeout: nil, chunk_size: CHUNK_SIZE)
+                    @builders = builders
+                    @current_samples = Array.new(builders.size)
+                    @chunks = builders.map do |b|
+                        b.create_chunks(CHUNK_SIZE)
                     end
+                    @chunk_size = chunk_size
 
-                    deadline = time + timeout if timeout
-                    current_row[index] = [time, sample, deadline]
-                    master_deadline = deadline if index == 0
+                    @df = ::Polars::DataFrame.new(
+                        builders.flat_map { |b| b.create_series([]) }
+                    )
 
-                    if initialized
-                        if index != 0
-                            next unless master_deadline && master_deadline < time
+                    @row_count = 0
+                    @initialized = false
+                    @master_deadline = nil
+                    @timeout = timeout
+                end
+
+                def update_current_samples(index, time, sample)
+                    deadline = time + @timeout if @timeout
+                    @current_samples[index] = [time, sample, deadline]
+                    @master_deadline = deadline if index == 0
+                    if @initialized
+                        index == 0 && (!@master_deadline || time < @master_deadline)
+                    else
+                        @initialized = !@current_samples.index(nil)
+                    end
+                end
+
+                def push_current_samples
+                    ref_time = @current_samples[0][0]
+                    @current_samples
+                        .each_with_index do |(v_time, v_sample, v_deadline), v_index|
+                            if v_deadline && (v_deadline < ref_time)
+                                update_current_row_na(v_index)
+                            else
+                                update_current_row(v_index, v_time, v_sample)
+                            end
                         end
-                    elsif current_row.index(nil)
-                        next
-                    end
-                    initialized = true
 
-                    ref_time = current_row[0][0]
-                    current_row.each_with_index do |(v_time, v_sample, v_deadline), v_index|
-                        if v_deadline && (v_deadline < ref_time)
-                            builders[v_index].update_row_na(chunk[v_index], row_count)
-                        else
-                            builders[v_index].update_row(
-                                chunk[v_index], row_count, v_time, v_sample
-                            )
-                        end
-                    end
-
-                    row_count += 1
+                    @row_count += 1
+                    push_chunks if @row_count == @chunk_size
                 end
 
-                if row_count > 0
-                    chunk = chunk.map do |builder_chunks|
-                        builder_chunks.map { |a| a[0, row_count] }
+                def update_current_row_na(index)
+                    @builders[index].update_row_na(@chunks[index], @row_count)
+                end
+
+                def update_current_row(index, time, sample)
+                    @builders[index].update_row(@chunks[index], @row_count, time, sample)
+                end
+
+                def self.truncate_chunks(chunks, size)
+                    chunks.map do |builder_chunks|
+                        builder_chunks.map { |a| a[0, size] }
                     end
-                    chunk_df = create_dataframe(builders, chunk)
-                    df = df.vstack(chunk_df)
                 end
 
-                # Resize the vectors
-                builders.each do |b|
-                    b.recenter_time_series(df, center_time)
+                def self.create_dataframe(builders, chunks)
+                    series = builders.zip(chunks).flat_map do |b, b_chunks|
+                        b.create_series(b_chunks)
+                    end
+                    ::Polars::DataFrame.new(series)
                 end
 
-                df
+                def push_chunks
+                    return @df if @row_count == 0
+
+                    chunks = CreateAlignedFrame.truncate_chunks(@chunks, @row_count)
+                    chunk_df = CreateAlignedFrame.create_dataframe(@builders, chunks)
+
+                    @row_count = 0
+                    @df = @df.vstack(chunk_df)
+                end
+
+                def recenter_time_series(center_time)
+                    @builders.each do |b|
+                        b.recenter_time_series(@df, center_time)
+                    end
+                end
             end
         end
     end

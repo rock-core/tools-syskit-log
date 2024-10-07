@@ -2,7 +2,7 @@
 
 module Syskit
     module Log
-        module Polars
+        module Polars # :nodoc:
             def self.allocate_series(name, size, type)
                 ::Polars::Series.new(name, [nil] * size, dtype: type)
             end
@@ -149,10 +149,12 @@ module Syskit
                 # @param [#raw_each] samples the object that will enumerate samples
                 #   It must yield [realtime, logical_time, sample] the way
                 #   Pocolog::SampleEnumerator does
-                def to_polars_frame(center_time, stream, timeout: nil)
+                def to_polars_frame(
+                    center_time, stream, timeout: nil, chunk_size: CHUNK_SIZE
+                )
                     Polars.create_aligned_frame(
                         center_time, [self], SingleStreamAdapter.new(stream),
-                        timeout: timeout
+                        timeout: timeout, chunk_size: chunk_size
                     )
                 end
 

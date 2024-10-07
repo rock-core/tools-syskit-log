@@ -446,7 +446,9 @@ module Syskit
             # the method resamples only the first stream, and then aligns the
             # other full non-resampled streams. accurante: false is significantly
             # faster for very dense streams (w.r.t. the sampling period)
-            def to_polars_frame(*streams, accurate: false, timeout: nil)
+            def to_polars_frame(
+                *streams, accurate: false, timeout: nil, chunk_size: Polars::CHUNK_SIZE
+            )
                 return ::Polars::DataFrame.new if streams.empty?
 
                 interval_start, interval_end = streams.map(&:interval_lg).transpose
@@ -476,13 +478,14 @@ module Syskit
 
                 if builders.size == 1
                     builders.first.to_polars_frame(
-                        @interval_zero_time, samples.first, timeout: timeout
+                        @interval_zero_time, samples.first,
+                        timeout: timeout, chunk_size: chunk_size
                     )
                 else
                     joint_stream = Pocolog::StreamAligner.new(false, *samples)
                     Polars.create_aligned_frame(
                         @interval_zero_time, builders, joint_stream,
-                        timeout: timeout
+                        timeout: timeout, chunk_size: chunk_size
                     )
                 end
             end

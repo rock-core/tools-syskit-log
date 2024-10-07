@@ -9,7 +9,7 @@ HAS_POLARS =
     begin
         require "polars"
         true
-    rescue LoadError
+    rescue LoadError # rubocop:disable Lint/SuppressedException
     end
 
 require "syskit/log/polars" if HAS_POLARS
@@ -419,12 +419,37 @@ module Syskit
                         b.add_logical_time("b_time")
                     end
 
-                    expected = ::Polars::DataFrame.new({
-                        a_time: [0, 1],
-                        a: [0.1, 0.2],
-                        b: [0.15, 0.25],
-                        b_time: [0.1, 0.9]
-                    }, schema: nil) # schema for 2.7 compatibility
+                    expected = ::Polars::DataFrame.new(
+                        {
+                            a_time: [0, 1],
+                            a: [0.1, 0.2],
+                            b: [0.15, 0.25],
+                            b_time: [0.1, 0.9]
+                        }, schema: nil
+                    ) # schema for 2.7 compatibility
+                    diff = expected - frame
+                    max = (diff.max.row(0).to_a + diff.min.row(0).to_a).map(&:abs).max
+                    assert_operator max, :<, 1e-6
+                end
+
+                it "handles datasets bigger than the chunk size" do
+                    port = @context.task_test_task.port_test_port
+                    port1 = @context.task_test1_task.port_test_port
+                    frame = @context.to_polars_frame port, port1, chunk_size: 1 do |a, b|
+                        a.add_logical_time("a_time")
+                        a.add("a", &:d)
+                        b.add("b", &:d)
+                        b.add_logical_time("b_time")
+                    end
+
+                    expected = ::Polars::DataFrame.new(
+                        {
+                            a_time: [0, 1],
+                            a: [0.1, 0.2],
+                            b: [0.15, 0.25],
+                            b_time: [0.1, 0.9]
+                        }, schema: nil
+                    ) # schema for 2.7 compatibility
                     diff = expected - frame
                     max = (diff.max.row(0).to_a + diff.min.row(0).to_a).map(&:abs).max
                     assert_operator max, :<, 1e-6

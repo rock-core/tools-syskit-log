@@ -46,7 +46,7 @@ module Syskit
                 end
 
                 def vector_transform(&block)
-                    if @vector_transform
+                    if @vector_transform # rubocop:disable Style/GuardClause
                         raise ArgumentError, "there is already a vector transform block"
                     elsif @transform
                         raise ArgumentError, "cannot mix transform and vector transform"
@@ -62,7 +62,7 @@ module Syskit
                 end
 
                 def transform(&block)
-                    if @vector_transform
+                    if @vector_transform # rubocop:disable Style/GuardClause
                         raise ArgumentError, "cannot mix transform and vector transform"
                     elsif @transform
                         raise ArgumentError, "there is already a transform block"
@@ -132,8 +132,10 @@ module Syskit
                         ::Kernel.raise ::ArgumentError,
                                        "expected 1 argument to [], but got #{args}"
                     elsif !args[0].kind_of?(::Integer)
-                        ::Kernel.raise ::TypeError,
-                                       "expected a single numeric argument, got #{args[0]}"
+                        ::Kernel.raise(
+                            ::TypeError,
+                            "expected a single numeric argument, got #{args[0]}"
+                        )
                     end
                 end
 
