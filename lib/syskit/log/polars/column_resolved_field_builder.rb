@@ -7,11 +7,25 @@ module Syskit
             #
             # Dispatch of a stream's field data into a single column
             class ColumnResolvedFieldBuilder < ColumnBuilder
-                def initialize(
-                    name:, path:, type:, value_transform:, global_transform:
+                NA_UNSET = Object.new
+
+                def initialize( # rubocop:disable Metrics/ParameterLists
+                    name:, path:, type:, value_transform:, global_transform:,
+                    dtype: nil
                 )
+                    if dtype && !dtype.respond_to?(:to_sym)
+                        raise ArgumentError,
+                              "'dtype' must be given in symbol form (e.g. :f32 "\
+                              "instead of Polars::Float32)"
+                    end
+
                     @path = path
                     @type = type
+                    @dtype =
+                        dtype || ColumnResolvedFieldBuilder.dtype_from_typelib_type(type)
+                    @na_value =
+                        ColumnResolvedFieldBuilder.na_value_from_dtype(@dtype)
+
                     super(name: name, value_transform: value_transform,
                           global_transform: global_transform)
                 end
@@ -21,31 +35,25 @@ module Syskit
                     apply_value_transform(v)
                 end
 
-                def na_value
-                    Float::NAN if @type <= Typelib::NumericType && !@type.integer?
+                def self.na_value_from_dtype(dtype)
+                    @na_value = (Float::NAN if dtype.to_s.start_with?("f"))
                 end
 
-                POLARS_DTYPES_INTEGER_UNSIGNED = [
-                    ::Polars::UInt8, ::Polars::UInt16, ::Polars::UInt32, ::Polars::UInt64
-                ].freeze
-                POLARS_DTYPES_INTEGER_SIGNED = [
-                    ::Polars::UInt8, ::Polars::UInt16, ::Polars::UInt32, ::Polars::UInt64
-                ].freeze
-                POLARS_DTYPES_FLOAT = [::Polars::Float32, ::Polars::Float64] .freeze
+                def self.dtype_from_typelib_type(type)
+                    return ::Polars::Object unless type <= Typelib::NumericType
 
-                def dtype
-                    return ::Polars::Object unless @type <= Typelib::NumericType
-
-                    type_size_bits = @type.size.bit_length
-                    if @type.integer?
-                        if @type.unsigned?
-                            POLARS_DTYPES_INTEGER_UNSIGNED.at(type_size_bits - 1)
+                    category =
+                        if type.integer?
+                            if type.unsigned?
+                                "u"
+                            else
+                                "i"
+                            end
                         else
-                            POLARS_DTYPES_INTEGER_SIGNED.at(type_size_bits - 1)
+                            "f"
                         end
-                    else
-                        POLARS_DTYPES_FLOAT.at(type_size_bits - 3)
-                    end
+
+                    "#{category}#{type.size * 8}"
                 end
             end
         end

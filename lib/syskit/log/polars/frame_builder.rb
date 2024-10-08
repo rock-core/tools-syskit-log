@@ -47,10 +47,10 @@ module Syskit
                 # @yieldparam [PathBuilder] an object that allows to extract specific
                 #    fields and/or apply transformations before the value gets
                 #    stored in the frame
-                def add(name = nil, &block)
+                def add(name = nil, dtype: nil, &block)
                     raise ArgumentError, "a block is required" unless block_given?
 
-                    resolved = resolve_field(name: name, &block)
+                    resolved = resolve_field(name: name, dtype: dtype, &block)
                     add_resolved_field(resolved)
                 end
 
@@ -75,7 +75,7 @@ module Syskit
                 # Helper that resolves a field from the block given to {#add} and {#time}
                 #
                 # @return [ColumnBuilder]
-                def resolve_field(name: nil)
+                def resolve_field(name: nil, dtype: nil)
                     builder = yield(PathBuilder.new(@type))
                     unless builder.__terminal?
                         raise InvalidDataType,
@@ -86,7 +86,8 @@ module Syskit
                         name: name || builder.__name, path: builder.__path,
                         type: builder.__type,
                         value_transform: builder.__transform,
-                        global_transform: builder.__vector_transform
+                        global_transform: builder.__vector_transform,
+                        dtype: dtype
                     )
                 end
 

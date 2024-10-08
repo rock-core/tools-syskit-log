@@ -20,7 +20,7 @@ module Syskit
                 end
 
                 def create_series(data)
-                    ::Polars::Series.new(@name, data, dtype: dtype)
+                    ::Polars::Series.new(@name, data, dtype: @dtype)
                 end
 
                 def apply_global_transform(series)

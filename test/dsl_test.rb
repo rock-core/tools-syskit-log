@@ -409,6 +409,18 @@ module Syskit
                     assert_equal [0.1, 0.2], frame[".d"].to_a
                 end
 
+                it "allows overriding the column type" do
+                    port = @context.task_test_task.port_test_port
+                    port1 = @context.task_test1_task.port_test_port
+                    frame = @context.to_polars_frame port, port1 do |a, b|
+                        a.add_time_field("t", &:t)
+                        a.add("a", dtype: :f32, &:d)
+                        b.add("b", &:d)
+                    end
+
+                    assert_equal ::Polars::Float32, frame["a"].dtype
+                end
+
                 it "aligns different streams in a single frame" do
                     port = @context.task_test_task.port_test_port
                     port1 = @context.task_test1_task.port_test_port
