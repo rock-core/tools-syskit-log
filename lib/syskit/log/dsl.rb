@@ -649,6 +649,11 @@ module Syskit
             end
 
             # Convert a Daru frame into a vega data array
+            def polars_to_vega(frame)
+                frame.fill_nan(nil).to_a
+            end
+
+            # Convert a Daru frame into a vega data array
             def daru_to_vega(frame, every: 1)
                 data = []
                 frame.each_row.each_with_index do |row, i|

@@ -502,6 +502,20 @@ module Syskit
                 end
             end
 
+            describe "polars_to_vega" do
+                before do
+                    @context = make_context
+                end
+
+                it "converts NaN into nil" do
+                    frame = ::Polars::DataFrame.new(
+                        { "a" => [Float::NAN, 0.1] }, schema: nil
+                    )
+                    vega = @context.polars_to_vega(frame)
+                    assert_equal [{ "a" => nil }, { "a" => 0.1 }], vega
+                end
+            end
+
             describe "daru_to_vega" do
                 before do
                     @context = make_context
