@@ -35,8 +35,8 @@ module Syskit
                 #
                 # The field must represent microseconds in the same frame than
                 # center_time
-                def add_time_field(name = nil, &block)
-                    add(name, &block)
+                def add_time_field(name = nil, dtype: :i64, &block)
+                    add(name, dtype: dtype, &block)
                     @time_fields << (@fields.size - 1)
                 end
 

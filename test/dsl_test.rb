@@ -361,9 +361,11 @@ module Syskit
 
                     now_nsec = Time.now
                     now = Time.at(now_nsec.tv_sec, now_nsec.tv_usec)
+                    now_usec = now.tv_sec * 1_000_000 + now.tv_usec
 
                     registry = Typelib::CXXRegistry.new
                     compound_t = registry.create_compound "/C" do |b|
+                        b.t = "/uint64_t"
                         b.d = "/double"
                         b.i = "/int"
                     end
@@ -376,8 +378,10 @@ module Syskit
                                     "rock_stream_type" => "port"
                                 }
                             )
-                            write_logfile_sample now, now, { d: 0.1, i: 1 }
-                            write_logfile_sample now + 10, now + 1, { d: 0.2, i: 2 }
+                            write_logfile_sample now, now, { t: now_usec - 500, d: 0.1, i: 1 }
+                            write_logfile_sample(
+                                now + 10, now + 1, { t: now_usec + 999_500, d: 0.2, i: 2 }
+                            )
                         end
 
                         create_logfile "test1.0.log" do
@@ -388,8 +392,13 @@ module Syskit
                                     "rock_stream_type" => "port"
                                 }
                             )
-                            write_logfile_sample now, now + 0.1, { d: 0.15, i: 3 }
-                            write_logfile_sample now + 10, now + 0.9, { d: 0.25, i: 4 }
+                            write_logfile_sample(
+                                now, now + 0.1, { t: now_usec + 100_000, d: 0.15, i: 3 }
+                            )
+                            write_logfile_sample(
+                                now + 10, now + 0.9,
+                                { t: now_usec + 900_000, d: 0.25, i: 4 }
+                            )
                         end
                     end
 
@@ -419,6 +428,31 @@ module Syskit
                     end
 
                     assert_equal ::Polars::Float32, frame["a"].dtype
+                end
+
+                it "centers the time fields" do
+                    port = @context.task_test_task.port_test_port
+                    port1 = @context.task_test1_task.port_test_port
+                    frame = @context.to_polars_frame port, port1 do |a, b|
+                        a.add_time_field("t", &:t)
+                        a.add("a", &:d)
+                        b.add("b", &:d)
+                    end
+
+                    expected = ::Polars::DataFrame.new(
+                        {
+                            t: [-0.0005, 0.9995],
+                            a: [0.1, 0.2],
+                            b: [0.15, 0.25]
+                        }, schema: nil
+                    ) # 'schema' option for 2.7 compatibility
+                    assert_polars_frame_near(expected, frame)
+                end
+
+                def assert_polars_frame_near(expected, actual)
+                    diff = expected - actual
+                    max = (diff.max.row(0).to_a + diff.min.row(0).to_a).map(&:abs).max
+                    assert_operator max, :<, 1e-6
                 end
 
                 it "aligns different streams in a single frame" do
