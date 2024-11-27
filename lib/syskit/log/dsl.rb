@@ -804,7 +804,8 @@ module Syskit
             # @param [Boolean] upgrade if true, the data types are upgraded to their
             #   latest representation. Set to false to keep them as-is. This can be
             #   controlled by calling `.upgrade` on the streams in the block
-            def export_to_single_file(path, *streams, upgrade: true)
+            def export_to_single_file(path, *streams, use_realtime: false, upgrade: true)
+                path = Pathname(path)
                 log_file = Pocolog::Logfiles.create(path.to_s)
                 return if streams.empty?
 
@@ -827,7 +828,7 @@ module Syskit
 
                 log_file_streams =
                     DSL.export_to_single_file_create_output_streams(log_file, builders)
-                joint_stream = Pocolog::StreamAligner.new(false, *samples)
+                joint_stream = Pocolog::StreamAligner.new(use_realtime, *samples)
                 DSL.export_to_single_file_process(
                     builders, log_file_streams, joint_stream
                 )
