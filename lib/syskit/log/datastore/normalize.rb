@@ -34,6 +34,7 @@ module Syskit::Log
             # Internal representation of the output of a normalization operation
             class Output
                 attr_reader :path
+                attr_reader :logical_time_field
                 attr_reader :stream_block
                 attr_reader :digest
                 attr_reader :stream_size
@@ -52,6 +53,7 @@ module Syskit::Log
                     @wio = wio
                     @stream_block = stream_block
                     @stream_block_pos = stream_block_pos
+                    @logical_time_field = resolve_logical_time_field(stream_block)
                     @stream_size = 0
                     @interval_rt = []
                     @interval_lg = []
@@ -115,11 +117,49 @@ module Syskit::Log
                     write ZERO_BYTE
                     write raw_data[4..-1]
                     write raw_payload
+
+                    logical_time = extract_logical_time(raw_payload)
+                    lg_time = logical_time if logical_time
+
                     @interval_rt[0] ||= rt_time
                     @interval_rt[1] = rt_time
                     @interval_lg[0] ||= lg_time
                     @interval_lg[1] = lg_time
                     @last_data_block_time = [rt_time, lg_time]
+                end
+
+                def resolve_logical_time_field(stream_block)
+                    type = stream_block.type
+
+                    return unless type < Typelib::CompoundType
+
+                    metadata = type.field_metadata
+                    type.each_field do |field|
+                        return if metadata[field].include?("rock_timestamp_field")
+
+                        next unless metadata[field].include?("role")
+
+                        role = metadata[field].get("role").first
+
+                        return field if role == "logical_time"
+                    end
+                    nil
+                end
+
+                def extract_logical_time(raw_payload)
+                    return unless @logical_time_field
+
+                    # Skip 21 bytes as they belong to the data stream declaration block
+                    # information before the marshalled data.
+                    # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
+                    time_to_microseconds(
+                        @stream_block.type
+                        .from_buffer(raw_payload[21..-1])[@logical_time_field]
+                    )
+                end
+
+                def time_to_microseconds(time)
+                    time.tv_sec * 1_000_000 + time.tv_usec
                 end
 
                 def string_digest
