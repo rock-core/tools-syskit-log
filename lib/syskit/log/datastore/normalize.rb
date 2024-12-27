@@ -135,7 +135,7 @@ module Syskit::Log
 
                     metadata = type.field_metadata
                     type.each_field do |field|
-                        return if metadata[field].include?("rock_timestamp_field")
+                        break if metadata[field].include?("rock_timestamp_field")
 
                         next unless metadata[field].include?("role")
 

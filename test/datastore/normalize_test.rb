@@ -217,6 +217,51 @@ module Syskit::Log
                                  stream.samples.to_a
                 end
             end
+
+            describe "logical_time" do
+                it "extract logical time from payload" do
+                    registry = Typelib::CXXRegistry.new
+                    registry.create_compound "/Time" do |b|
+                        b.microseconds = "uint64_t"
+                        b.tv_sec = "uint64_t"
+                        b.tv_usec = "uint64_t"
+                    end
+                    test_t = registry.create_compound "/Test" do |b|
+                        b.time = "/Time"
+                        b.other_type = "/int"
+                    end
+                    test_t.field_metadata["time"].set("role", "logical_time")
+                    timestamp = Time.new(1998, 12, 22)
+                    timestamp_as_microseconds = timestamp.tv_sec * 1_000_000 +
+                                                timestamp.tv_usec
+                    value = test_t.new(time: { microseconds: timestamp_as_microseconds,
+                                               tv_sec: timestamp.tv_sec,
+                                               tv_usec: timestamp.tv_usec },
+                                       other_type: 42)
+
+                    create_logfile "file0.0.log" do
+                        create_logfile_stream(
+                            "stream0",
+                            metadata: {
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port"
+                            },
+                            type: test_t
+                        )
+                        write_logfile_sample base_time, base_time + 5, value
+                    end
+
+                    logfile_pathname("normalized").mkdir
+                    input_path = logfile_pathname("file0.0.log")
+                    normalize.normalize([input_path])
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+
+                    assert_equal [[base_time, timestamp, value]],
+                                 stream.samples.to_a
+                end
+            end
         end
     end
 end
