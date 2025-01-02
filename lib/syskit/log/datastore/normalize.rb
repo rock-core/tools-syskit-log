@@ -116,10 +116,19 @@ module Syskit::Log
                     write raw_data[0, 2]
                     write ZERO_BYTE
                     write raw_data[4..-1]
-                    write raw_payload
 
+                    # Real time are bytes from 0..7
+                    write raw_payload[0..7]
+                    # Logical time are bytes from 8..15
                     logical_time = extract_logical_time(raw_payload)
-                    lg_time = logical_time if logical_time
+                    if logical_time
+                        write [logical_time.tv_sec].pack("V")
+                        write [logical_time.tv_usec].pack("V")
+                        lg_time = logical_time.microseconds
+                    else
+                        write raw_payload[8..15]
+                    end
+                    write raw_payload[16..-1]
 
                     @interval_rt[0] ||= rt_time
                     @interval_rt[1] = rt_time
@@ -129,14 +138,14 @@ module Syskit::Log
                 end
 
                 def resolve_logical_time_field(stream_block)
-                    type = stream_block.type
+                    rock_timestamp_field = stream_block.metadata["rock_timestamp_field"]
+                    return rock_timestamp_field if rock_timestamp_field
 
+                    type = stream_block.type
                     return unless type < Typelib::CompoundType
 
                     metadata = type.field_metadata
                     type.each_field do |field|
-                        break if metadata[field].include?("rock_timestamp_field")
-
                         next unless metadata[field].include?("role")
 
                         role = metadata[field].get("role").first
@@ -152,14 +161,9 @@ module Syskit::Log
                     # Skip 21 bytes as they belong to the data stream declaration block
                     # information before the marshalled data.
                     # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
-                    time_to_microseconds(
-                        @stream_block.type
-                        .from_buffer(raw_payload[21..-1])[@logical_time_field]
-                    )
-                end
-
-                def time_to_microseconds(time)
-                    time.tv_sec * 1_000_000 + time.tv_usec
+                    @stream_block.type
+                                 .from_buffer(raw_payload[21..-1])
+                                 .raw_get(@logical_time_field)
                 end
 
                 def string_digest
