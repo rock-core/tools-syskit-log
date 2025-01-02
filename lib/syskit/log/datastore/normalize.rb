@@ -110,6 +110,13 @@ module Syskit::Log
                     Pocolog::BlockStream.new(@wio.dup)
                 end
 
+                def update_raw_payload_logical_time(raw_payload, logical_time)
+                    # Logical time are bytes from 8..15
+                    raw_payload[8..11] = [logical_time.tv_sec].pack("V")
+                    raw_payload[12..15] = [logical_time.tv_usec].pack("V")
+                    raw_payload
+                end
+
                 def add_data_block(rt_time, lg_time, raw_data, raw_payload)
                     @stream_size += 1
 
@@ -117,18 +124,14 @@ module Syskit::Log
                     write ZERO_BYTE
                     write raw_data[4..-1]
 
-                    # Real time are bytes from 0..7
-                    write raw_payload[0..7]
-                    # Logical time are bytes from 8..15
                     logical_time = extract_logical_time(raw_payload)
                     if logical_time
-                        write [logical_time.tv_sec].pack("V")
-                        write [logical_time.tv_usec].pack("V")
                         lg_time = logical_time.microseconds
-                    else
-                        write raw_payload[8..15]
+                        raw_payload = update_raw_payload_logical_time(
+                            raw_payload, logical_time
+                        )
                     end
-                    write raw_payload[16..-1]
+                    write raw_payload
 
                     @interval_rt[0] ||= rt_time
                     @interval_rt[1] = rt_time
