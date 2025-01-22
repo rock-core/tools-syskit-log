@@ -173,9 +173,9 @@ module Syskit::Log
 
             describe "#normalize_logfile" do
                 it "skips invalid files" do
-                    write_logfile "file0.0.log", "INVALID"
+                    content = Random.hex(ZstdIO::DECOMPRESS_READ_SIZE + 1)
+                    write_logfile "file0.0.log", content
                     reporter = flexmock(NullReporter.new)
-                    flexmock(reporter).should_receive(:current).and_return(10)
                     ext = ".zst" if compress?
                     reporter
                         .should_receive(:warn)
@@ -186,6 +186,9 @@ module Syskit::Log
                         logfile_pathname("file0.0.log"),
                         logfile_pathname("normalized"), reporter: reporter
                     )
+
+                    file_size = logfile_pathname("file0.0.log").stat.size
+                    assert_equal file_size, reporter.current
                 end
                 it "handles truncated files" do
                     create_logfile "file0.0.log", truncate: 1 do
@@ -201,7 +204,10 @@ module Syskit::Log
                     file0_path = logfile_pathname("file0.0.log")
                     logdir_pathname("normalized").mkpath
                     reporter = flexmock(NullReporter.new)
-                    flexmock(reporter).should_receive(:current).and_return(10)
+                    reporter.should_receive(:current).and_return(10)
+                    reporter.should_receive(:current=)
+                            .with(10 + logfile_pathname("file0.0.log").stat.size)
+                            .once
                     ext = ".zst" if compress?
                     reporter.should_receive(:warn)
                             .with(/^file0.0.log#{ext} looks truncated/)

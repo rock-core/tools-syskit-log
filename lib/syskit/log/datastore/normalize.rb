@@ -248,7 +248,7 @@ module Syskit::Log
                 reporter.warn "#{logfile_path.basename} looks truncated or contains "\
                               "garbage (#{e.message}), stopping processing but keeping "\
                               "the samples processed so far"
-                reporter.current = in_io.size + reporter_offset
+                reporter.current = Syskit::Log.io_disk_size(in_io) + reporter_offset
             ensure
                 state.out_io_streams.each(&:flush)
                 in_block_stream&.close
@@ -316,7 +316,7 @@ module Syskit::Log
             rescue Pocolog::InvalidFile
                 reporter.warn "#{logfile_path.basename} does not seem to be "\
                                 "a valid pocolog file, skipping"
-                reporter.current += in_io.size
+                reporter.current += Syskit::Log.io_disk_size(in_io)
                 nil
             end
 
