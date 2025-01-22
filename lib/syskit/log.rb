@@ -78,6 +78,10 @@ module Syskit
             end
         end
 
+        def self.io_disk_size(io)
+            File.stat(io.path).size
+        end
+
         def self.open_out_stream(path, &block)
             return path.open("w", &block) unless path.extname == ".zst"
 
