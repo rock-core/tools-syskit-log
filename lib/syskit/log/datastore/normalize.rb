@@ -124,8 +124,8 @@ module Syskit::Log
                     write ZERO_BYTE
                     write raw_data[4..-1]
 
-                    logical_time = extract_logical_time(raw_payload)
-                    if logical_time
+                    if @logical_time_field
+                        logical_time = extract_logical_time(raw_payload)
                         lg_time = logical_time.microseconds
                         raw_payload = update_raw_payload_logical_time(
                             raw_payload, logical_time
@@ -149,8 +149,6 @@ module Syskit::Log
 
                     metadata = type.field_metadata
                     type.each_field do |field|
-                        next unless metadata[field].include?("role")
-
                         role = metadata[field].get("role").first
 
                         return field if role == "logical_time"
