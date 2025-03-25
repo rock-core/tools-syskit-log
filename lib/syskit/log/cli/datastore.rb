@@ -999,6 +999,33 @@ module Syskit::Log
                      "--index-path", dataset.roby_index_path(roby_log_path).to_s,
                      *args)
             end
+
+            desc "pack ID PATH",
+                 "pack a dataset into a normalized tar format and " \
+                 "save it into the given folder"
+            def pack(dataset_query, path)
+                store = open_store
+                path = Pathname(path).expand_path
+                reporter = create_reporter
+                datasets = resolve_datasets(store, dataset_query)
+                datasets.each do |ds|
+                    target_path = path / "#{ds.digest}.tar"
+                    source_path = ds.dataset_path
+
+                    reporter.info "Creating #{target_path}"
+                    system("tar", "--create", "-f", target_path.to_s,
+                           "syskit-dataset.yml", "syskit-metadata.yml",
+                           chdir: source_path.to_s, exception: true)
+                    system("tar", "--append", "-f", target_path.to_s,
+                           "--exclude", "./syskit-dataset.yml",
+                           "--exclude", "./syskit-metadata.yml", ".",
+                           chdir: source_path.to_s, exception: true)
+                rescue RuntimeError
+                    reporter.info ""
+                    target_path.unlink
+                    raise
+                end
+            end
         end
     end
 end
