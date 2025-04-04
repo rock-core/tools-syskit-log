@@ -3,6 +3,7 @@
 require "roby"
 require "syskit"
 require "thor"
+require "minitar"
 
 require "syskit/log"
 require "syskit/log/datastore/normalize"
@@ -317,6 +318,24 @@ module Syskit::Log
                     return Integer(time, 10) if time =~ /^\d+$/
 
                     Time.parse(time).tv_sec
+                end
+
+                PACKED_DATASET_EXPECTED_PRELUDE_SIZE = 5
+
+                def packed_dataset_digest(path)
+                    counter = 0
+                    Minitar::Input.each_entry(path.to_s) do |entry|
+                        if entry.full_name == "syskit-dataset.yml"
+                            yaml = YAML.safe_load(entry.read)
+                            return yaml.fetch("sha2")
+                        elsif counter > PACKED_DATASET_EXPECTED_PRELUDE_SIZE
+                            raise ArgumentError,
+                                  "cannot find syskit-dataset.yml at the beginning " \
+                                  "of #{path}"
+                        else
+                            counter += 1
+                        end
+                    end
                 end
 
                 TIMESTAMP_APPROX_PATTERNS = [
@@ -1025,6 +1044,20 @@ module Syskit::Log
                     target_path.unlink
                     raise
                 end
+            end
+
+            desc "unpack PATH",
+                 "unpacks a dataset saved in a normalized tar format inside the " \
+                 "datastore"
+            def unpack(path)
+                path = Pathname(path)
+                digest = packed_dataset_digest(path)
+                dataset_path = datastore_path.realpath / "core" / digest
+                dataset_path.mkdir
+                system("tar", "-C", dataset_path.to_s, "-xf", path.to_s, exception: true)
+            rescue StandardError
+                dataset_path&.rmtree
+                raise
             end
         end
     end
