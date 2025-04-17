@@ -8,6 +8,7 @@
     <depend package="rom-sql" />
     <depend package="ruby-sqlite3" />
     <depend package="zstd-ruby" />
+    <depend package="minitar" />
     <depend_optional package="data_processing/daru" />
     <depend_optional package="gui/vega-rb" />
     <depend_optional package="data_processing/rb-gsl" />
