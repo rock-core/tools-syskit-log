@@ -267,12 +267,13 @@ module Syskit::Log
 
         describe ".redirect?" do
             before do
-                @file = Pathname.new(Tempfile.new)
+                @io = Tempfile.new
+                @file = Pathname.new(@io.path)
                 @file.write ""
             end
 
             after do
-                @file.unlink
+                @io.close!
             end
 
             it "returns false if the path does not exist" do
