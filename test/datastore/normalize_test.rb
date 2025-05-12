@@ -124,18 +124,41 @@ module Syskit::Log
                     assert_equal [[base_time + 2, base_time + 20, 2],
                                   [base_time + 3, base_time + 30, 3]], stream.samples.to_a
                 end
-                it "raises if a potential followup stream has an non-matching realtime range" do
+                it "skips the sample if a potential followup stream has an non-matching "\
+                   "realtime range" do
                     create_logfile "file0.1.log" do
-                        create_logfile_stream "stream0", metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
+                        create_logfile_stream(
+                            "stream0",
+                            metadata: Hash[
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port"
+                            ]
+                        )
                         write_logfile_sample base_time + 1, base_time + 30, 3
                     end
-                    capture_io do
-                        assert_raises(Normalize::InvalidFollowupStream) do
-                            normalize.normalize([logfile_pathname("file0.0.log"), logfile_pathname("file0.1.log")])
-                        end
-                    end
+                    reporter = flexmock(NullReporter.new)
+                    real_time_warn = "found followup stream whose real time is before "\
+                                      "the stream that came before it. Previous sample "\
+                                      "real time = #{base_time + 2}, sample real time = "\
+                                      "#{base_time + 1}."
+                    reporter.should_receive(:warn)
+                            .with(real_time_warn)
+                            .once
+                    normalize.normalize(
+                        [
+                            logfile_pathname("file0.0.log"),
+                            logfile_pathname("file0.1.log")
+                        ],
+                        reporter: reporter
+                    )
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(stream.size, 1)
+                    assert_equal(stream[0][2], 2)
                 end
-                it "raises if a potential followup stream has an non-matching logical time range" do
+                it "skips the sample if a potential followup stream has an non-matching "\
+                   "logical time range" do
                     create_logfile "file0.1.log" do
                         create_logfile_stream(
                             "stream0",
@@ -144,16 +167,28 @@ module Syskit::Log
                                 "rock_task_object_name" => "port"
                             }
                         )
-                        write_logfile_sample base_time + 3, base_time + 10, 3
+                        write_logfile_sample base_time + 50, base_time, 3
                     end
-                    capture_io do
-                        assert_raises(Normalize::InvalidFollowupStream) do
-                            normalize.normalize(
-                                [logfile_pathname("file0.0.log"),
-                                 logfile_pathname("file0.1.log")]
-                            )
-                        end
-                    end
+                    reporter = flexmock(NullReporter.new)
+                    logical_time_warn = "found followup stream whose logical time is "\
+                                        "before the stream that came before it. Previous"\
+                                        " sample logical time = #{base_time + 20}, "\
+                                        "sample logical time = #{base_time}."
+                    reporter.should_receive(:warn)
+                            .with(logical_time_warn)
+                            .once
+                    normalize.normalize(
+                        [
+                            logfile_pathname("file0.0.log"),
+                            logfile_pathname("file0.1.log")
+                        ],
+                        reporter: reporter
+                    )
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(stream.size, 1)
+                    assert_equal(stream[0][2], 2)
                 end
                 it "raises if a potential followup stream has an non-matching type" do
                     create_logfile "file0.1.log" do

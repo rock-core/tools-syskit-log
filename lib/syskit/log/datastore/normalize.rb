@@ -247,22 +247,34 @@ module Syskit::Log
             NormalizationState =
                 Struct
                 .new(:out_io_streams, :control_blocks, :followup_stream_time) do
-                    def validate_time_followup(stream_index, data_block_header)
+                    def validate_time_followup(
+                        stream_index, data_block_header, reporter: NullReporter.new
+                    )
                         # Second part of the followup stream validation (see above)
                         last_stream_time = followup_stream_time[stream_index]
-                        return unless last_stream_time
+                        valid = true
+                        return valid unless last_stream_time
 
                         followup_stream_time[stream_index] = nil
                         previous_rt, previous_lg = last_stream_time
                         if previous_rt > data_block_header.rt_time
-                            raise InvalidFollowupStream,
-                                  "found followup stream whose real time is before "\
-                                  "the stream that came before it"
+                            msg = "found followup stream whose real time is before the "\
+                                  "stream that came before it. Previous sample real time"\
+                                  " = #{Time.at(previous_rt / 1_000_000)}, sample real "\
+                                  "time = "\
+                                  "#{Time.at(data_block_header.rt_time / 1_000_000)}."
+                            reporter.warn msg
+                            valid = false
                         elsif previous_lg > data_block_header.lg_time
-                            raise InvalidFollowupStream,
-                                  "found followup stream whose logical time is "\
-                                  "before the stream that came before it"
+                            msg = "found followup stream whose logical time is before "\
+                                  "the stream that came before it. Previous sample "\
+                                  "logical time = #{Time.at(previous_lg / 1_000_000)}, "\
+                                  "sample logical time = "\
+                                  "#{Time.at(data_block_header.lg_time / 1_000_000)}."
+                            reporter.warn msg
+                            valid = false
                         end
+                        valid
                     end
                 end
 
@@ -300,7 +312,7 @@ module Syskit::Log
             end
 
             def normalize_logfile_process_block_stream(
-                output_path, state, in_block_stream, reporter:
+                output_path, state, in_block_stream, reporter: NullReporter.new
             )
                 reporter_offset = reporter.current
 
@@ -308,7 +320,8 @@ module Syskit::Log
                 while (block_header = in_block_stream.read_next_block_header)
                     begin
                         normalize_logfile_process_block(
-                            output_path, state, block_header, in_block_stream.read_payload
+                            output_path, state, block_header,
+                            in_block_stream.read_payload, reporter: reporter
                         )
                     rescue InvalidFollowupStream => e
                         raise e, "while processing #{in_block_stream.io.path}: #{e.message}"
@@ -327,7 +340,7 @@ module Syskit::Log
             # Process a single in block and dispatch it into separate
             # normalized logfiles
             def normalize_logfile_process_block(
-                output_path, state, block_header, raw_payload
+                output_path, state, block_header, raw_payload, reporter: NullReporter.new
             )
                 stream_index = block_header.stream_index
 
@@ -346,7 +359,8 @@ module Syskit::Log
                     )
                 else
                     normalize_logfile_process_data_block(
-                        state, stream_index, block_header.raw_data, raw_payload
+                        state, stream_index, block_header.raw_data, raw_payload,
+                        reporter: reporter
                     )
                 end
             end
@@ -354,7 +368,7 @@ module Syskit::Log
             # @api private
             #
             # Open a log file and make sure it's actually a pocolog logfile
-            def normalize_logfile_init(logfile_path, in_io, reporter:)
+            def normalize_logfile_init(logfile_path, in_io, reporter: NullReporter.new)
                 in_block_stream = Pocolog::BlockStream.new(in_io)
                 in_block_stream.read_prologue
                 in_block_stream
@@ -413,11 +427,14 @@ module Syskit::Log
             #
             # Process a single data block in {#normalize_logfile_process_block}
             def normalize_logfile_process_data_block(
-                state, stream_index, raw_data, raw_payload
+                state, stream_index, raw_data, raw_payload, reporter: NullReporter.new
             )
                 data_block_header =
                     Pocolog::BlockStream::DataBlockHeader.parse(raw_payload)
-                state.validate_time_followup(stream_index, data_block_header)
+                valid = state.validate_time_followup(
+                    stream_index, data_block_header, reporter: reporter
+                )
+                return unless valid
 
                 output = state.out_io_streams[stream_index]
                 output.add_data_block(
