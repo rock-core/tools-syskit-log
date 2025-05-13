@@ -141,8 +141,8 @@ module Syskit::Log
                         Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
                         stream_name: logfile_pathname("normalized", "task0::port.0.log"),
                         mode: "real time",
-                        previous: base_time + 2,
-                        current: base_time + 1
+                        previous: Normalize.format_timestamp(timestamp_us(base_time + 2)),
+                        current: Normalize.format_timestamp(timestamp_us(base_time + 1))
                     )
                     reporter.should_receive(:warn)
                             .with(msg)
@@ -177,8 +177,8 @@ module Syskit::Log
                         Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
                         stream_name: logfile_pathname("normalized", "task0::port.0.log"),
                         mode: "logical time",
-                        previous: base_time + 20,
-                        current: base_time
+                        previous: Normalize.format_timestamp(timestamp_us(base_time + 20)),
+                        current: Normalize.format_timestamp(timestamp_us(base_time))
                     )
                     reporter.should_receive(:warn)
                             .with(msg)
@@ -276,8 +276,7 @@ module Syskit::Log
                         b.other_type = "/int"
                     end
                     @timestamp = Time.new(1998, 12, 22)
-                    @timestamp_as_microseconds = @timestamp.tv_sec * 1_000_000 +
-                                                 @timestamp.tv_usec
+                    @timestamp_as_microseconds = timestamp_us(@timestamp)
                 end
 
                 it "extract logical time from payload" do
@@ -339,6 +338,11 @@ module Syskit::Log
                     assert_equal [[base_time, base_time + 5, value]],
                                  stream.samples.to_a
                 end
+            end
+
+            def timestamp_us(time)
+                timestamp_us = time.tv_sec * 1_000_000 + time.tv_usec
+                timestamp_us
             end
         end
     end

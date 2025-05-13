@@ -260,6 +260,10 @@ module Syskit::Log
                 "is before the stream that came before it. Previous sample real time = "\
                 "%<previous>s, sample real time = %<current>s"
 
+            def self.format_timestamp(time_us)
+                Time.at(time_us / 1_000_000).strftime("%Y-%m-%d %H:%M:%S:%6N")
+            end
+
             NormalizationState =
                 Struct
                 .new(:out_io_streams, :control_blocks, :followup_stream_time) do
@@ -278,8 +282,10 @@ module Syskit::Log
                             msg = format(
                                 FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
                                 stream_name: output_stream_name, mode: "real time",
-                                previous: Time.at(previous_rt / 1_000_000),
-                                current: Time.at(data_block_header.rt_time / 1_000_000)
+                                previous: Normalize.format_timestamp(previous_rt),
+                                current: Normalize.format_timestamp(
+                                    data_block_header.rt_time
+                                )
                             )
                             reporter.warn msg
                             valid = false
@@ -287,8 +293,10 @@ module Syskit::Log
                             msg = format(
                                 FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
                                 stream_name: output_stream_name, mode: "logical time",
-                                previous: Time.at(previous_lg / 1_000_000),
-                                current: Time.at(data_block_header.lg_time / 1_000_000)
+                                previous: Normalize.format_timestamp(previous_lg),
+                                current: Normalize.format_timestamp(
+                                    data_block_header.lg_time
+                                )
                             )
                             reporter.warn msg
                             valid = false
