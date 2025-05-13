@@ -264,8 +264,6 @@ module Syskit::Log
                     registry = Typelib::CXXRegistry.new
                     registry.create_compound "/Time" do |b|
                         b.microseconds = "uint64_t"
-                        b.tv_sec = "uint64_t"
-                        b.tv_usec = "uint64_t"
                     end
                     test_t = registry.create_compound "/Test" do |b|
                         b.time = "/Time"
@@ -275,9 +273,7 @@ module Syskit::Log
                     timestamp = Time.new(1998, 12, 22)
                     timestamp_as_microseconds = timestamp.tv_sec * 1_000_000 +
                                                 timestamp.tv_usec
-                    value = test_t.new(time: { microseconds: timestamp_as_microseconds,
-                                               tv_sec: timestamp.tv_sec,
-                                               tv_usec: timestamp.tv_usec },
+                    value = test_t.new(time: { microseconds: timestamp_as_microseconds },
                                        other_type: 42)
 
                     create_logfile "file0.0.log" do

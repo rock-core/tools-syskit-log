@@ -110,10 +110,10 @@ module Syskit::Log
                     Pocolog::BlockStream.new(@wio.dup)
                 end
 
-                def update_raw_payload_logical_time(raw_payload, logical_time)
+                def update_raw_payload_logical_time(raw_payload, logical_time_us)
                     # Logical time are bytes from 8..15
-                    raw_payload[8..11] = [logical_time.tv_sec].pack("V")
-                    raw_payload[12..15] = [logical_time.tv_usec].pack("V")
+                    raw_payload[8..11] = [logical_time_us / 1_000_000].pack("V")
+                    raw_payload[12..15] = [logical_time_us % 1_000_000].pack("V")
                     raw_payload
                 end
 
@@ -128,7 +128,7 @@ module Syskit::Log
                         logical_time = extract_logical_time(raw_payload)
                         lg_time = logical_time.microseconds
                         raw_payload = update_raw_payload_logical_time(
-                            raw_payload, logical_time
+                            raw_payload, lg_time
                         )
                     end
                     write raw_payload
