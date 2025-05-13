@@ -137,12 +137,15 @@ module Syskit::Log
                         write_logfile_sample base_time + 1, base_time + 30, 3
                     end
                     reporter = flexmock(NullReporter.new)
-                    real_time_warn = "found followup stream whose real time is before "\
-                                      "the stream that came before it. Previous sample "\
-                                      "real time = #{base_time + 2}, sample real time = "\
-                                      "#{base_time + 1}."
+                    msg = format(
+                        Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
+                        stream_name: logfile_pathname("normalized", "task0::port.0.log"),
+                        mode: "real time",
+                        previous: base_time + 2,
+                        current: base_time + 1
+                    )
                     reporter.should_receive(:warn)
-                            .with(real_time_warn)
+                            .with(msg)
                             .once
                     normalize.normalize(
                         [
@@ -170,12 +173,15 @@ module Syskit::Log
                         write_logfile_sample base_time + 50, base_time, 3
                     end
                     reporter = flexmock(NullReporter.new)
-                    logical_time_warn = "found followup stream whose logical time is "\
-                                        "before the stream that came before it. Previous"\
-                                        " sample logical time = #{base_time + 20}, "\
-                                        "sample logical time = #{base_time}."
+                    msg = format(
+                        Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
+                        stream_name: logfile_pathname("normalized", "task0::port.0.log"),
+                        mode: "logical time",
+                        previous: base_time + 20,
+                        current: base_time
+                    )
                     reporter.should_receive(:warn)
-                            .with(logical_time_warn)
+                            .with(msg)
                             .once
                     normalize.normalize(
                         [

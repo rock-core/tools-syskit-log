@@ -255,6 +255,11 @@ module Syskit::Log
                 Pathname.new(path)
             end
 
+            FOLLOWUP_STREAM_TIME_ERROR_FORMAT =
+                "While building %<stream_name>s, found followup stream whose %<mode>s "\
+                "is before the stream that came before it. Previous sample real time = "\
+                "%<previous>s, sample real time = %<current>s"
+
             NormalizationState =
                 Struct
                 .new(:out_io_streams, :control_blocks, :followup_stream_time) do
@@ -268,20 +273,23 @@ module Syskit::Log
 
                         followup_stream_time[stream_index] = nil
                         previous_rt, previous_lg = last_stream_time
+                        output_stream_name = out_io_streams[stream_index].path
                         if previous_rt > data_block_header.rt_time
-                            msg = "found followup stream whose real time is before the "\
-                                  "stream that came before it. Previous sample real time"\
-                                  " = #{Time.at(previous_rt / 1_000_000)}, sample real "\
-                                  "time = "\
-                                  "#{Time.at(data_block_header.rt_time / 1_000_000)}."
+                            msg = format(
+                                FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
+                                stream_name: output_stream_name, mode: "real time",
+                                previous: Time.at(previous_rt / 1_000_000),
+                                current: Time.at(data_block_header.rt_time / 1_000_000)
+                            )
                             reporter.warn msg
                             valid = false
                         elsif previous_lg > data_block_header.lg_time
-                            msg = "found followup stream whose logical time is before "\
-                                  "the stream that came before it. Previous sample "\
-                                  "logical time = #{Time.at(previous_lg / 1_000_000)}, "\
-                                  "sample logical time = "\
-                                  "#{Time.at(data_block_header.lg_time / 1_000_000)}."
+                            msg = format(
+                                FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
+                                stream_name: output_stream_name, mode: "logical time",
+                                previous: Time.at(previous_lg / 1_000_000),
+                                current: Time.at(data_block_header.lg_time / 1_000_000)
+                            )
                             reporter.warn msg
                             valid = false
                         end
