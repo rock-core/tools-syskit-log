@@ -140,9 +140,20 @@ module Syskit::Log
                     @last_data_block_time = [rt_time, lg_time]
                 end
 
+                # Return the name of field that should be used as logical time, if needed
+                # during normalization
+                #
+                # This method sets up the normalization to save the logical time saved
+                # in the data samples in the log file's logical time field, but only if
+                # it has not been done by Rock's logger already.
+                #
+                # If the stream metadata contains rock_timestamp_field, the method assumes
+                # that this was done by Rock's logger already and returns nil.
+                # Otherwise, it looks for a field with the logical_time role
+                #
+                # @return [String, nil]
                 def resolve_logical_time_field(stream_block)
-                    rock_timestamp_field = stream_block.metadata["rock_timestamp_field"]
-                    return rock_timestamp_field if rock_timestamp_field
+                    return if stream_block.metadata["rock_timestamp_field"]
 
                     type = stream_block.type
                     return unless type < Typelib::CompoundType
