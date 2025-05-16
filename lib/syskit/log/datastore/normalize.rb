@@ -267,41 +267,47 @@ module Syskit::Log
             NormalizationState =
                 Struct
                 .new(:out_io_streams, :control_blocks, :followup_stream_time) do
+                    def report_followup_stream_error(
+                        reporter: NullReporter.new, stream_index:, mode:, previous:,
+                        current:
+                    )
+                        output_stream_name = out_io_streams[stream_index].path
+                        msg = format(
+                            FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
+                            stream_name: output_stream_name, mode: mode,
+                            previous: Normalize.format_timestamp(previous),
+                            current: Normalize.format_timestamp(current)
+                        )
+                        reporter.warn msg
+                    end
+
                     def validate_time_followup(
                         stream_index, data_block_header, reporter: NullReporter.new
                     )
                         # Second part of the followup stream validation (see above)
                         last_stream_time = followup_stream_time[stream_index]
-                        valid = true
-                        return valid unless last_stream_time
+                        valid_time = true
+                        return valid_time unless last_stream_time
 
                         followup_stream_time[stream_index] = nil
                         previous_rt, previous_lg = last_stream_time
-                        output_stream_name = out_io_streams[stream_index].path
-                        if previous_rt > data_block_header.rt_time
-                            msg = format(
-                                FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                                stream_name: output_stream_name, mode: "real time",
-                                previous: Normalize.format_timestamp(previous_rt),
-                                current: Normalize.format_timestamp(
-                                    data_block_header.rt_time
-                                )
+                        rt = data_block_header.rt_time
+                        lg = data_block_header.lg_time
+                        if previous_rt > rt
+                            report_followup_stream_error(
+                                reporter: reporter, stream_index: stream_index,
+                                mode: "real time", previous: previous_rt, current: rt
                             )
-                            reporter.warn msg
-                            valid = false
-                        elsif previous_lg > data_block_header.lg_time
-                            msg = format(
-                                FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                                stream_name: output_stream_name, mode: "logical time",
-                                previous: Normalize.format_timestamp(previous_lg),
-                                current: Normalize.format_timestamp(
-                                    data_block_header.lg_time
-                                )
-                            )
-                            reporter.warn msg
-                            valid = false
+                            valid_time = false
                         end
-                        valid
+                        if previous_lg > lg
+                            report_followup_stream_error(
+                                reporter: reporter, stream_index: stream_index,
+                                mode: "logical time", previous: previous_lg, current: lg
+                            )
+                            valid_time = false
+                        end
+                        valid_time
                     end
                 end
 

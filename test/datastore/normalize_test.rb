@@ -341,8 +341,7 @@ module Syskit::Log
             end
 
             def timestamp_us(time)
-                timestamp_us = time.tv_sec * 1_000_000 + time.tv_usec
-                timestamp_us
+                time.tv_sec * 1_000_000 + time.tv_usec
             end
         end
     end
