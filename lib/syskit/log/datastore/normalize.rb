@@ -281,6 +281,20 @@ module Syskit::Log
                         reporter.warn msg
                     end
 
+                    def validate_time_field_sequential(
+                        reporter: NullReporter.new, stream_index:,
+                        mode:, previous:, current:
+                    )
+                        if previous > current
+                            report_followup_stream_error(
+                                reporter: reporter, stream_index: stream_index,
+                                mode: mode, previous: previous, current: current
+                            )
+                            return false
+                        end
+                        true
+                    end
+
                     def validate_time_followup(
                         stream_index, data_block_header, reporter: NullReporter.new
                     )
@@ -293,21 +307,15 @@ module Syskit::Log
                         previous_rt, previous_lg = last_stream_time
                         rt = data_block_header.rt_time
                         lg = data_block_header.lg_time
-                        if previous_rt > rt
-                            report_followup_stream_error(
-                                reporter: reporter, stream_index: stream_index,
-                                mode: "real time", previous: previous_rt, current: rt
-                            )
-                            valid_time = false
-                        end
-                        if previous_lg > lg
-                            report_followup_stream_error(
-                                reporter: reporter, stream_index: stream_index,
-                                mode: "logical time", previous: previous_lg, current: lg
-                            )
-                            valid_time = false
-                        end
-                        valid_time
+                        rt_valid = validate_time_field_sequential(
+                            reporter: reporter, stream_index: stream_index,
+                            mode: "real time", previous: previous_rt, current: rt
+                        )
+                        lg_valid = validate_time_field_sequential(
+                            reporter: reporter, stream_index: stream_index,
+                            mode: "logical time", previous: previous_lg, current: lg
+                        )
+                        rt_valid && lg_valid
                     end
                 end
 
