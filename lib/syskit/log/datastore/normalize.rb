@@ -176,6 +176,10 @@ module Syskit::Log
                     @stream_block.type
                                  .from_buffer(raw_payload[21..-1])
                                  .raw_get(@logical_time_field)
+                rescue ArgumentError => e
+                    raise unless e.message.match?(/parts.of.the.provided.buffer/)
+
+                    raise Pocolog::InvalidBlockFound, e.message, e.backtrace
                 end
 
                 def string_digest
