@@ -44,7 +44,7 @@ module Syskit::Log
                 attr_reader :interval_rt
                 attr_reader :interval_lg
 
-                WRITE_BLOCK_SIZE = 1024**2
+                WRITE_BLOCK_SIZE = 128 * 1024
 
                 def initialize(
                     path, wio, stream_block, digest, stream_block_pos
