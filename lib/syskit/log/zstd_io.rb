@@ -93,7 +93,7 @@ module Syskit
 
                 @tell += buffer.size
                 compressed = @zstd_out.compress(buffer)
-                @io.write(compressed)
+                @io.write(compressed) unless compressed.empty?
             end
 
             # Seek in the IO. Can only seek forward
