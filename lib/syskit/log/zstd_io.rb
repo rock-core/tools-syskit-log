@@ -38,6 +38,10 @@ module Syskit
                 @io.closed?
             end
 
+            def compressed_tell
+                @io.tell
+            end
+
             attr_reader :tell
 
             # Return the size when the file has been read in its entirety
