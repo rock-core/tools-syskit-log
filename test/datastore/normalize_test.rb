@@ -265,6 +265,47 @@ module Syskit::Log
                 end
             end
 
+            describe "compound_field_directly_addressable?" do
+                before do
+                    @registry = Typelib::CXXRegistry.new
+                    @registry.create_compound "/Time" do |b|
+                        b.microseconds = "uint64_t"
+                    end
+                end
+
+                it "returns true if the time field is first" do
+                    type_t = @registry.create_compound "/Test" do |b|
+                        b.time = "/Time"
+                    end
+                    assert Normalize::Output.compound_field_directly_addressable?(
+                        type_t, "time"
+                    )
+                end
+
+                it "returns true if there are no container fields between " \
+                   "the beginning and the time field" do
+                    type_t = @registry.create_compound "/Test" do |b|
+                        b.pad = "/uint32_t"
+                        b.time = "/Time"
+                    end
+                    assert Normalize::Output.compound_field_directly_addressable?(
+                        type_t, "time"
+                    )
+                end
+
+                it "returns false if there containers fields between " \
+                   "the beginning and the time field" do
+                    @registry.create_container "/std/vector", "/uint32_t"
+                    type_t = @registry.create_compound "/Test" do |b|
+                        b.pad = "/std/vector</uint32_t>"
+                        b.time = "/Time"
+                    end
+                    refute Normalize::Output.compound_field_directly_addressable?(
+                        type_t, "time"
+                    )
+                end
+            end
+
             describe "logical_time" do
                 before do
                     @registry = Typelib::CXXRegistry.new
@@ -275,11 +316,17 @@ module Syskit::Log
                         b.time = "/Time"
                         b.other_type = "/int"
                     end
+                    @registry.create_container "/std/vector", "/uint32_t"
+                    @unopt_test_t = @registry.create_compound "/UnoptTest" do |b|
+                        b.container = "/std/vector</uint32_t>"
+                        b.time = "/Time"
+                        b.other_type = "/int"
+                    end
                     @timestamp = Time.new(1998, 12, 22)
                     @timestamp_as_microseconds = timestamp_us(@timestamp)
                 end
 
-                it "extract logical time from payload" do
+                it "extract logical time from payload in the optimized case" do
                     @test_t.field_metadata["time"].set("role", "logical_time")
                     value = @test_t.new(
                         time: { microseconds: @timestamp_as_microseconds },
@@ -289,6 +336,36 @@ module Syskit::Log
                     logical_time_create_file(value)
                     logical_time_normalize
                     stream = logical_time_open_stream
+
+                    assert_equal [[base_time, @timestamp, value]],
+                                 stream.samples.to_a
+                end
+
+                it "extract logical time from payload in the unoptimized case" do
+                    @unopt_test_t.field_metadata["time"].set("role", "logical_time")
+                    value = @unopt_test_t.new(
+                        time: { microseconds: @timestamp_as_microseconds },
+                        other_type: 42
+                    )
+
+                    create_logfile "file0.0.log" do
+                        create_logfile_stream(
+                            "stream0",
+                            metadata: {
+                                "rock_task_name" => "task0",
+                                "rock_task_object_name" => "port"
+                            },
+                            type: @unopt_test_t
+                        )
+                        write_logfile_sample base_time, base_time + 5, value
+                    end
+
+                    logfile_pathname("normalized").mkdir
+                    input_path = logfile_pathname("file0.0.log")
+                    normalize.normalize([input_path])
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
 
                     assert_equal [[base_time, @timestamp, value]],
                                  stream.samples.to_a
