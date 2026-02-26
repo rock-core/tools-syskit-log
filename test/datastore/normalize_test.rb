@@ -296,6 +296,7 @@ module Syskit::Log
 
                 it "doesn't update the logical time field if rock_timestamp_field "\
                    "exists" do
+                    @test_t.field_metadata["time"].set("role", "logical_time")
                     value = @test_t.new(
                         time: { microseconds: @timestamp_as_microseconds },
                         other_type: 42
@@ -358,7 +359,7 @@ module Syskit::Log
                             metadata: {
                                 "rock_task_name" => "task0",
                                 "rock_task_object_name" => "port"
-                            },
+                            }.merge(metadata),
                             type: type
                         )
                         @__current_stream.write_raw(
