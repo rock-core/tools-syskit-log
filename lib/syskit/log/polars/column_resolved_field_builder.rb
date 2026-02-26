@@ -9,6 +9,8 @@ module Syskit
             class ColumnResolvedFieldBuilder < ColumnBuilder
                 NA_UNSET = Object.new
 
+                attr_reader :na_value
+
                 def initialize( # rubocop:disable Metrics/ParameterLists
                     name:, path:, type:, value_transform:, global_transform:,
                     dtype: nil
