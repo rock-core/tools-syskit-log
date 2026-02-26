@@ -167,15 +167,28 @@ module Syskit::Log
                     nil
                 end
 
+                def resolve_native_type
+                    type = @stream_block.type
+                    native_registry =
+                        Pocolog::DataStream
+                        .update_container_types_to_native(type.registry)
+                    native_registry.build(type.name)
+                end
+
                 def extract_logical_time(raw_payload)
                     return unless @logical_time_field
+
+                    unless @extract_logical_time_sample
+                        @native_type = resolve_native_type
+                        @extract_logical_time_sample = @native_type.new
+                    end
 
                     # Skip 21 bytes as they belong to the data stream declaration block
                     # information before the marshalled data.
                     # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
-                    @stream_block.type
-                                 .from_buffer(raw_payload[21..-1])
-                                 .raw_get(@logical_time_field)
+                    @extract_logical_time_sample
+                        .from_buffer(raw_payload[21..-1])
+                        .raw_get(@logical_time_field)
                 rescue ArgumentError => e
                     raise unless e.message.match?(/parts.of.the.provided.buffer/)
 
