@@ -75,7 +75,7 @@ module Syskit::Log
                               "#{raw_payload.size}"
                     end
 
-                    raw_payload[@offset, 8].unpack1("Q")
+                    raw_payload[@offset, 8].unpack1("q")
                 end
             end
 
@@ -245,7 +245,7 @@ module Syskit::Log
                     return unless type.has_field?("microseconds")
 
                     us_type = type["microseconds"]
-                    us_type <= Typelib::NumericType
+                    us_type <= Typelib::NumericType && us_type.size == 8
                 end
 
                 def self.compound_field_directly_addressable?(compound_type, field_name)
