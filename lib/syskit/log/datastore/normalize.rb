@@ -188,8 +188,8 @@ module Syskit::Log
                     @last_data_block_time = [rt_time, lg_time]
                 end
 
-                # Return the name of field that should be used as logical time, if needed
-                # during normalization
+                # Return an object that extracts the logical time of a sample if
+                # needed, and nil otherwise.
                 #
                 # This method sets up the normalization to save the logical time saved
                 # in the data samples in the log file's logical time field, but only if
@@ -199,7 +199,11 @@ module Syskit::Log
                 # that this was done by Rock's logger already and returns nil.
                 # Otherwise, it looks for a field with the logical_time role
                 #
-                # @return [String, nil]
+                # The returned object must have a `call` method which is given
+                # the sample in marshalled form (as saved on disk) and return
+                # the time in microseconds
+                #
+                # @return [#call,nil]
                 def resolve_logical_time_reader(stream_block)
                     return if stream_block.metadata["rock_timestamp_field"]
 
@@ -229,6 +233,13 @@ module Syskit::Log
                     end
                 end
 
+                # Find the name of the first field in a type to have the
+                # logical_time role
+                #
+                # This field will be used during the normalization process to
+                #
+                # The method does not validate that the field's type is
+                # compatible with the logical time extraction logic
                 def logical_time_field(type)
                     return unless type < Typelib::CompoundType
 
@@ -240,6 +251,12 @@ module Syskit::Log
                     nil
                 end
 
+                # Validate that the given type is valid as a 'logical time' type
+                #
+                # In practice, it has to follow Rock's base::Time
+                # implementation, which means
+                # - being a compound
+                # - having a 'microseconds' field of type int64_t
                 def valid_logical_time_type?(type)
                     return unless type <= Typelib::CompoundType
                     return unless type.has_field?("microseconds")
@@ -248,6 +265,13 @@ module Syskit::Log
                     us_type <= Typelib::NumericType && us_type.size == 8
                 end
 
+                # Validates that a compound's field offset is fixed in its
+                # marshalled form
+                #
+                # This is a precondition to use the optimized codepath to
+                # extract a sample's logical time.
+                #
+                # @raise [ArgumentError] if the field does not exist in the type
                 def self.compound_field_directly_addressable?(compound_type, field_name)
                     compound_type.each_field do |field|
                         return true if field == field_name
