@@ -35,6 +35,7 @@ module Syskit
                     *streams, accurate: false, timeout: nil,
                     chunk_size: Polars::CHUNK_SIZE
                 )
+                    to_polars_frame_validate_timeout(timeout) if timeout
                     return ::Polars::DataFrame.new if streams.empty?
 
                     samples =
@@ -53,6 +54,14 @@ module Syskit
                         builders, center_time, samples,
                         timeout: timeout, chunk_size: chunk_size
                     )
+                end
+
+                def to_polars_frame_validate_timeout(timeout)
+                    return unless @interval_sample_by_time
+                    return if timeout > @interval_sample_by_time
+
+                    raise ArgumentError,
+                          "sampling interval must be lower than timeout"
                 end
 
                 # @api private
