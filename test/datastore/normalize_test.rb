@@ -267,11 +267,11 @@ module Syskit::Log
 
             describe "logical_time" do
                 before do
-                    registry = Typelib::CXXRegistry.new
-                    registry.create_compound "/Time" do |b|
+                    @registry = Typelib::CXXRegistry.new
+                    @registry.create_compound "/Time" do |b|
                         b.microseconds = "uint64_t"
                     end
-                    @test_t = registry.create_compound "/Test" do |b|
+                    @test_t = @registry.create_compound "/Test" do |b|
                         b.time = "/Time"
                         b.other_type = "/int"
                     end
@@ -286,24 +286,9 @@ module Syskit::Log
                         other_type: 42
                     )
 
-                    create_logfile "file0.0.log" do
-                        create_logfile_stream(
-                            "stream0",
-                            metadata: {
-                                "rock_task_name" => "task0",
-                                "rock_task_object_name" => "port"
-                            },
-                            type: @test_t
-                        )
-                        write_logfile_sample base_time, base_time + 5, value
-                    end
-
-                    logfile_pathname("normalized").mkdir
-                    input_path = logfile_pathname("file0.0.log")
-                    normalize.normalize([input_path])
-                    stream = open_logfile_stream(
-                        ["normalized", "task0::port.0.log"], "task0.port"
-                    )
+                    logical_time_create_file(value)
+                    logical_time_normalize
+                    stream = logical_time_open_stream
 
                     assert_equal [[base_time, @timestamp, value]],
                                  stream.samples.to_a
@@ -311,32 +296,86 @@ module Syskit::Log
 
                 it "doesn't update the logical time field if rock_timestamp_field "\
                    "exists" do
+                    @test_t.field_metadata["time"].set("role", "logical_time")
                     value = @test_t.new(
                         time: { microseconds: @timestamp_as_microseconds },
                         other_type: 42
                     )
+                    logical_time_create_file(
+                        value, metadata: { "rock_timestamp_field" => "time" }
+                    )
 
+                    logical_time_normalize
+                    stream = logical_time_open_stream
+                    assert_equal [[base_time, base_time + 5, value]],
+                                 stream.samples.to_a
+                end
+
+                it "resizes containers if the native type has a different size" do
+                    # The idea of that test is to create a log file using a
+                    # valid type (compound_t) that has the same marshalled
+                    # representation than a type whose container has a "wrong"
+                    # size
+                    #
+                    # Given that the codepath that will be affected by this is
+                    # the one that extracts logical time from the sample, we have
+                    # to have a Time type. It is placed after the vector so as to
+                    # guarantee that we will corrupt the vector's internal state
+                    # if there are no resizes
+                    #
+                    # Tested to actually crash
+                    container_t = @registry.create_container "/std/vector", "/int32_t"
+                    compound_t = @registry.create_compound "/ResizingTest" do |c|
+                        c.a = container_t
+                        c.b = "/Time"
+                    end
+
+                    wrong_registry = Typelib::CXXRegistry.new
+                    wrong_registry.create_compound "/Time" do |b|
+                        b.microseconds = "uint64_t"
+                    end
+                    wrong_container_t =
+                        wrong_registry.create_container("/std/vector", "/int32_t", 1)
+                    wrong_compound_t =
+                        wrong_registry.create_compound "/WrongSizeResizingTest" do |c|
+                            c.a = wrong_container_t
+                            c.b = "/Time"
+                        end
+                    wrong_compound_t.field_metadata["b"].set("role", "logical_time")
+
+                    value = compound_t.new(a: [1, 2, 3], b: { microseconds: 10 })
+                    logical_time_create_file(value, type: wrong_compound_t)
+
+                    logfile_pathname("normalized").mkdir
+                    input_path = logfile_pathname("file0.0.log")
+                    # This crashes if the resize did not happen
+                    normalize.normalize([input_path])
+                end
+
+                def logical_time_create_file(value, type: value.class, metadata: {})
                     create_logfile "file0.0.log" do
                         create_logfile_stream(
                             "stream0",
                             metadata: {
                                 "rock_task_name" => "task0",
-                                "rock_task_object_name" => "port",
-                                "rock_timestamp_field" => "time"
-                            },
-                            type: @test_t
+                                "rock_task_object_name" => "port"
+                            }.merge(metadata),
+                            type: type
                         )
-                        write_logfile_sample base_time, base_time + 5, value
+                        @__current_stream.write_raw(
+                            base_time, base_time + 5, value.to_byte_array
+                        )
                     end
+                end
 
+                def logical_time_normalize
                     logfile_pathname("normalized").mkdir
                     input_path = logfile_pathname("file0.0.log")
                     normalize.normalize([input_path])
-                    stream = open_logfile_stream(
-                        ["normalized", "task0::port.0.log"], "task0.port"
-                    )
-                    assert_equal [[base_time, base_time + 5, value]],
-                                 stream.samples.to_a
+                end
+
+                def logical_time_open_stream
+                    open_logfile_stream(["normalized", "task0::port.0.log"], "task0.port")
                 end
             end
 
