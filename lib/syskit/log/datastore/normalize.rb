@@ -29,12 +29,62 @@ module Syskit::Log
 
             ZERO_BYTE = [0].pack("v").freeze
 
+            class LogicalTimeReader
+                def initialize(type, field_name)
+                    @field_name = field_name
+                    @native_type = resolve_native_type(type)
+                    @sample = @native_type.new
+                end
+
+                def resolve_native_type(type)
+                    native_registry =
+                        Pocolog::DataStream
+                        .update_container_types_to_native(type.registry)
+                    native_registry.build(type.name)
+                end
+
+                def call(raw_payload)
+                    # Skip 21 bytes as they belong to the data stream declaration block
+                    # information before the marshalled data.
+                    # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
+                    @sample
+                        .from_buffer(raw_payload[21..-1])
+                        .raw_get(@field_name)
+                        .microseconds
+                rescue ArgumentError => e
+                    raise unless e.message.match?(/parts.of.the.provided.buffer/)
+
+                    raise Pocolog::InvalidBlockFound, e.message, e.backtrace
+                end
+            end
+
+            class LogicalTimeReaderOpt
+                def initialize(offset)
+                    # Skip 21 bytes as they belong to the data stream declaration block
+                    # information before the marshalled data.
+                    # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
+                    @offset = offset + 21
+                    @expected_size = @offset + 8
+                end
+
+                def call(raw_payload)
+                    if raw_payload.size < @expected_size
+                        raise Pocolog::InvalidBlockFound,
+                              "buffer too small when extracting logical time, expected " \
+                              "at least #{@expected_size} bytes but got " \
+                              "#{raw_payload.size}"
+                    end
+
+                    raw_payload[@offset, 8].unpack1("q")
+                end
+            end
+
             # @api private
             #
             # Internal representation of the output of a normalization operation
             class Output
                 attr_reader :path
-                attr_reader :logical_time_field
+                attr_reader :logical_time_reader
                 attr_reader :stream_block
                 attr_reader :digest
                 attr_reader :stream_size
@@ -53,7 +103,7 @@ module Syskit::Log
                     @wio = wio
                     @stream_block = stream_block
                     @stream_block_pos = stream_block_pos
-                    @logical_time_field = resolve_logical_time_field(stream_block)
+                    @logical_time_reader = resolve_logical_time_reader(stream_block)
                     @stream_size = 0
                     @interval_rt = []
                     @interval_lg = []
@@ -124,11 +174,9 @@ module Syskit::Log
                     write ZERO_BYTE
                     write raw_data[4..-1]
 
-                    if @logical_time_field
-                        logical_time = extract_logical_time(raw_payload)
-                        lg_time = logical_time.microseconds
+                    if (lg_time_us = @logical_time_reader&.call(raw_payload))
                         raw_payload = update_raw_payload_logical_time(
-                            raw_payload, lg_time
+                            raw_payload, lg_time_us
                         )
                     end
                     write raw_payload
@@ -140,8 +188,8 @@ module Syskit::Log
                     @last_data_block_time = [rt_time, lg_time]
                 end
 
-                # Return the name of field that should be used as logical time, if needed
-                # during normalization
+                # Return an object that extracts the logical time of a sample if
+                # needed, and nil otherwise.
                 #
                 # This method sets up the normalization to save the logical time saved
                 # in the data samples in the log file's logical time field, but only if
@@ -151,48 +199,89 @@ module Syskit::Log
                 # that this was done by Rock's logger already and returns nil.
                 # Otherwise, it looks for a field with the logical_time role
                 #
-                # @return [String, nil]
-                def resolve_logical_time_field(stream_block)
+                # The returned object must have a `call` method which is given
+                # the sample in marshalled form (as saved on disk) and return
+                # the time in microseconds
+                #
+                # @return [#call,nil]
+                def resolve_logical_time_reader(stream_block)
                     return if stream_block.metadata["rock_timestamp_field"]
 
                     type = stream_block.type
+                    field_name = logical_time_field(type)
+                    return unless field_name
+
+                    field_type = type[field_name]
+                    unless valid_logical_time_type?(field_type)
+                        raise ArgumentError,
+                              "field #{field_name} of #{type}, of type #{field_type}, " \
+                              "is marked as logical time, but it does not have an " \
+                              "integer type field called 'microseconds'"
+                    end
+
+                    opt =
+                        Output.compound_field_directly_addressable?(type, field_name) &&
+                        Output.compound_field_directly_addressable?(
+                            field_type, "microseconds"
+                        )
+                    if opt
+                        offset = type.offset_of(field_name) +
+                                 field_type.offset_of("microseconds")
+                        LogicalTimeReaderOpt.new(offset)
+                    else
+                        LogicalTimeReader.new(type, field_name)
+                    end
+                end
+
+                # Find the name of the first field in a type to have the
+                # logical_time role
+                #
+                # This field will be used during the normalization process to
+                #
+                # The method does not validate that the field's type is
+                # compatible with the logical time extraction logic
+                def logical_time_field(type)
                     return unless type < Typelib::CompoundType
 
                     metadata = type.field_metadata
                     type.each_field do |field|
                         role = metadata[field].get("role").first
-
                         return field if role == "logical_time"
                     end
                     nil
                 end
 
-                def resolve_native_type
-                    type = @stream_block.type
-                    native_registry =
-                        Pocolog::DataStream
-                        .update_container_types_to_native(type.registry)
-                    native_registry.build(type.name)
+                # Validate that the given type is valid as a 'logical time' type
+                #
+                # In practice, it has to follow Rock's base::Time
+                # implementation, which means
+                # - being a compound
+                # - having a 'microseconds' field of type int64_t
+                def valid_logical_time_type?(type)
+                    return unless type <= Typelib::CompoundType
+                    return unless type.has_field?("microseconds")
+
+                    us_type = type["microseconds"]
+                    us_type <= Typelib::NumericType && us_type.size == 8
                 end
 
-                def extract_logical_time(raw_payload)
-                    return unless @logical_time_field
+                # Validates that a compound's field offset is fixed in its
+                # marshalled form
+                #
+                # This is a precondition to use the optimized codepath to
+                # extract a sample's logical time.
+                #
+                # @raise [ArgumentError] if the field does not exist in the type
+                def self.compound_field_directly_addressable?(compound_type, field_name)
+                    compound_type.each_field do |field|
+                        return true if field == field_name
 
-                    unless @extract_logical_time_sample
-                        @native_type = resolve_native_type
-                        @extract_logical_time_sample = @native_type.new
+                        field_type = compound_type[field]
+                        return false if field_type <= Typelib::ContainerType
                     end
 
-                    # Skip 21 bytes as they belong to the data stream declaration block
-                    # information before the marshalled data.
-                    # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
-                    @extract_logical_time_sample
-                        .from_buffer(raw_payload[21..-1])
-                        .raw_get(@logical_time_field)
-                rescue ArgumentError => e
-                    raise unless e.message.match?(/parts.of.the.provided.buffer/)
-
-                    raise Pocolog::InvalidBlockFound, e.message, e.backtrace
+                    raise ArgumentError,
+                          "no field #{field_name} in #{compound_type}"
                 end
 
                 def string_digest
