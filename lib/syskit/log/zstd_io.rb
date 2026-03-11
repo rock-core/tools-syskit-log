@@ -38,6 +38,10 @@ module Syskit
                 @io.closed?
             end
 
+            def compressed_tell
+                @io.tell
+            end
+
             attr_reader :tell
 
             # Return the size when the file has been read in its entirety
@@ -89,7 +93,7 @@ module Syskit
 
                 @tell += buffer.size
                 compressed = @zstd_out.compress(buffer)
-                @io.write(compressed)
+                @io.write(compressed) unless compressed.empty?
             end
 
             # Seek in the IO. Can only seek forward

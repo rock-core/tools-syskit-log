@@ -44,7 +44,7 @@ module Syskit::Log
                 attr_reader :interval_rt
                 attr_reader :interval_lg
 
-                WRITE_BLOCK_SIZE = 1024**2
+                WRITE_BLOCK_SIZE = 128 * 1024
 
                 def initialize(
                     path, wio, stream_block, digest, stream_block_pos
@@ -357,7 +357,9 @@ module Syskit::Log
 
                 reporter_offset = reporter.current
                 normalize_logfile_process_block_stream(
-                    output_path, state, in_block_stream, reporter: reporter
+                    output_path, state, in_block_stream,
+                    reporter: reporter,
+                    progress_position: -> { progress_position(in_io) }
                 )
             rescue Pocolog::InvalidBlockFound => e
                 reporter.warn "#{logfile_path.basename} looks truncated or contains "\
@@ -370,7 +372,9 @@ module Syskit::Log
             end
 
             def normalize_logfile_process_block_stream(
-                output_path, state, in_block_stream, reporter: NullReporter.new
+                output_path, state, in_block_stream,
+                progress_position:,
+                reporter: NullReporter.new
             )
                 reporter_offset = reporter.current
 
@@ -387,9 +391,17 @@ module Syskit::Log
 
                     now = Time.now
                     if (now - last_progress_report) > 0.1
-                        reporter.current = in_block_stream.tell + reporter_offset
+                        reporter.current = progress_position.call + reporter_offset
                         last_progress_report = now
                     end
+                end
+            end
+
+            def progress_position(io)
+                if io.respond_to?(:compressed_tell)
+                    io.compressed_tell
+                else
+                    io.tell
                 end
             end
 
