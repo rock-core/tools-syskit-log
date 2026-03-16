@@ -5,23 +5,24 @@ module Syskit
         module RobySQLIndex
             # Access and creation API of the Roby SQL index
             class Index
-                # Opens an existing index file, or creates one
+                # Opens an existing index file in read-only mode
                 def self.open(path, dataset: nil)
                     raise ArgumentError, "#{path} does not exist" unless path.exist?
 
                     uri = "sqlite://#{path}"
-                    rom = ROM.container(:sql, uri) do |config|
+                    rom = ROM.container(:sql, uri, { readonly: true }) do |config|
                         Definitions.configure(config)
                     end
                     new(rom, dataset: dataset)
                 end
 
-                # Create a new index file
+                # Create a new index file, assuming that this process will be the
+                # only one to access it
                 def self.create(path, dataset: nil)
                     raise ArgumentError, "#{path} already exists" if path.exist?
 
                     uri = "sqlite://#{path}"
-                    rom = ROM.container(:sql, uri) do |config|
+                    rom = ROM.container(:sql, uri, { synchronous: :off }) do |config|
                         Definitions.schema(config)
                         Definitions.configure(config)
                     end
