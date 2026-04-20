@@ -77,10 +77,10 @@ module Syskit
                 # be the replay model's {#plain_task_model}) onto this model
                 def copy_services_from_plain_model(plain_model)
                     plain_model.each_data_service do |name, srv|
-                        data_services[name] = srv.attach(self)
+                        data_service_set(name, srv.attach(self))
                     end
                     plain_model.each_dynamic_service do |name, srv|
-                        dynamic_services[name] = srv.attach(self)
+                        dynamic_service_set(name, srv.attach(self))
                     end
                 end
 
