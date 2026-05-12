@@ -124,7 +124,7 @@ module Syskit::Log
                     assert_equal [[base_time + 2, base_time + 20, 2],
                                   [base_time + 3, base_time + 30, 3]], stream.samples.to_a
                 end
-                it "skips the sample if a potential followup stream has an non-matching "\
+                it "skips the sample if a potential followup stream has a non-matching "\
                    "realtime range" do
                     create_logfile "file0.1.log" do
                         create_logfile_stream(
@@ -139,20 +139,17 @@ module Syskit::Log
                     reporter = flexmock(NullReporter.new)
                     msg = format(
                         Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                        stream_name: logfile_pathname("normalized", "task0::port.0.log"),
+                        stream_name:
+                            logfile_pathname("normalized", "0", "task0::port.0.log"),
                         mode: "real time",
                         previous: Normalize.format_timestamp(timestamp_us(base_time + 2)),
                         current: Normalize.format_timestamp(timestamp_us(base_time + 1))
                     )
                     reporter.should_receive(:warn)
-                            .with(msg)
-                            .once
+                            .with(msg).once
                     normalize.normalize(
-                        [
-                            logfile_pathname("file0.0.log"),
-                            logfile_pathname("file0.1.log")
-                        ],
-                        reporter: reporter
+                        [logfile_pathname("file0.0.log"),
+                         logfile_pathname("file0.1.log")], reporter: reporter
                     )
                     stream = open_logfile_stream(
                         ["normalized", "task0::port.0.log"], "task0.port"
@@ -160,7 +157,7 @@ module Syskit::Log
                     assert_equal(stream.size, 1)
                     assert_equal(stream[0][2], 2)
                 end
-                it "skips the sample if a potential followup stream has an non-matching "\
+                it "skips the sample if a potential followup stream has a non-matching "\
                    "logical time range" do
                     create_logfile "file0.1.log" do
                         create_logfile_stream(
@@ -175,7 +172,8 @@ module Syskit::Log
                     reporter = flexmock(NullReporter.new)
                     msg = format(
                         Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                        stream_name: logfile_pathname("normalized", "task0::port.0.log"),
+                        stream_name:
+                            logfile_pathname("normalized", "0", "task0::port.0.log"),
                         mode: "logical time",
                         previous: Normalize.format_timestamp(timestamp_us(base_time + 20)),
                         current: Normalize.format_timestamp(timestamp_us(base_time))
@@ -184,11 +182,8 @@ module Syskit::Log
                             .with(msg)
                             .once
                     normalize.normalize(
-                        [
-                            logfile_pathname("file0.0.log"),
-                            logfile_pathname("file0.1.log")
-                        ],
-                        reporter: reporter
+                        [logfile_pathname("file0.0.log"),
+                         logfile_pathname("file0.1.log")], reporter: reporter
                     )
                     stream = open_logfile_stream(
                         ["normalized", "task0::port.0.log"], "task0.port"

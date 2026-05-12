@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest/sha2"
+require "open3"
 
 module Syskit::Log
     class Datastore
@@ -83,21 +84,24 @@ module Syskit::Log
             #
             # Internal representation of the output of a normalization operation
             class Output
-                attr_reader :path
+                attr_accessor :path
                 attr_reader :logical_time_reader
                 attr_reader :stream_block
-                attr_reader :digest
+                attr_accessor :digest
                 attr_reader :stream_size
                 attr_reader :stream_block_pos
                 attr_reader :last_data_block_time
                 attr_reader :tell
                 attr_reader :interval_rt
                 attr_reader :interval_lg
+                attr_reader :compressed
+                attr_accessor :size
+                attr_accessor :string_digest
 
                 WRITE_BLOCK_SIZE = 128 * 1024
 
                 def initialize(
-                    path, wio, stream_block, digest, stream_block_pos
+                    path, wio, stream_block, stream_block_pos, compressed
                 )
                     @path = path
                     @wio = wio
@@ -107,9 +111,9 @@ module Syskit::Log
                     @stream_size = 0
                     @interval_rt = []
                     @interval_lg = []
-                    @digest = digest
                     @tell = wio.tell
                     @buffer = "".dup
+                    @compressed = compressed
                 end
 
                 def write_pocolog_minimal_index
@@ -283,10 +287,6 @@ module Syskit::Log
                     raise ArgumentError,
                           "no field #{field_name} in #{compound_type}"
                 end
-
-                def string_digest
-                    DatasetIdentity.string_digest(@digest)
-                end
             end
 
             def initialize(compress: false)
@@ -334,19 +334,43 @@ module Syskit::Log
                     raise
                 end
 
-                out_files.each_value.map do |output|
+                futures = out_files.each_value.map do |output|
                     output.write_pocolog_minimal_index
                     output.close
 
+                    digest = Concurrent::Promises.future do
+                        subcommand_compute_digest(output.path, reporter)
+                    end
+
+                    if output.compressed
+                        compression = Concurrent::Promises.future do
+                            subcommand_compress_path(output.path, reporter)
+                        end
+                    end
+
+                    [output, [digest, compression]]
+                end
+
+                Concurrent::Promises.zip_futures(*futures.flat_map(&:last).compact).wait!
+                futures.each do |output, (digest, compression)|
+                    output.size = output.path.stat.size
+                    if compression
+                        output.path.unlink
+                        output.path = output.path.dirname / "#{output.path.basename}.zst"
+                    end
+                    output.digest = digest.value
+                end
+
+                out_files.each_value.map do |output|
                     Dataset::IdentityEntry.new(
-                        output.path, output.tell, output.string_digest
+                        output.path, output.size, output.string_digest
                     )
                 end
             rescue Exception # rubocop:disable Lint/RescueException
                 reporter.warn(
                     "normalize: deleting #{out_files.size} output files and their indexes"
                 )
-                out_files.each_value { _1.path.unlink }
+                out_files.each_value { _1.path.unlink if _1.path.exist? }
                 raise
             ensure
                 out_files.each_value { _1.close unless _1.closed? }
@@ -359,6 +383,38 @@ module Syskit::Log
                     logfile_path, index_dir: index_dir
                 )
                 Pathname.new(path)
+            end
+
+            def subcommand_compress_path(path, reporter)
+                r, w = IO.pipe
+                Open3.popen3(
+                    "zstd", "-19", "--keep", path.to_s, "-o", "#{path}.zst",
+                    "--no-progress") do |stdin, stdout, stderr, wait_thread|
+                    stdin.close
+                    err = Thread.new { stdout.read }
+                    out = Thread.new { stderr.read }
+                    err, out = [err, out].map(&:value)
+                    status = wait_thread.value
+                    unless status.success?
+                        raise SubcommandFailed,
+                              "compression of #{path.basename} failed: #{output}"
+                    end
+                end
+            end
+
+            def subcommand_compute_digest(path, reporter)
+                r, w = IO.pipe
+                Open3.popen2("sha256sum", path.to_s) do |stdin, stdout, wait_thread|
+                    stdin.close
+                    output = stdout.read
+                    status = wait_thread.value
+                    unless status.success?
+                        raise SubcommandFailed,
+                              "digest computation for #{path.basename} " \
+                              "failed: #{output}"
+                    end
+                    output.split(" ").first.strip
+                end
             end
 
             FOLLOWUP_STREAM_TIME_ERROR_FORMAT =
@@ -639,21 +695,23 @@ module Syskit::Log
             def initialize_out_file(
                 out_file_path, stream_block, raw_header, raw_payload, initial_blocks
             )
+                out_files_key = out_file_path
+                if out_file_path.extname == ".zst"
+                    out_file_path = out_file_path.sub_ext("")
+                    compressed = true
+                end
                 wio = Syskit::Log.open_out_stream(out_file_path)
 
                 Pocolog::Format::Current.write_prologue(wio)
-                digest = Digest::SHA256.new
-                wio = DigestIO.new(wio, digest)
-
                 output = Output.new(
-                    out_file_path, wio, stream_block, digest, wio.tell
+                    out_file_path, wio, stream_block, wio.tell, compressed
                 )
                 output.write initial_blocks
                 output.write raw_header[0, 2]
                 output.write ZERO_BYTE
                 output.write raw_header[4..-1]
                 output.write raw_payload
-                out_files[out_file_path] = output
+                out_files[out_files_key] = output
             rescue Exception # rubocop:disable Lint/RescueException
                 wio&.close
                 out_file_path&.unlink if out_file_path&.exist?
