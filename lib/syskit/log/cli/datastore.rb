@@ -253,14 +253,15 @@ module Syskit::Log
                     paths
                 end
 
-                def import_dataset(
+                def import_dataset( # rubocop:disable Metrics/ParameterLists
                     paths, datastore,
-                    include:, delete_input: false, compress: false
+                    include:, delete_input: false, compress: false, parallel: 1
                 )
                     datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
                         importer = Syskit::Log::Datastore::Import.new(
                             core_path,
-                            cache_path: cache_path, reporter: reporter, compress: compress
+                            cache_path: cache_path, reporter: reporter,
+                            compress: compress, parallel: parallel
                         )
                         dataset = importer.normalize_dataset(
                             paths, include: include, delete_input: delete_input
@@ -561,6 +562,10 @@ module Syskit::Log
             method_option :compress,
                           desc: "compress the resulting dataset",
                           type: :boolean, default: false
+            method_option :parallel,
+                          desc: "use this many cores",
+                          type: :numeric, default: 1
+
             option :rebuild_orogen_models,
                    type: :boolean, default: false,
                    desc: "use this to disable rebuilding orogen models",
@@ -624,7 +629,7 @@ module Syskit::Log
                     dataset = import_dataset(
                         paths, datastore,
                         include: include, delete_input: options[:delete_input],
-                        compress: options[:compress]
+                        compress: options[:compress], parallel: options[:parallel]
                     )
 
                     if dataset
