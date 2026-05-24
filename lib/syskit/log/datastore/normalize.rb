@@ -430,7 +430,7 @@ module Syskit::Log
             def subcommand_compress_path(async_failure, path)
                 r, w = IO.pipe
                 Open3.popen3(
-                    "zstd", "-19", "--keep", path.to_s, "-o", "#{path}.zst",
+                    "zstd", "--keep", path.to_s, "-o", "#{path}.zst",
                     "--no-progress"
                 ) do |stdin, stdout, stderr, wait_thread|
                     stdin.close
