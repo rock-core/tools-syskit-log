@@ -330,7 +330,11 @@ module Syskit::Log
                         output_path: temp_output_path, reporter: reporter
                     )
 
-                    break if async_failure.set?
+                    if async_failure.set?
+                        # Make sure the promise is waited-on below
+                        postprocess.concat(group_output)
+                        break
+                    end
 
                     group_postprocess = group_output.map do |output_stream|
                         postprocess_output(async_failure, output_path, output_stream)
