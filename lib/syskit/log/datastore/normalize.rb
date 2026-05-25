@@ -332,12 +332,22 @@ module Syskit::Log
 
                     break if async_failure.set?
 
-                    group_output.each do
-                        postprocess << postprocess_output(async_failure, output_path, _1)
+                    group_postprocess = group_output.map do |output_stream|
+                        postprocess_output(async_failure, output_path, output_stream)
                     end
+                    group_postprocess =
+                        Concurrent::Promises
+                        .zip_futures_on(@finalization_executor, *group_postprocess)
+                    group_postprocess.on_fulfillment! do
+                        files.each { _1.unlink } if delete_input
+                        temp_output_path.rmdir
+                    end
+                    postprocess << group_postprocess
                 end
 
-                Concurrent::Promises.zip_futures_on(@executor, *postprocess).value!
+                Concurrent::Promises
+                    .zip_futures_on(@finalization_executor, *postprocess)
+                    .value!.flatten
             end
 
             # Postprocess a single {Output} normalized by {#normalize_logfile_group}
@@ -372,7 +382,7 @@ module Syskit::Log
                     Dataset::IdentityEntry.new(
                         output_path / final_path_basename, size, digest
                     )
-                end.on_rejection { async_failure.set }
+                end.on_rejection! { async_failure.set }
             end
 
             # Normalize a group of log files
