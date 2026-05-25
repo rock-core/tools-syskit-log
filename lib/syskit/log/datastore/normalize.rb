@@ -454,8 +454,12 @@ module Syskit::Log
             #
             # @return [String] the digest
             def subcommand_compute_digest(async_failure, path)
-                r, w = IO.pipe
-                Open3.popen2("sha256sum", "-b", path.to_s) do |stdin, stdout, wait_thread|
+                Open3.popen2("sha256sum", "-b") do |stdin, stdout, wait_thread|
+                    IO.copy_stream(
+                        path.to_s, stdin,
+                        path.stat.size - Pocolog::Format::Current::PROLOGUE_SIZE,
+                        Pocolog::Format::Current::PROLOGUE_SIZE
+                    )
                     stdin.close
                     output = stdout.read
                     status = wait_thread.value
