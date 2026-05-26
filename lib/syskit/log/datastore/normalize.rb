@@ -337,7 +337,7 @@ module Syskit::Log
                     end
 
                     group_postprocess = group_output.map do |output_stream|
-                        postprocess_output(async_failure, output_path, output_stream)
+                        postprocess_output(output_path, output_stream)
                     end
                     group_postprocess =
                         Concurrent::Promises
@@ -349,6 +349,7 @@ module Syskit::Log
                         p.rmdir
                         identities
                     end
+                    group_postprocess.on_rejection! { async_failure.set }
                     postprocess << group_postprocess
                 end
 
@@ -358,15 +359,15 @@ module Syskit::Log
             end
 
             # Postprocess a single {Output} normalized by {#normalize_logfile_group}
-            def postprocess_output(async_failure, output_path, output)
+            def postprocess_output(output_path, output)
                 future = Concurrent::Promises.future_on(@executor, output.path) do |path|
-                    subcommand_compute_digest(async_failure, path)
+                    subcommand_compute_digest(path)
                 end
 
                 if compress?
                     compress_future =
                         Concurrent::Promises.future_on(@executor, output.path) do |path|
-                            subcommand_compress_path(async_failure, path)
+                            subcommand_compress_path(path)
                         end
                     future = future.zip(compress_future)
                 end
@@ -389,7 +390,7 @@ module Syskit::Log
                     Dataset::IdentityEntry.new(
                         output_path / final_path_basename, size, digest
                     )
-                end.on_rejection! { async_failure.set }
+                end
             end
 
             # Normalize a group of log files
@@ -404,7 +405,7 @@ module Syskit::Log
                 async_failure, files, output_path:, reporter: NullReporter.new
             )
                 files.each do |logfile_path|
-                    return if async_failure.set?
+                    return if async_failure.set? # rubocop:disable Lint/NonLocalExitFromIterator
 
                     normalize_logfile(logfile_path, output_path, reporter: reporter)
                 rescue Exception # rubocop:disable Lint/RescueException
@@ -445,8 +446,7 @@ module Syskit::Log
             # The compressed file is #{path}.zst. The original path is kept
             #
             # @return [void]
-            def subcommand_compress_path(async_failure, path)
-                r, w = IO.pipe
+            def subcommand_compress_path(path)
                 Open3.popen3(
                     "zstd", "--keep", path.to_s, "-o", "#{path}.zst",
                     "--no-progress"
@@ -470,7 +470,7 @@ module Syskit::Log
             # Compute the sha256 digest of the given file
             #
             # @return [String] the digest
-            def subcommand_compute_digest(async_failure, path)
+            def subcommand_compute_digest(path)
                 Open3.popen2("sha256sum", "-b") do |stdin, stdout, wait_thread|
                     IO.copy_stream(
                         path.to_s, stdin,
