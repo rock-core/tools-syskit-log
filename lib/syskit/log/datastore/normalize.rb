@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest/sha2"
+require "open3"
 
 module Syskit::Log
     class Datastore
@@ -8,9 +9,10 @@ module Syskit::Log
         def self.normalize(
             paths,
             output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
-            delete_input: false, compress: false
+            delete_input: false, compress: false,
+            executor: Concurrent::ImmediateExecutor.new
         )
-            Normalize.new(compress: compress).normalize(
+            Normalize.new(compress: compress, executor: executor).normalize(
                 paths,
                 output_path: output_path, reporter: reporter, delete_input: delete_input
             )
@@ -83,21 +85,21 @@ module Syskit::Log
             #
             # Internal representation of the output of a normalization operation
             class Output
-                attr_reader :path
+                attr_accessor :path
                 attr_reader :logical_time_reader
                 attr_reader :stream_block
-                attr_reader :digest
+                attr_accessor :digest
                 attr_reader :stream_size
                 attr_reader :stream_block_pos
                 attr_reader :last_data_block_time
-                attr_reader :tell
                 attr_reader :interval_rt
                 attr_reader :interval_lg
+                attr_accessor :string_digest
 
-                WRITE_BLOCK_SIZE = 128 * 1024
+                WRITE_BLOCK_SIZE = 8 * 1024
 
                 def initialize(
-                    path, wio, stream_block, digest, stream_block_pos
+                    path, wio, stream_block, stream_block_pos
                 )
                     @path = path
                     @wio = wio
@@ -107,9 +109,15 @@ module Syskit::Log
                     @stream_size = 0
                     @interval_rt = []
                     @interval_lg = []
-                    @digest = digest
-                    @tell = wio.tell
                     @buffer = "".dup
+                end
+
+                def tell
+                    @wio.tell
+                end
+
+                def size
+                    path.stat.size
                 end
 
                 def write_pocolog_minimal_index
@@ -133,7 +141,6 @@ module Syskit::Log
                 def write(data)
                     if data.size + @buffer.size > WRITE_BLOCK_SIZE
                         @wio.write @buffer + data
-                        @tell += @buffer.size + data.size
                         @buffer.clear
                     else
                         @buffer.concat(data)
@@ -143,7 +150,6 @@ module Syskit::Log
                 def flush
                     @wio.write @buffer unless @buffer.empty?
                     @wio.flush
-                    @tell += @buffer.size
                     @buffer.clear
                 end
 
@@ -283,14 +289,12 @@ module Syskit::Log
                     raise ArgumentError,
                           "no field #{field_name} in #{compound_type}"
                 end
-
-                def string_digest
-                    DatasetIdentity.string_digest(@digest)
-                end
             end
 
-            def initialize(compress: false)
+            def initialize(executor: Concurrent::ImmediateExecutor.new, compress: false)
                 @out_files = {}
+                @executor = executor
+                @finalization_executor = Concurrent::ImmediateExecutor.new
                 @compress = compress
             end
 
@@ -309,23 +313,100 @@ module Syskit::Log
                     /\.\d+\.log(?:\.zst)?$/.match(_1.basename.to_s).pre_match
                 end
 
-                result = logfile_groups.map do |key, files|
+                async_failure = Concurrent::Event.new
+
+                groups = logfile_groups.to_a
+                postprocess = []
+                until groups.empty?
+                    key, files = groups.shift
+                    id = groups.size
+
                     reporter.info "Normalizing group #{key}"
-                    group_result = normalize_logfile_group(
-                        files, output_path: output_path, reporter: reporter
+
+                    temp_output_path = output_path / id.to_s
+                    temp_output_path.mkdir
+                    group_output = normalize_logfile_group(
+                        async_failure, files,
+                        output_path: temp_output_path, reporter: reporter
                     )
 
-                    files.each(&:unlink) if delete_input
-                    group_result
+                    if async_failure.set?
+                        # Make sure the promise is waited-on below
+                        postprocess.concat(group_output)
+                        break
+                    end
+
+                    group_postprocess = group_output.map do |output_stream|
+                        postprocess_output(output_path, output_stream)
+                    end
+                    group_postprocess =
+                        Concurrent::Promises
+                        .zip_futures_on(@finalization_executor, *group_postprocess)
+                    group_postprocess = group_postprocess.then_on(
+                        @finalization_executor, files, temp_output_path
+                    ) do |*identities, f, p|
+                        f.each { _1.unlink } if delete_input
+                        p.rmdir
+                        identities
+                    end
+                    group_postprocess.on_rejection! { async_failure.set }
+                    postprocess << group_postprocess
                 end
 
-                result.flatten
+                Concurrent::Promises
+                    .zip_futures_on(@finalization_executor, *postprocess)
+                    .value!.flatten
             end
 
+            # Postprocess a single {Output} normalized by {#normalize_logfile_group}
+            def postprocess_output(output_path, output)
+                future = Concurrent::Promises.future_on(@executor, output.path) do |path|
+                    subcommand_compute_digest(path)
+                end
+
+                if compress?
+                    compress_future =
+                        Concurrent::Promises.future_on(@executor, output.path) do |path|
+                            subcommand_compress_path(path)
+                        end
+                    future = future.zip(compress_future)
+                end
+
+                path = output.path
+                future.then_on(@finalization_executor) do |digest|
+                    size = path.stat.size
+                    final_path_basename =
+                        if compress?
+                            path.unlink
+                            "#{path.basename}.zst"
+                        else
+                            path.basename
+                        end
+
+                    source_path = path.dirname / final_path_basename
+                    FileUtils.mv source_path, output_path
+                    FileUtils.mv path.sub_ext(".idx"), output_path
+
+                    Dataset::IdentityEntry.new(
+                        output_path / final_path_basename, size, digest
+                    )
+                end
+            end
+
+            # Normalize a group of log files
+            #
+            # A "group" of log files are all log files from the same logger. They are
+            # expected to be rotations of the same set of streams, and therefore are
+            # being normalized to the same set of log files. In addition, we expect
+            # two different groups to not have overlapping streams
+            #
+            # @return [Array<Output>]
             def normalize_logfile_group(
-                files, output_path:, reporter: NullReporter.new
+                async_failure, files, output_path:, reporter: NullReporter.new
             )
                 files.each do |logfile_path|
+                    return if async_failure.set? # rubocop:disable Lint/NonLocalExitFromIterator
+
                     normalize_logfile(logfile_path, output_path, reporter: reporter)
                 rescue Exception # rubocop:disable Lint/RescueException
                     reporter.warn(
@@ -334,19 +415,16 @@ module Syskit::Log
                     raise
                 end
 
-                out_files.each_value.map do |output|
+                out_files.each_value do |output|
                     output.write_pocolog_minimal_index
                     output.close
-
-                    Dataset::IdentityEntry.new(
-                        output.path, output.tell, output.string_digest
-                    )
                 end
+                out_files.values
             rescue Exception # rubocop:disable Lint/RescueException
                 reporter.warn(
                     "normalize: deleting #{out_files.size} output files and their indexes"
                 )
-                out_files.each_value { _1.path.unlink }
+                out_files.each_value { _1.path.unlink if _1.path.exist? }
                 raise
             ensure
                 out_files.each_value { _1.close unless _1.closed? }
@@ -361,6 +439,56 @@ module Syskit::Log
                 Pathname.new(path)
             end
 
+            # @api private
+            #
+            # Compress the given file
+            #
+            # The compressed file is #{path}.zst. The original path is kept
+            #
+            # @return [void]
+            def subcommand_compress_path(path)
+                Open3.popen3(
+                    "zstd", "--keep", path.to_s, "-o", "#{path}.zst",
+                    "--no-progress"
+                ) do |stdin, stdout, stderr, wait_thread|
+                    stdin.close
+                    err = Thread.new { stderr.read }
+                    out = Thread.new { stdout.read }
+                    err, out = [err, out].map(&:value)
+                    status = wait_thread.value
+                    unless status.success?
+                        raise SubcommandFailed,
+                              "compression of #{path.basename} failed: " \
+                              "out=#{out} err=#{err}"
+                    end
+                end
+                nil
+            end
+
+            # @api private
+            #
+            # Compute the sha256 digest of the given file
+            #
+            # @return [String] the digest
+            def subcommand_compute_digest(path)
+                Open3.popen2("sha256sum", "-b") do |stdin, stdout, wait_thread|
+                    IO.copy_stream(
+                        path.to_s, stdin,
+                        path.stat.size - Pocolog::Format::Current::PROLOGUE_SIZE,
+                        Pocolog::Format::Current::PROLOGUE_SIZE
+                    )
+                    stdin.close
+                    output = stdout.read
+                    status = wait_thread.value
+                    unless status.success?
+                        raise SubcommandFailed,
+                              "digest computation for #{path.basename} " \
+                              "failed: #{output}"
+                    end
+                    output.split(" ").first.strip
+                end
+            end
+
             FOLLOWUP_STREAM_TIME_ERROR_FORMAT =
                 "While building %<stream_name>s, found followup stream whose %<mode>s "\
                 "is before the stream that came before it. Previous sample real time = "\
@@ -371,8 +499,7 @@ module Syskit::Log
             end
 
             NormalizationState =
-                Struct
-                .new(:out_io_streams, :control_blocks, :followup_stream_time) do
+                Struct.new(:out_io_streams, :control_blocks, :followup_stream_time) do
                     def report_followup_stream_error(
                         reporter: NullReporter.new, stream_index:, mode:, previous:,
                         current:
@@ -462,8 +589,7 @@ module Syskit::Log
 
             def normalize_logfile_process_block_stream(
                 output_path, state, in_block_stream,
-                progress_position:,
-                reporter: NullReporter.new
+                progress_position:, reporter: NullReporter.new
             )
                 reporter_offset = reporter.current
 
@@ -606,8 +732,7 @@ module Syskit::Log
                 output_path, raw_header, stream_block, initial_blocks
             )
                 basename = Streams.normalized_filename(stream_block.metadata)
-                ext = ".zst" if compress?
-                out_file_path = output_path + "#{basename}.0.log#{ext}"
+                out_file_path = output_path + "#{basename}.0.log"
 
                 # Check if that's already known to us (multi-part
                 # logfile)
@@ -642,12 +767,7 @@ module Syskit::Log
                 wio = Syskit::Log.open_out_stream(out_file_path)
 
                 Pocolog::Format::Current.write_prologue(wio)
-                digest = Digest::SHA256.new
-                wio = DigestIO.new(wio, digest)
-
-                output = Output.new(
-                    out_file_path, wio, stream_block, digest, wio.tell
-                )
+                output = Output.new(out_file_path, wio, stream_block, wio.tell)
                 output.write initial_blocks
                 output.write raw_header[0, 2]
                 output.write ZERO_BYTE

@@ -105,11 +105,11 @@ module Syskit::Log
         # datasets (see {#compress?})
         #
         # @return [Pathname]
-        def logfile_pathname(*path)
+        def logfile_pathname(*path, compress: compress?)
             raw = Pathname.new(logfile_path(*path))
             return raw if path.empty?
             return raw if raw.extname == ".idx"
-            return raw unless compress?
+            return raw unless compress
 
             Pathname.new(logfile_path(*path[0..-2], path.last + ".zst"))
         end
