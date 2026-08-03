@@ -325,6 +325,21 @@ module Syskit::Log
                     @timestamp_as_microseconds = timestamp_us(@timestamp)
                 end
 
+                it "ignores unset logical time fields" do
+                    @test_t.field_metadata["time"].set("role", "logical_time")
+                    value = @test_t.new(
+                        time: { microseconds: 0 },
+                        other_type: 42
+                    )
+
+                    logical_time_create_file(value)
+                    logical_time_normalize
+                    stream = logical_time_open_stream
+
+                    assert_equal [[base_time, base_time + 5, value]],
+                                 stream.samples.to_a
+                end
+
                 it "extract logical time from payload in the optimized case" do
                     @test_t.field_metadata["time"].set("role", "logical_time")
                     value = @test_t.new(

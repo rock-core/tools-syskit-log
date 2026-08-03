@@ -181,9 +181,12 @@ module Syskit::Log
                     write raw_data[4..-1]
 
                     if (lg_time_us = @logical_time_reader&.call(raw_payload))
-                        raw_payload = update_raw_payload_logical_time(
-                            raw_payload, lg_time_us
-                        )
+                        # ignore logical time for samples that have invalid timestamps
+                        unless lg_time_us == 0
+                            raw_payload = update_raw_payload_logical_time(
+                                raw_payload, lg_time_us
+                            )
+                        end
                     end
                     write raw_payload
 
