@@ -578,13 +578,24 @@ module Syskit::Log
                     progress_position: -> { progress_position(in_io) }
                 )
             rescue Pocolog::InvalidBlockFound => e
-                reporter.warn "#{logfile_path.basename} looks truncated or contains "\
-                              "garbage (#{e.message}), stopping processing but keeping "\
-                              "the samples processed so far"
+                report_truncated_file(reporter, logfile_path, e.message)
+                reporter.current = Syskit::Log.io_disk_size(in_io) + reporter_offset
+            rescue RuntimeError => e
+                if e.message != "decompress error error code: Data corruption detected"
+                    raise
+                end
+
+                report_truncated_file(reporter, logfile_path, e.message)
                 reporter.current = Syskit::Log.io_disk_size(in_io) + reporter_offset
             ensure
                 state.out_io_streams.each(&:flush)
                 in_block_stream&.close
+            end
+
+            def report_truncated_file(reporter, logfile_path, message)
+                reporter.warn "#{logfile_path.basename} looks truncated or contains "\
+                              "garbage (#{message}), stopping processing but keeping "\
+                              "the samples processed so far"
             end
 
             def normalize_logfile_process_block_stream(

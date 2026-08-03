@@ -77,6 +77,10 @@ module Syskit::Log
             Pathname(__dir__) + "roby-logs" + "#{name}-events.log"
         end
 
+        def datastore_fixtures_path(name)
+            Pathname.new(__dir__) / "datastore" / "fixtures" / name
+        end
+
         # Create a "ready to use" datastore based on the given data in fixtures/
         #
         # @return [(Datastore, Datastore::Dataset)]
