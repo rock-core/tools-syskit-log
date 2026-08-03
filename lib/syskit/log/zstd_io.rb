@@ -14,7 +14,7 @@ module Syskit
                 @io = io
                 @mode_read = read
                 @mode_write = write
-                @in_buffer = +"" if read
+                @in_buffer = String.new(encoding: Encoding::ASCII_8BIT) if read
                 rewind
             end
 
@@ -25,7 +25,7 @@ module Syskit
             def rewind
                 @io.rewind
                 @tell = 0
-                @buffer = +""
+                @buffer = String.new(encoding: Encoding::ASCII_8BIT)
                 @zstd_in = Zstd::StreamingDecompress.new if @mode_read
                 @zstd_out = Zstd::StreamingCompress.new if @mode_write
             end
@@ -63,7 +63,8 @@ module Syskit
 
                 ret = @buffer[0, count]
                 @tell += ret.size
-                @buffer = @buffer[ret.size..-1] || +""
+                @buffer = @buffer[ret.size..-1] ||
+                          String.new(encoding: Encoding::ASCII_8BIT)
                 ret if !ret.empty? || !eof_reached
             end
 
