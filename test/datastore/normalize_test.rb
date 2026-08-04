@@ -426,6 +426,23 @@ module Syskit::Log
                                  stream.samples.to_a
                 end
 
+                it "uses the rock_timestamp_field_override metadata field instead of " \
+                   "rock_timestamp_field if the former is present" do
+                    value = @test_t.new(
+                        time: { microseconds: @timestamp_as_microseconds },
+                        other_type: 42
+                    )
+                    logical_time_create_file(value, metadata: {
+                                                 "rock_timestamp_field" => "invalid",
+                                                 "rock_timestamp_field_override" => "time"
+                                             })
+
+                    logical_time_normalize
+                    stream = logical_time_open_stream
+                    assert_equal [[base_time, base_time + 5, value]],
+                                 stream.samples.to_a
+                end
+
                 it "resizes containers if the native type has a different size" do
                     # The idea of that test is to create a log file using a
                     # valid type (compound_t) that has the same marshalled

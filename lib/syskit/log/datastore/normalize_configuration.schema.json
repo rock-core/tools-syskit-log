@@ -1,0 +1,21 @@
+{
+    "type": "object",
+    "required": [],
+    "additionalProperties": false,
+    "properties": {
+        "metadata": {
+            "type": "object",
+            "required": [],
+            "additionalProperties": false,
+            "properties": {
+                "streams": {
+                    "type": "array",
+                    "required": [],
+                    "items": {
+                        "$ref": "streams_metadata_update.schema.json"
+                    }
+                }
+            }
+        }
+    }
+}
