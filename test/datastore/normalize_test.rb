@@ -288,7 +288,7 @@ module Syskit::Log
                 end
             end
 
-            describe "compound_field_directly_addressable?" do
+            describe "compound_field_path_directly_addressable?" do
                 before do
                     @registry = Typelib::CXXRegistry.new
                     @registry.create_compound "/Time" do |b|
@@ -300,8 +300,8 @@ module Syskit::Log
                     type_t = @registry.create_compound "/Test" do |b|
                         b.time = "/Time"
                     end
-                    assert Normalize::Output.compound_field_directly_addressable?(
-                        type_t, "time"
+                    assert Normalize::Output.compound_field_path_directly_addressable?(
+                        type_t, ["time"]
                     )
                 end
 
@@ -311,8 +311,8 @@ module Syskit::Log
                         b.pad = "/uint32_t"
                         b.time = "/Time"
                     end
-                    assert Normalize::Output.compound_field_directly_addressable?(
-                        type_t, "time"
+                    assert Normalize::Output.compound_field_path_directly_addressable?(
+                        type_t, ["time"]
                     )
                 end
 
@@ -323,8 +323,36 @@ module Syskit::Log
                         b.pad = "/std/vector</uint32_t>"
                         b.time = "/Time"
                     end
-                    refute Normalize::Output.compound_field_directly_addressable?(
-                        type_t, "time"
+                    refute Normalize::Output.compound_field_path_directly_addressable?(
+                        type_t, ["time"]
+                    )
+                end
+
+                it "returns true if the time field is within a field " \
+                   "that is directly addressable" do
+                    intermediate_t = @registry.create_compound "/Intermediate" do |b|
+                        b.time = "/Time"
+                    end
+                    test_t = @registry.create_compound "/Test" do |b|
+                        b.field = intermediate_t
+                    end
+                    assert Normalize::Output.compound_field_path_directly_addressable?(
+                        test_t, %w[field time]
+                    )
+                end
+
+                it "returns false if the time field is within a field " \
+                   "that is not directly addressable" do
+                    @registry.create_container "/std/vector", "/uint32_t"
+                    intermediate_t = @registry.create_compound "/Intermediate" do |b|
+                        b.time = "/Time"
+                    end
+                    test_t = @registry.create_compound "/Test" do |b|
+                        b.pad = "/std/vector</uint32_t>"
+                        b.field = intermediate_t
+                    end
+                    refute Normalize::Output.compound_field_path_directly_addressable?(
+                        test_t, %w[field time]
                     )
                 end
             end
@@ -440,6 +468,28 @@ module Syskit::Log
                     logical_time_normalize
                     stream = logical_time_open_stream
                     assert_equal [[base_time, base_time + 5, value]],
+                                 stream.samples.to_a
+                end
+
+                it "is able to extract the logical time field from a compound field" do
+                    root_t = @registry.create_compound "/Root" do |b|
+                        b.field = @test_t
+                    end
+
+                    value = root_t.new(
+                        field: {
+                            time: { microseconds: @timestamp_as_microseconds },
+                            other_type: 42
+                        }
+                    )
+
+                    logical_time_create_file(value, metadata: {
+                                                 "rock_timestamp_field_override" => "field.time"
+                                             })
+                    logical_time_normalize
+                    stream = logical_time_open_stream
+
+                    assert_equal [[base_time, @timestamp, value]],
                                  stream.samples.to_a
                 end
 

@@ -35,8 +35,8 @@ module Syskit::Log
             ZERO_BYTE = [0].pack("v").freeze
 
             class LogicalTimeReader
-                def initialize(type, field_name)
-                    @field_name = field_name
+                def initialize(type, field_path)
+                    @field_path = field_path
                     @native_type = resolve_native_type(type)
                     @sample = @native_type.new
                 end
@@ -52,10 +52,11 @@ module Syskit::Log
                     # Skip 21 bytes as they belong to the data stream declaration block
                     # information before the marshalled data.
                     # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
-                    @sample
-                        .from_buffer(raw_payload[21..-1])
-                        .raw_get(@field_name)
-                        .microseconds
+                    raw_sample = @sample.from_buffer(raw_payload[21..-1])
+                    t = @field_path.inject(raw_sample) do |s, name|
+                        s.raw_get(name)
+                    end
+                    t.microseconds
                 rescue ArgumentError => e
                     raise unless e.message.match?(/parts.of.the.provided.buffer/)
 
@@ -217,33 +218,47 @@ module Syskit::Log
                 #
                 # @return [#call,nil]
                 def resolve_logical_time_reader(stream_block)
+                    path = resolve_logical_time_field_path(stream_block)
+                    return unless path
+
+                    stream_type = stream_block.type
+
+                    opt = Output
+                          .compound_field_path_directly_addressable?(stream_type, path)
+
+                    if opt
+                        _, offset = path.inject([stream_type, 0]) do |(t, o), name|
+                            [t[name], o + t.offset_of(name)]
+                        end
+
+                        LogicalTimeReaderOpt.new(offset)
+                    else
+                        LogicalTimeReader.new(stream_type, path[0..-2])
+                    end
+                end
+
+                def resolve_logical_time_field_path(stream_block)
                     return if stream_block.metadata["rock_timestamp_field"]
 
                     field_name = stream_block.metadata["rock_timestamp_field_override"]
-                    type = stream_block.type
+                    stream_type = stream_block.type
                     unless field_name
-                        field_name = logical_time_field(type)
+                        field_name = logical_time_field(stream_type)
                         return unless field_name
                     end
+
+                    field_path = field_name.split(".") + ["microseconds"]
+                    field_type = field_path.inject(stream_type) do |t, name|
+                        t[name]
+                    end
+
                     unless valid_logical_time_type?(field_type)
                         raise ArgumentError,
                               "field #{field_name} of #{type}, of type #{field_type}, " \
                               "is marked as logical time, but it does not have an " \
                               "integer type field called 'microseconds'"
                     end
-
-                    opt =
-                        Output.compound_field_directly_addressable?(type, field_name) &&
-                        Output.compound_field_directly_addressable?(
-                            field_type, "microseconds"
-                        )
-                    if opt
-                        offset = type.offset_of(field_name) +
-                                 field_type.offset_of("microseconds")
-                        LogicalTimeReaderOpt.new(offset)
-                    else
-                        LogicalTimeReader.new(type, field_name)
-                    end
+                    field_path
                 end
 
                 # Find the name of the first field in a type to have the
@@ -270,12 +285,22 @@ module Syskit::Log
                 # implementation, which means
                 # - being a compound
                 # - having a 'microseconds' field of type int64_t
-                def valid_logical_time_type?(type)
-                    return unless type <= Typelib::CompoundType
-                    return unless type.has_field?("microseconds")
-
-                    us_type = type["microseconds"]
+                def valid_logical_time_type?(us_type)
                     us_type <= Typelib::NumericType && us_type.size == 8
+                end
+
+                def self.compound_field_path_directly_addressable?(
+                    compound_type, field_path
+                )
+                    type = compound_type
+                    field_path.each do |name|
+                        unless compound_field_directly_addressable?(type, name)
+                            return false
+                        end
+
+                        type = type[name]
+                    end
+                    true
                 end
 
                 # Validates that a compound's field offset is fixed in its
