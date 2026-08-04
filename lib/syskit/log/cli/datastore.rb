@@ -7,6 +7,7 @@ require "minitar"
 
 require "syskit/log"
 require "syskit/log/datastore/normalize"
+require "syskit/log/datastore/normalize_configuration"
 require "syskit/log/datastore/import"
 require "syskit/log/datastore/index_build"
 require "syskit/log/cli/reports"
@@ -255,8 +256,14 @@ module Syskit::Log
 
                 def import_dataset( # rubocop:disable Metrics/ParameterLists
                     paths, datastore,
-                    include:, delete_input: false, compress: false, parallel: 1
+                    include:, delete_input: false, compress: false, parallel: 1,
+                    config_path: nil
                 )
+                    config = Syskit::Log::NormalizeConfiguration.new
+                    if config_path
+                        config.update_from_hash(YAML.safe_load(File.read(config_path)))
+                    end
+
                     datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
                         importer = Syskit::Log::Datastore::Import.new(
                             core_path,
@@ -264,7 +271,9 @@ module Syskit::Log
                             compress: compress, parallel: parallel
                         )
                         dataset = importer.normalize_dataset(
-                            paths, include: include, delete_input: delete_input
+                            paths,
+                            include: include, delete_input: delete_input,
+                            config: config
                         )
                         break unless validate_dataset_duration(paths, dataset)
                         break unless validate_dataset_import(datastore, paths, dataset)
@@ -565,6 +574,9 @@ module Syskit::Log
             method_option :parallel,
                           desc: "use this many cores",
                           type: :numeric, default: 1
+            method_option :config_path,
+                          desc: "additional configuration file",
+                          type: :string, default: nil
 
             option :rebuild_orogen_models,
                    type: :boolean, default: false,
@@ -629,7 +641,8 @@ module Syskit::Log
                     dataset = import_dataset(
                         paths, datastore,
                         include: include, delete_input: options[:delete_input],
-                        compress: options[:compress], parallel: options[:parallel]
+                        compress: options[:compress], parallel: options[:parallel],
+                        config_path: options[:config_path]
                     )
 
                     if dataset

@@ -4,6 +4,7 @@ require "pocolog/cli/tty_reporter"
 
 require "roby/droby/plan_rebuilder"
 require "syskit/log/datastore/normalize"
+require "syskit/log/datastore/normalize_configuration"
 
 module Syskit::Log
     class Datastore
@@ -174,7 +175,9 @@ module Syskit::Log
             # @param [Pathname] dir_path the input directory
             # @return [Dataset] the resulting dataset
             def normalize_dataset(
-                dir_paths, include: IMPORT_DEFAULT_STEPS, delete_input: false
+                dir_paths,
+                include: IMPORT_DEFAULT_STEPS, delete_input: false,
+                config: NormalizeConfiguration.new
             )
                 pocolog_files, text_files, roby_event_logs, ignored_entries =
                     dir_paths.map { |dir| prepare_import(dir) }
@@ -184,7 +187,7 @@ module Syskit::Log
                 if include.include?(:pocolog)
                     @reporter.info "Normalizing pocolog log files"
                     identity += normalize_pocolog_files(
-                        pocolog_files, delete_input: delete_input
+                        pocolog_files, delete_input: delete_input, config: config
                     )
                 end
 
@@ -251,7 +254,9 @@ module Syskit::Log
             # @param [Array<Pathname>] paths the input pocolog log files
             # @return [[Dataset::IdentityEntry]] information needed to compute
             #   the dataset identity
-            def normalize_pocolog_files(files, delete_input: false)
+            def normalize_pocolog_files(
+                files, delete_input: false, config: NormalizeConfiguration.new
+            )
                 return [] if files.empty?
 
                 out_pocolog_dir = (@output_path + "pocolog")
@@ -264,7 +269,7 @@ module Syskit::Log
 
                 entries = Syskit::Log::Datastore.normalize(
                     files,
-                    output_path: out_pocolog_dir, executor: @executor,
+                    output_path: out_pocolog_dir, executor: @executor, config: config,
                     delete_input: delete_input, compress: @compress, reporter: @reporter
                 )
                 entries.each { |e| e.path = identity_path(e.path) }

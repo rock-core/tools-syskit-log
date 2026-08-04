@@ -1,0 +1,17 @@
+{
+    "type": "object",
+    "required": ["match", "op", "key"],
+    "additionalProperties": false,
+    "properties": {
+        "match": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "type": { "type": "string" }
+            }
+        },
+        "op": { "enum": ["set", "delete"] },
+        "key": { "type": "string" },
+        "value": {}
+    }
+}

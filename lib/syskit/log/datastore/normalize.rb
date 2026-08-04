@@ -10,12 +10,15 @@ module Syskit::Log
             paths,
             output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
             delete_input: false, compress: false,
-            executor: Concurrent::ImmediateExecutor.new
+            executor: Concurrent::ImmediateExecutor.new,
+            config: NormalizeConfiguration.new
         )
-            Normalize.new(compress: compress, executor: executor).normalize(
-                paths,
-                output_path: output_path, reporter: reporter, delete_input: delete_input
-            )
+            Normalize.new(compress: compress, executor: executor, config: config)
+                     .normalize(
+                         paths,
+                         output_path: output_path, reporter: reporter,
+                         delete_input: delete_input
+                     )
         end
 
         # Encapsulation of the operations necessary to normalize a dataset
@@ -216,11 +219,12 @@ module Syskit::Log
                 def resolve_logical_time_reader(stream_block)
                     return if stream_block.metadata["rock_timestamp_field"]
 
+                    field_name = stream_block.metadata["rock_timestamp_field_override"]
                     type = stream_block.type
-                    field_name = logical_time_field(type)
-                    return unless field_name
-
-                    field_type = type[field_name]
+                    unless field_name
+                        field_name = logical_time_field(type)
+                        return unless field_name
+                    end
                     unless valid_logical_time_type?(field_type)
                         raise ArgumentError,
                               "field #{field_name} of #{type}, of type #{field_type}, " \
@@ -294,11 +298,15 @@ module Syskit::Log
                 end
             end
 
-            def initialize(executor: Concurrent::ImmediateExecutor.new, compress: false)
+            def initialize(
+                executor: Concurrent::ImmediateExecutor.new,
+                compress: false, config: NormalizeConfiguration.new
+            )
                 @out_files = {}
                 @executor = executor
                 @finalization_executor = Concurrent::ImmediateExecutor.new
                 @compress = compress
+                @config = config
             end
 
             def compress?
@@ -716,10 +724,21 @@ module Syskit::Log
                     metadata, stream_name: stream_block.name
                 )
                 name = Streams.normalized_stream_name(metadata)
+                metadata = apply_metadata_from_config(stream_block, metadata)
                 Pocolog::BlockStream::StreamBlock.new(
                     name, stream_block.typename,
                     stream_block.registry_xml, YAML.dump(metadata)
                 )
+            end
+
+            # @api private
+            #
+            # Apply extra metadata to streams
+            #
+            # Used to "fixup" metadata on import
+            def apply_metadata_from_config(stream_block, metadata)
+                @config.stream_metadata_update_for_type(stream_block.typename)
+                       .update(metadata)
             end
 
             # @api private
