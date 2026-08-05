@@ -100,6 +100,24 @@ module Syskit::Log
                 attr_reader :interval_lg
                 attr_accessor :string_digest
 
+                attr_reader :stats
+
+                Stats = Struct.new(
+                    :rt_time_not_monotonic, :lg_time_not_monotonic,
+                    :rt_time_duplicate, :lg_time_duplicate,
+                    :invalid_logical_time, :logical_time_overrides,
+                    :rejected_samples,
+                    keyword_init: true
+                ) do
+                    def warn?
+                        !zero?
+                    end
+
+                    def zero?
+                        each.all?(&:zero?)
+                    end
+                end
+
                 WRITE_BLOCK_SIZE = 8 * 1024
 
                 def initialize(
@@ -114,6 +132,12 @@ module Syskit::Log
                     @interval_rt = []
                     @interval_lg = []
                     @buffer = "".dup
+                    @stats = Stats.new(
+                        rt_time_not_monotonic: 0, lg_time_not_monotonic: 0,
+                        rt_time_duplicate: 0, lg_time_duplicate: 0,
+                        invalid_logical_time: 0, logical_time_overrides: 0,
+                        rejected_samples: 0
+                    )
                 end
 
                 def tell
@@ -177,6 +201,18 @@ module Syskit::Log
                     raw_payload
                 end
 
+                def read_logical_time(raw_payload)
+                    return unless (lg_time_us = @logical_time_reader&.call(raw_payload))
+
+                    if lg_time_us == 0
+                        stats.invalid_logical_time += 1
+                        return
+                    end
+
+                    stats.logical_time_overrides += 1
+                    lg_time_us
+                end
+
                 def add_data_block(rt_time, lg_time, raw_data, raw_payload)
                     @stream_size += 1
 
@@ -184,14 +220,6 @@ module Syskit::Log
                     write ZERO_BYTE
                     write raw_data[4..-1]
 
-                    if (lg_time_us = @logical_time_reader&.call(raw_payload))
-                        # ignore logical time for samples that have invalid timestamps
-                        unless lg_time_us == 0
-                            raw_payload = update_raw_payload_logical_time(
-                                raw_payload, lg_time_us
-                            )
-                        end
-                    end
                     write raw_payload
 
                     @interval_rt[0] ||= rt_time
@@ -259,6 +287,20 @@ module Syskit::Log
                               "integer type field called 'microseconds'"
                     end
                     field_path
+                end
+
+                def display_stats(reporter)
+                    if @stats.warn?
+                        reporter.warn "#{path}: WARNING"
+                        @stats.each_pair do |k, v|
+                            reporter.warn "  #{k}: #{v}" unless v == 0
+                        end
+                    elsif !@stats.zero?
+                        reporter.info "#{path}:"
+                        @stats.each_pair do |k, v|
+                            reporter.info "  #{k}: #{v}" unless v == 0
+                        end
+                    end
                 end
 
                 # Find the name of the first field in a type to have the
@@ -454,6 +496,7 @@ module Syskit::Log
                 out_files.each_value do |output|
                     output.write_pocolog_minimal_index
                     output.close
+                    output.display_stats(reporter)
                 end
                 out_files.values
             rescue Exception # rubocop:disable Lint/RescueException
@@ -525,66 +568,46 @@ module Syskit::Log
                 end
             end
 
-            FOLLOWUP_STREAM_TIME_ERROR_FORMAT =
-                "While building %<stream_name>s, found followup stream whose %<mode>s "\
-                "is before the stream that came before it. Previous sample real time = "\
-                "%<previous>s, sample real time = %<current>s"
-
             def self.format_timestamp(time_us)
                 Time.at(time_us / 1_000_000).strftime("%Y-%m-%d %H:%M:%S:%6N")
             end
 
             NormalizationState =
                 Struct.new(:out_io_streams, :control_blocks, :followup_stream_time) do
-                    def report_followup_stream_error(
-                        reporter: NullReporter.new, stream_index:, mode:, previous:,
-                        current:
-                    )
-                        output_stream_name = out_io_streams[stream_index].path
-                        msg = format(
-                            FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                            stream_name: output_stream_name, mode: mode,
-                            previous: Normalize.format_timestamp(previous),
-                            current: Normalize.format_timestamp(current)
-                        )
-                        reporter.warn msg
-                    end
-
-                    def validate_time_field_sequential(
-                        reporter: NullReporter.new, stream_index:,
-                        mode:, previous:, current:
-                    )
-                        if previous > current
-                            report_followup_stream_error(
-                                reporter: reporter, stream_index: stream_index,
-                                mode: mode, previous: previous, current: current
-                            )
-                            return false
+                    def validate_time_followup(stream_index, data_block_header, stats)
+                        last_stream_time = followup_stream_time[stream_index]
+                        rt = data_block_header.rt_time
+                        lg = data_block_header.lg_time
+                        unless last_stream_time
+                            followup_stream_time[stream_index] = [rt, lg]
+                            return true
                         end
+
+                        previous_rt, previous_lg = last_stream_time
+                        rt_valid =
+                            validate_time_followup_rtlg("rt", previous_rt, rt, stats)
+                        lg_valid =
+                            validate_time_followup_rtlg("lg", previous_lg, lg, stats)
+
+                        unless rt_valid && lg_valid
+                            stats.rejected_samples += 1
+                            return
+                        end
+
+                        followup_stream_time[stream_index] = [rt, lg]
                         true
                     end
 
-                    def validate_time_followup(
-                        stream_index, data_block_header, reporter: NullReporter.new
-                    )
-                        # Second part of the followup stream validation (see above)
-                        last_stream_time = followup_stream_time[stream_index]
-                        valid_time = true
-                        return valid_time unless last_stream_time
+                    def validate_time_followup_rtlg(field, previous, actual, stats)
+                        return true if previous < actual
 
-                        followup_stream_time[stream_index] = nil
-                        previous_rt, previous_lg = last_stream_time
-                        rt = data_block_header.rt_time
-                        lg = data_block_header.lg_time
-                        rt_valid = validate_time_field_sequential(
-                            reporter: reporter, stream_index: stream_index,
-                            mode: "real time", previous: previous_rt, current: rt
-                        )
-                        lg_valid = validate_time_field_sequential(
-                            reporter: reporter, stream_index: stream_index,
-                            mode: "logical time", previous: previous_lg, current: lg
-                        )
-                        rt_valid && lg_valid
+                        if previous > actual
+                            stats["#{field}_time_not_monotonic"] += 1
+                            return false
+                        end
+
+                        stats["#{field}_time_duplicate"] += 1 if previous == actual
+                        true
                     end
                 end
 
@@ -644,8 +667,7 @@ module Syskit::Log
                 while (block_header = in_block_stream.read_next_block_header)
                     begin
                         normalize_logfile_process_block(
-                            output_path, state, block_header,
-                            in_block_stream.read_payload, reporter: reporter
+                            output_path, state, block_header, in_block_stream.read_payload
                         )
                     rescue InvalidFollowupStream => e
                         raise e, "while processing #{in_block_stream.io.path}: #{e.message}"
@@ -672,7 +694,7 @@ module Syskit::Log
             # Process a single in block and dispatch it into separate
             # normalized logfiles
             def normalize_logfile_process_block(
-                output_path, state, block_header, raw_payload, reporter: NullReporter.new
+                output_path, state, block_header, raw_payload
             )
                 stream_index = block_header.stream_index
 
@@ -691,8 +713,7 @@ module Syskit::Log
                     )
                 else
                     normalize_logfile_process_data_block(
-                        state, stream_index, block_header.raw_data, raw_payload,
-                        reporter: reporter
+                        state, stream_index, block_header.raw_data, raw_payload
                     )
                 end
             end
@@ -770,16 +791,26 @@ module Syskit::Log
             #
             # Process a single data block in {#normalize_logfile_process_block}
             def normalize_logfile_process_data_block(
-                state, stream_index, raw_data, raw_payload, reporter: NullReporter.new
+                state, stream_index, raw_data, raw_payload
             )
                 data_block_header =
                     Pocolog::BlockStream::DataBlockHeader.parse(raw_payload)
+                output = state.out_io_streams[stream_index]
+                if (lg_time_override = output.read_logical_time(raw_payload))
+                    data_block_header.lg_time = lg_time_override
+                end
+
                 valid = state.validate_time_followup(
-                    stream_index, data_block_header, reporter: reporter
+                    stream_index, data_block_header, output.stats
                 )
                 return unless valid
 
-                output = state.out_io_streams[stream_index]
+                if lg_time_override
+                    raw_payload = output.update_raw_payload_logical_time(
+                        raw_payload, lg_time_override
+                    )
+                end
+
                 output.add_data_block(
                     data_block_header.rt_time, data_block_header.lg_time,
                     raw_data, raw_payload
