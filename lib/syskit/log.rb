@@ -69,12 +69,16 @@ module Syskit
                 Pathname.enum_for(:glob, path + "*.*.log.zst")
         end
 
-        def self.open_in_stream(path, &block)
-            return path.open(&block) unless path.extname == ".zst"
-            return ZstdIO.new(path.open) unless block_given?
+        def self.open_in_stream(path)
+            io = path.open(encoding: Encoding::ASCII_8BIT)
+            io = ZstdIO.new(io) if path.extname == ".zst"
 
-            path.open do |io|
-                yield(ZstdIO.new(io))
+            return io unless block_given?
+
+            begin
+                yield(io)
+            ensure
+                io.close
             end
         end
 

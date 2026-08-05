@@ -230,7 +230,7 @@ module Syskit::Log
                     file_size = logfile_pathname("file0.0.log").stat.size
                     assert_equal file_size, reporter.current
                 end
-                it "handles truncated files" do
+                it "handles truncated pocolog files" do
                     create_logfile "file0.0.log", truncate: 1 do
                         create_logfile_stream(
                             "stream0", metadata: {
@@ -261,6 +261,30 @@ module Syskit::Log
                     )
                     assert_equal [[base_time + 3, base_time + 30, 3]],
                                  stream.samples.to_a
+                end
+                it "handles corrupted compressed files" do
+                    skip unless compress?
+
+                    file0_path = logfile_pathname("file0.0.log")
+                    FileUtils.cp(
+                        datastore_fixtures_path("corrupted_zst_file.0.log.zst"),
+                        file0_path
+                    )
+                    logdir_pathname("normalized").mkpath
+                    reporter = flexmock(NullReporter.new)
+                    reporter.should_receive(:warn)
+                            .with(/^file0.0.log.zst looks truncated/)
+                            .once
+                    normalize.normalize_logfile(
+                        file0_path,
+                        logdir_pathname("normalized"), reporter: reporter
+                    )
+                    stream = open_logfile_stream(
+                        ["normalized", "port_contactor_fault_reset::state.0.log"],
+                        "port_contactor_fault_reset.state"
+                    )
+                    # Check that the stream is valid
+                    stream.samples.to_a
                 end
             end
 
