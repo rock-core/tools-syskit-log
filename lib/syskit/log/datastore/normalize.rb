@@ -10,12 +10,15 @@ module Syskit::Log
             paths,
             output_path: paths.first.dirname + "normalized", reporter: NullReporter.new,
             delete_input: false, compress: false,
-            executor: Concurrent::ImmediateExecutor.new
+            executor: Concurrent::ImmediateExecutor.new,
+            config: NormalizeConfiguration.new
         )
-            Normalize.new(compress: compress, executor: executor).normalize(
-                paths,
-                output_path: output_path, reporter: reporter, delete_input: delete_input
-            )
+            Normalize.new(compress: compress, executor: executor, config: config)
+                     .normalize(
+                         paths,
+                         output_path: output_path, reporter: reporter,
+                         delete_input: delete_input
+                     )
         end
 
         # Encapsulation of the operations necessary to normalize a dataset
@@ -23,6 +26,11 @@ module Syskit::Log
             include Logger::Hierarchy
             extend Logger::Hierarchy
             class InvalidFollowupStream < RuntimeError; end
+
+            # Configuration of the normalization process
+            #
+            # @return [NormalizeConfiguration]
+            attr_reader :config
 
             # Mapping of path for created output files to their {Output} object
             #
@@ -32,8 +40,8 @@ module Syskit::Log
             ZERO_BYTE = [0].pack("v").freeze
 
             class LogicalTimeReader
-                def initialize(type, field_name)
-                    @field_name = field_name
+                def initialize(type, field_path)
+                    @field_path = field_path
                     @native_type = resolve_native_type(type)
                     @sample = @native_type.new
                 end
@@ -49,10 +57,11 @@ module Syskit::Log
                     # Skip 21 bytes as they belong to the data stream declaration block
                     # information before the marshalled data.
                     # See rock-core/tools-pocolog/blob/master/spec/spec-v2.txt
-                    @sample
-                        .from_buffer(raw_payload[21..-1])
-                        .raw_get(@field_name)
-                        .microseconds
+                    raw_sample = @sample.from_buffer(raw_payload[21..-1])
+                    t = @field_path.inject(raw_sample) do |s, name|
+                        s.raw_get(name)
+                    end
+                    t.microseconds
                 rescue ArgumentError => e
                     raise unless e.message.match?(/parts.of.the.provided.buffer/)
 
@@ -96,10 +105,28 @@ module Syskit::Log
                 attr_reader :interval_lg
                 attr_accessor :string_digest
 
+                attr_reader :stats
+
+                Stats = Struct.new(
+                    :rt_time_not_monotonic, :lg_time_not_monotonic,
+                    :rt_time_duplicate, :lg_time_duplicate,
+                    :invalid_logical_time, :logical_time_overrides,
+                    :rejected_samples,
+                    keyword_init: true
+                ) do
+                    def warn?
+                        !zero?
+                    end
+
+                    def zero?
+                        each.all?(&:zero?)
+                    end
+                end
+
                 WRITE_BLOCK_SIZE = 8 * 1024
 
                 def initialize(
-                    path, wio, stream_block, stream_block_pos
+                    path, wio, stream_block, stream_block_pos, config
                 )
                     @path = path
                     @wio = wio
@@ -110,6 +137,17 @@ module Syskit::Log
                     @interval_rt = []
                     @interval_lg = []
                     @buffer = "".dup
+                    @allow_duplicates = {
+                        "rt" => config.rt_allow_duplicates?,
+                        "lg" => config.lg_allow_duplicates?
+                    }
+
+                    @stats = Stats.new(
+                        rt_time_not_monotonic: 0, lg_time_not_monotonic: 0,
+                        rt_time_duplicate: 0, lg_time_duplicate: 0,
+                        invalid_logical_time: 0, logical_time_overrides: 0,
+                        rejected_samples: 0
+                    )
                 end
 
                 def tell
@@ -173,6 +211,18 @@ module Syskit::Log
                     raw_payload
                 end
 
+                def read_logical_time(raw_payload)
+                    return unless (lg_time_us = @logical_time_reader&.call(raw_payload))
+
+                    if lg_time_us == 0
+                        stats.invalid_logical_time += 1
+                        return
+                    end
+
+                    stats.logical_time_overrides += 1
+                    lg_time_us
+                end
+
                 def add_data_block(rt_time, lg_time, raw_data, raw_payload)
                     @stream_size += 1
 
@@ -180,14 +230,6 @@ module Syskit::Log
                     write ZERO_BYTE
                     write raw_data[4..-1]
 
-                    if (lg_time_us = @logical_time_reader&.call(raw_payload))
-                        # ignore logical time for samples that have invalid timestamps
-                        unless lg_time_us == 0
-                            raw_payload = update_raw_payload_logical_time(
-                                raw_payload, lg_time_us
-                            )
-                        end
-                    end
                     write raw_payload
 
                     @interval_rt[0] ||= rt_time
@@ -214,31 +256,60 @@ module Syskit::Log
                 #
                 # @return [#call,nil]
                 def resolve_logical_time_reader(stream_block)
+                    path = resolve_logical_time_field_path(stream_block)
+                    return unless path
+
+                    stream_type = stream_block.type
+
+                    opt = Output
+                          .compound_field_path_directly_addressable?(stream_type, path)
+
+                    if opt
+                        _, offset = path.inject([stream_type, 0]) do |(t, o), name|
+                            [t[name], o + t.offset_of(name)]
+                        end
+
+                        LogicalTimeReaderOpt.new(offset)
+                    else
+                        LogicalTimeReader.new(stream_type, path[0..-2])
+                    end
+                end
+
+                def resolve_logical_time_field_path(stream_block)
                     return if stream_block.metadata["rock_timestamp_field"]
 
-                    type = stream_block.type
-                    field_name = logical_time_field(type)
-                    return unless field_name
+                    field_name = stream_block.metadata["rock_timestamp_field_override"]
+                    stream_type = stream_block.type
+                    unless field_name
+                        field_name = logical_time_field(stream_type)
+                        return unless field_name
+                    end
 
-                    field_type = type[field_name]
+                    field_path = field_name.split(".") + ["microseconds"]
+                    field_type = field_path.inject(stream_type) do |t, name|
+                        t[name]
+                    end
+
                     unless valid_logical_time_type?(field_type)
                         raise ArgumentError,
                               "field #{field_name} of #{type}, of type #{field_type}, " \
                               "is marked as logical time, but it does not have an " \
                               "integer type field called 'microseconds'"
                     end
+                    field_path
+                end
 
-                    opt =
-                        Output.compound_field_directly_addressable?(type, field_name) &&
-                        Output.compound_field_directly_addressable?(
-                            field_type, "microseconds"
-                        )
-                    if opt
-                        offset = type.offset_of(field_name) +
-                                 field_type.offset_of("microseconds")
-                        LogicalTimeReaderOpt.new(offset)
-                    else
-                        LogicalTimeReader.new(type, field_name)
+                def display_stats(reporter)
+                    if @stats.warn?
+                        reporter.warn "#{path}: WARNING"
+                        @stats.each_pair do |k, v|
+                            reporter.warn "  #{k}: #{v}" unless v == 0
+                        end
+                    elsif !@stats.zero?
+                        reporter.info "#{path}:"
+                        @stats.each_pair do |k, v|
+                            reporter.info "  #{k}: #{v}" unless v == 0
+                        end
                     end
                 end
 
@@ -266,12 +337,55 @@ module Syskit::Log
                 # implementation, which means
                 # - being a compound
                 # - having a 'microseconds' field of type int64_t
-                def valid_logical_time_type?(type)
-                    return unless type <= Typelib::CompoundType
-                    return unless type.has_field?("microseconds")
-
-                    us_type = type["microseconds"]
+                def valid_logical_time_type?(us_type)
                     us_type <= Typelib::NumericType && us_type.size == 8
+                end
+
+                def self.compound_field_path_directly_addressable?(
+                    compound_type, field_path
+                )
+                    type = compound_type
+                    field_path.each do |name|
+                        unless compound_field_directly_addressable?(type, name)
+                            return false
+                        end
+
+                        type = type[name]
+                    end
+                    true
+                end
+
+                def validate_time_followup(data_block_header)
+                    rt = data_block_header.rt_time
+                    lg = data_block_header.lg_time
+                    return true unless last_data_block_time
+
+                    previous_rt, previous_lg = last_data_block_time
+                    rt_valid =
+                        validate_time_followup_rtlg("rt", previous_rt, rt)
+                    lg_valid =
+                        validate_time_followup_rtlg("lg", previous_lg, lg)
+
+                    unless rt_valid && lg_valid
+                        stats.rejected_samples += 1
+                        return
+                    end
+
+                    true
+                end
+
+                def validate_time_followup_rtlg(field, previous, actual)
+                    return true if previous < actual
+
+                    if previous > actual
+                        stats["#{field}_time_not_monotonic"] += 1
+                        return false
+                    elsif previous == actual
+                        stats["#{field}_time_duplicate"] += 1
+                        return @allow_duplicates[field]
+                    end
+
+                    true
                 end
 
                 # Validates that a compound's field offset is fixed in its
@@ -294,11 +408,15 @@ module Syskit::Log
                 end
             end
 
-            def initialize(executor: Concurrent::ImmediateExecutor.new, compress: false)
+            def initialize(
+                executor: Concurrent::ImmediateExecutor.new,
+                compress: false, config: NormalizeConfiguration.new
+            )
                 @out_files = {}
                 @executor = executor
                 @finalization_executor = Concurrent::ImmediateExecutor.new
                 @compress = compress
+                @config = config
             end
 
             def compress?
@@ -421,6 +539,7 @@ module Syskit::Log
                 out_files.each_value do |output|
                     output.write_pocolog_minimal_index
                     output.close
+                    output.display_stats(reporter)
                 end
                 out_files.values
             rescue Exception # rubocop:disable Lint/RescueException
@@ -492,68 +611,12 @@ module Syskit::Log
                 end
             end
 
-            FOLLOWUP_STREAM_TIME_ERROR_FORMAT =
-                "While building %<stream_name>s, found followup stream whose %<mode>s "\
-                "is before the stream that came before it. Previous sample real time = "\
-                "%<previous>s, sample real time = %<current>s"
-
             def self.format_timestamp(time_us)
                 Time.at(time_us / 1_000_000).strftime("%Y-%m-%d %H:%M:%S:%6N")
             end
 
             NormalizationState =
-                Struct.new(:out_io_streams, :control_blocks, :followup_stream_time) do
-                    def report_followup_stream_error(
-                        reporter: NullReporter.new, stream_index:, mode:, previous:,
-                        current:
-                    )
-                        output_stream_name = out_io_streams[stream_index].path
-                        msg = format(
-                            FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                            stream_name: output_stream_name, mode: mode,
-                            previous: Normalize.format_timestamp(previous),
-                            current: Normalize.format_timestamp(current)
-                        )
-                        reporter.warn msg
-                    end
-
-                    def validate_time_field_sequential(
-                        reporter: NullReporter.new, stream_index:,
-                        mode:, previous:, current:
-                    )
-                        if previous > current
-                            report_followup_stream_error(
-                                reporter: reporter, stream_index: stream_index,
-                                mode: mode, previous: previous, current: current
-                            )
-                            return false
-                        end
-                        true
-                    end
-
-                    def validate_time_followup(
-                        stream_index, data_block_header, reporter: NullReporter.new
-                    )
-                        # Second part of the followup stream validation (see above)
-                        last_stream_time = followup_stream_time[stream_index]
-                        valid_time = true
-                        return valid_time unless last_stream_time
-
-                        followup_stream_time[stream_index] = nil
-                        previous_rt, previous_lg = last_stream_time
-                        rt = data_block_header.rt_time
-                        lg = data_block_header.lg_time
-                        rt_valid = validate_time_field_sequential(
-                            reporter: reporter, stream_index: stream_index,
-                            mode: "real time", previous: previous_rt, current: rt
-                        )
-                        lg_valid = validate_time_field_sequential(
-                            reporter: reporter, stream_index: stream_index,
-                            mode: "logical time", previous: previous_lg, current: lg
-                        )
-                        rt_valid && lg_valid
-                    end
-                end
+                Struct.new(:out_io_streams, :control_blocks, keyword_init: true)
 
             # @api private
             #
@@ -567,7 +630,7 @@ module Syskit::Log
             #   exception that has been raised during processing, and the IOs that
             #   have been touched by the call.
             def normalize_logfile(logfile_path, output_path, reporter: NullReporter.new)
-                state = NormalizationState.new([], +"", [])
+                state = NormalizationState.new(out_io_streams: [], control_blocks: +"")
 
                 in_io = Syskit::Log.open_in_stream(logfile_path)
                 in_block_stream =
@@ -611,8 +674,7 @@ module Syskit::Log
                 while (block_header = in_block_stream.read_next_block_header)
                     begin
                         normalize_logfile_process_block(
-                            output_path, state, block_header,
-                            in_block_stream.read_payload, reporter: reporter
+                            output_path, state, block_header, in_block_stream.read_payload
                         )
                     rescue InvalidFollowupStream => e
                         raise e, "while processing #{in_block_stream.io.path}: #{e.message}"
@@ -639,7 +701,7 @@ module Syskit::Log
             # Process a single in block and dispatch it into separate
             # normalized logfiles
             def normalize_logfile_process_block(
-                output_path, state, block_header, raw_payload, reporter: NullReporter.new
+                output_path, state, block_header, raw_payload
             )
                 stream_index = block_header.stream_index
 
@@ -658,8 +720,7 @@ module Syskit::Log
                     )
                 else
                     normalize_logfile_process_data_block(
-                        state, stream_index, block_header.raw_data, raw_payload,
-                        reporter: reporter
+                        state, stream_index, block_header.raw_data, raw_payload
                     )
                 end
             end
@@ -699,11 +760,6 @@ module Syskit::Log
                     output_path, raw_data, stream_block, state.control_blocks
                 )
                 state.out_io_streams[stream_index] = output
-
-                # If we're reusing a stream, save the time of the last
-                # written block so that we can validate that the two streams
-                # actually follow each other
-                state.followup_stream_time[stream_index] = output.last_data_block_time
             end
 
             # @api private
@@ -716,6 +772,7 @@ module Syskit::Log
                     metadata, stream_name: stream_block.name
                 )
                 name = Streams.normalized_stream_name(metadata)
+                metadata = apply_metadata_from_config(stream_block, metadata)
                 Pocolog::BlockStream::StreamBlock.new(
                     name, stream_block.typename,
                     stream_block.registry_xml, YAML.dump(metadata)
@@ -724,18 +781,36 @@ module Syskit::Log
 
             # @api private
             #
+            # Apply extra metadata to streams
+            #
+            # Used to "fixup" metadata on import
+            def apply_metadata_from_config(stream_block, metadata)
+                @config.stream_config_for_type(stream_block.typename)
+                       .metadata_update(metadata)
+            end
+
+            # @api private
+            #
             # Process a single data block in {#normalize_logfile_process_block}
             def normalize_logfile_process_data_block(
-                state, stream_index, raw_data, raw_payload, reporter: NullReporter.new
+                state, stream_index, raw_data, raw_payload
             )
                 data_block_header =
                     Pocolog::BlockStream::DataBlockHeader.parse(raw_payload)
-                valid = state.validate_time_followup(
-                    stream_index, data_block_header, reporter: reporter
-                )
+                output = state.out_io_streams[stream_index]
+                if (lg_time_override = output.read_logical_time(raw_payload))
+                    data_block_header.lg_time = lg_time_override
+                end
+
+                valid = output.validate_time_followup(data_block_header)
                 return unless valid
 
-                output = state.out_io_streams[stream_index]
+                if lg_time_override
+                    raw_payload = output.update_raw_payload_logical_time(
+                        raw_payload, lg_time_override
+                    )
+                end
+
                 output.add_data_block(
                     data_block_header.rt_time, data_block_header.lg_time,
                     raw_data, raw_payload
@@ -779,9 +854,10 @@ module Syskit::Log
                 out_file_path, stream_block, raw_header, raw_payload, initial_blocks
             )
                 wio = Syskit::Log.open_out_stream(out_file_path)
+                config = @config.stream_config_for_type(stream_block.typename)
 
                 Pocolog::Format::Current.write_prologue(wio)
-                output = Output.new(out_file_path, wio, stream_block, wio.tell)
+                output = Output.new(out_file_path, wio, stream_block, wio.tell, config)
                 output.write initial_blocks
                 output.write raw_header[0, 2]
                 output.write ZERO_BYTE

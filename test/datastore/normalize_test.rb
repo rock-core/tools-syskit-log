@@ -4,7 +4,7 @@ require "test_helper"
 require "syskit/log/datastore/normalize"
 
 module Syskit::Log
-    class Datastore
+    class Datastore # rubocop:disable Metrics/ClassLength
         describe Normalize do
             attr_reader :normalize, :base_time
             before do
@@ -15,9 +15,16 @@ module Syskit::Log
             describe "#normalize" do
                 before do
                     create_logfile "file0.0.log" do
-                        create_logfile_stream "stream0", metadata: Hash["rock_task_name" => "task0", "rock_task_object_name" => "port"]
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
                         write_logfile_sample base_time + 2, base_time + 20, 2
-                        create_logfile_stream "stream1", metadata: Hash["rock_task_name" => "task1", "rock_task_object_name" => "port"]
+
+                        create_logfile_stream("stream1", metadata: {
+                                                  "rock_task_name" => "task1",
+                                                  "rock_task_object_name" => "port"
+                                              })
                         write_logfile_sample base_time + 1, base_time + 10, 1
                     end
                 end
@@ -136,28 +143,86 @@ module Syskit::Log
                         )
                         write_logfile_sample base_time + 1, base_time + 30, 3
                     end
-                    reporter = NullReporter.new
-                    msg = format(
-                        Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                        stream_name: logfile_pathname(
-                            "normalized", "0", "task0::port.0.log", compress: false
-                        ),
-                        mode: "real time",
-                        previous: Normalize.format_timestamp(timestamp_us(base_time + 2)),
-                        current: Normalize.format_timestamp(timestamp_us(base_time + 1))
-                    )
-                    warnings = record_warnings(reporter) do
+                    warnings = record_warnings do |reporter|
                         normalize.normalize(
                             [logfile_pathname("file0.0.log"),
                              logfile_pathname("file0.1.log")], reporter: reporter
                         )
                     end
-                    assert_includes warnings, msg
+                    assert_includes warnings, "  rt_time_not_monotonic: 1"
                     stream = open_logfile_stream(
                         ["normalized", "task0::port.0.log"], "task0.port"
                     )
-                    assert_equal(stream.size, 1)
-                    assert_equal(stream[0][2], 2)
+                    assert_equal(1, stream.size)
+                    assert_equal(2, stream[0][2])
+                end
+                it "skips a sample if its real time is before the last sample's" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 2, base_time + 30, 2
+                        write_logfile_sample base_time + 1, base_time + 40, 3
+                    end
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  rt_time_not_monotonic: 1"
+                    assert_includes warnings, "  rejected_samples: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(1, stream.size)
+                    assert_equal(2, stream[0][2])
+                end
+                it "does not skip a sample if its real time is equal to the last sample's" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 2, base_time + 30, 2
+                        write_logfile_sample base_time + 2, base_time + 40, 3
+                    end
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  rt_time_duplicate: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(2, stream.size)
+                end
+                it "rejects a sample if its real time is equal " \
+                   "to the last sample's and it is configured to do so" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 2, base_time + 40, 2
+                        write_logfile_sample base_time + 2, base_time + 50, 3
+                    end
+                    normalize.config
+                             .stream_config_for_type("/int32_t")
+                             .rt_allow_duplicates = false
+
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  rt_time_duplicate: 1"
+                    assert_includes warnings, "  rejected_samples: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(1, stream.size)
                 end
                 it "skips the sample if a potential followup stream has a non-matching "\
                    "logical time range" do
@@ -171,29 +236,118 @@ module Syskit::Log
                         )
                         write_logfile_sample base_time + 50, base_time, 3
                     end
-                    reporter = NullReporter.new
-                    msg = format(
-                        Normalize::FOLLOWUP_STREAM_TIME_ERROR_FORMAT,
-                        stream_name: logfile_pathname(
-                            "normalized", "0", "task0::port.0.log",
-                            compress: false
-                        ),
-                        mode: "logical time",
-                        previous: Normalize.format_timestamp(timestamp_us(base_time + 20)),
-                        current: Normalize.format_timestamp(timestamp_us(base_time))
-                    )
-                    warnings = record_warnings(reporter) do
+                    warnings = record_warnings do |reporter|
                         normalize.normalize(
                             [logfile_pathname("file0.0.log"),
                              logfile_pathname("file0.1.log")], reporter: reporter
                         )
                     end
-                    assert_includes warnings, msg
+                    assert_includes warnings, "  lg_time_not_monotonic: 1"
                     stream = open_logfile_stream(
                         ["normalized", "task0::port.0.log"], "task0.port"
                     )
-                    assert_equal(stream.size, 1)
-                    assert_equal(stream[0][2], 2)
+                    assert_equal(1, stream.size)
+                    assert_equal(2, stream[0][2])
+                end
+                it "skips a sample if its logical time is before the last sample's" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 1, base_time + 40, 2
+                        write_logfile_sample base_time + 2, base_time + 30, 3
+                    end
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  lg_time_not_monotonic: 1"
+                    assert_includes warnings, "  rejected_samples: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(1, stream.size)
+                    assert_equal(2, stream[0][2])
+                end
+                it "by default, does not skip a sample if its logical time is equal " \
+                   "to the last sample's" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 1, base_time + 40, 2
+                        write_logfile_sample base_time + 2, base_time + 40, 3
+                    end
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  lg_time_duplicate: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(2, stream.size)
+                end
+                it "rejects a sample if its logical time is equal " \
+                   "to the last sample's and it is configured to do so" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 1, base_time + 40, 2
+                        write_logfile_sample base_time + 2, base_time + 40, 3
+                    end
+                    normalize.config
+                             .stream_config_for_type("/int32_t")
+                             .lg_allow_duplicates = false
+
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  lg_time_duplicate: 1"
+                    assert_includes warnings, "  rejected_samples: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(1, stream.size)
+                end
+                it "skips a sample if its imported logical time " \
+                   "is before the last sample's" do
+                    registry = Typelib::CXXRegistry.new
+                    time_t = registry.create_compound("/Time") do |c|
+                        c.microseconds = "/uint64_t"
+                    end
+                    test_t = registry.create_compound("/Test") { |c| c.f = time_t }
+
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", type: test_t, metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port",
+                                                  "rock_timestamp_field_override" => "f"
+                                              })
+                        write_logfile_sample base_time + 1, base_time + 30,
+                                             { f: { microseconds: 30 } }
+                        write_logfile_sample base_time + 2, base_time + 40,
+                                             { f: { microseconds: 20 } }
+                    end
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  lg_time_not_monotonic: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(1, stream.size)
+                    assert_equal(30, stream[0][2].f.microseconds)
                 end
                 it "raises if a potential followup stream has an non-matching type" do
                     create_logfile "file0.1.log" do
@@ -288,7 +442,7 @@ module Syskit::Log
                 end
             end
 
-            describe "compound_field_directly_addressable?" do
+            describe "compound_field_path_directly_addressable?" do
                 before do
                     @registry = Typelib::CXXRegistry.new
                     @registry.create_compound "/Time" do |b|
@@ -300,8 +454,8 @@ module Syskit::Log
                     type_t = @registry.create_compound "/Test" do |b|
                         b.time = "/Time"
                     end
-                    assert Normalize::Output.compound_field_directly_addressable?(
-                        type_t, "time"
+                    assert Normalize::Output.compound_field_path_directly_addressable?(
+                        type_t, ["time"]
                     )
                 end
 
@@ -311,8 +465,8 @@ module Syskit::Log
                         b.pad = "/uint32_t"
                         b.time = "/Time"
                     end
-                    assert Normalize::Output.compound_field_directly_addressable?(
-                        type_t, "time"
+                    assert Normalize::Output.compound_field_path_directly_addressable?(
+                        type_t, ["time"]
                     )
                 end
 
@@ -323,8 +477,36 @@ module Syskit::Log
                         b.pad = "/std/vector</uint32_t>"
                         b.time = "/Time"
                     end
-                    refute Normalize::Output.compound_field_directly_addressable?(
-                        type_t, "time"
+                    refute Normalize::Output.compound_field_path_directly_addressable?(
+                        type_t, ["time"]
+                    )
+                end
+
+                it "returns true if the time field is within a field " \
+                   "that is directly addressable" do
+                    intermediate_t = @registry.create_compound "/Intermediate" do |b|
+                        b.time = "/Time"
+                    end
+                    test_t = @registry.create_compound "/Test" do |b|
+                        b.field = intermediate_t
+                    end
+                    assert Normalize::Output.compound_field_path_directly_addressable?(
+                        test_t, %w[field time]
+                    )
+                end
+
+                it "returns false if the time field is within a field " \
+                   "that is not directly addressable" do
+                    @registry.create_container "/std/vector", "/uint32_t"
+                    intermediate_t = @registry.create_compound "/Intermediate" do |b|
+                        b.time = "/Time"
+                    end
+                    test_t = @registry.create_compound "/Test" do |b|
+                        b.pad = "/std/vector</uint32_t>"
+                        b.field = intermediate_t
+                    end
+                    refute Normalize::Output.compound_field_path_directly_addressable?(
+                        test_t, %w[field time]
                     )
                 end
             end
@@ -426,6 +608,45 @@ module Syskit::Log
                                  stream.samples.to_a
                 end
 
+                it "uses the rock_timestamp_field_override metadata field instead of " \
+                   "rock_timestamp_field if the former is present" do
+                    value = @test_t.new(
+                        time: { microseconds: @timestamp_as_microseconds },
+                        other_type: 42
+                    )
+                    logical_time_create_file(value, metadata: {
+                                                 "rock_timestamp_field" => "invalid",
+                                                 "rock_timestamp_field_override" => "time"
+                                             })
+
+                    logical_time_normalize
+                    stream = logical_time_open_stream
+                    assert_equal [[base_time, base_time + 5, value]],
+                                 stream.samples.to_a
+                end
+
+                it "is able to extract the logical time field from a compound field" do
+                    root_t = @registry.create_compound "/Root" do |b|
+                        b.field = @test_t
+                    end
+
+                    value = root_t.new(
+                        field: {
+                            time: { microseconds: @timestamp_as_microseconds },
+                            other_type: 42
+                        }
+                    )
+
+                    logical_time_create_file(value, metadata: {
+                                                 "rock_timestamp_field_override" => "field.time"
+                                             })
+                    logical_time_normalize
+                    stream = logical_time_open_stream
+
+                    assert_equal [[base_time, @timestamp, value]],
+                                 stream.samples.to_a
+                end
+
                 it "resizes containers if the native type has a different size" do
                     # The idea of that test is to create a log file using a
                     # valid type (compound_t) that has the same marshalled
@@ -498,11 +719,11 @@ module Syskit::Log
                 time.tv_sec * 1_000_000 + time.tv_usec
             end
 
-            def record_warnings(reporter)
+            def record_warnings(reporter = NullReporter.new)
                 record = []
                 FlexMock.use(reporter) do |mock|
                     mock.should_receive(:warn).and_return { |args| record << args }
-                    yield
+                    yield(reporter)
                 end
                 record
             end
