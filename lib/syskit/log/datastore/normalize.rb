@@ -27,6 +27,11 @@ module Syskit::Log
             extend Logger::Hierarchy
             class InvalidFollowupStream < RuntimeError; end
 
+            # Configuration of the normalization process
+            #
+            # @return [NormalizeConfiguration]
+            attr_reader :config
+
             # Mapping of path for created output files to their {Output} object
             #
             # @return [{Pathname=>Output}]
@@ -121,7 +126,7 @@ module Syskit::Log
                 WRITE_BLOCK_SIZE = 8 * 1024
 
                 def initialize(
-                    path, wio, stream_block, stream_block_pos
+                    path, wio, stream_block, stream_block_pos, config
                 )
                     @path = path
                     @wio = wio
@@ -132,6 +137,11 @@ module Syskit::Log
                     @interval_rt = []
                     @interval_lg = []
                     @buffer = "".dup
+                    @allow_duplicates = {
+                        "rt" => config.rt_allow_duplicates?,
+                        "lg" => config.lg_allow_duplicates?
+                    }
+
                     @stats = Stats.new(
                         rt_time_not_monotonic: 0, lg_time_not_monotonic: 0,
                         rt_time_duplicate: 0, lg_time_duplicate: 0,
@@ -372,7 +382,7 @@ module Syskit::Log
                         return false
                     elsif previous == actual
                         stats["#{field}_time_duplicate"] += 1
-                        return true
+                        return @allow_duplicates[field]
                     end
 
                     true
@@ -605,8 +615,8 @@ module Syskit::Log
                 Time.at(time_us / 1_000_000).strftime("%Y-%m-%d %H:%M:%S:%6N")
             end
 
-            NormalizationState = Struct.new(:config, :out_io_streams, :control_blocks,
-                                            keyword_init: true)
+            NormalizationState =
+                Struct.new(:out_io_streams, :control_blocks, keyword_init: true)
 
             # @api private
             #
@@ -620,9 +630,7 @@ module Syskit::Log
             #   exception that has been raised during processing, and the IOs that
             #   have been touched by the call.
             def normalize_logfile(logfile_path, output_path, reporter: NullReporter.new)
-                state = NormalizationState.new(
-                    config: @config, out_io_streams: [], control_blocks: +""
-                )
+                state = NormalizationState.new(out_io_streams: [], control_blocks: +"")
 
                 in_io = Syskit::Log.open_in_stream(logfile_path)
                 in_block_stream =
@@ -777,8 +785,8 @@ module Syskit::Log
             #
             # Used to "fixup" metadata on import
             def apply_metadata_from_config(stream_block, metadata)
-                @config.stream_metadata_update_for_type(stream_block.typename)
-                       .update(metadata)
+                @config.stream_config_for_type(stream_block.typename)
+                       .metadata_update(metadata)
             end
 
             # @api private
@@ -846,9 +854,10 @@ module Syskit::Log
                 out_file_path, stream_block, raw_header, raw_payload, initial_blocks
             )
                 wio = Syskit::Log.open_out_stream(out_file_path)
+                config = @config.stream_config_for_type(stream_block.typename)
 
                 Pocolog::Format::Current.write_prologue(wio)
-                output = Output.new(out_file_path, wio, stream_block, wio.tell)
+                output = Output.new(out_file_path, wio, stream_block, wio.tell, config)
                 output.write initial_blocks
                 output.write raw_header[0, 2]
                 output.write ZERO_BYTE

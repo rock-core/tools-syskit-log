@@ -3,19 +3,10 @@
     "required": [],
     "additionalProperties": false,
     "properties": {
-        "metadata": {
-            "type": "object",
-            "required": [],
-            "additionalProperties": false,
-            "properties": {
-                "streams": {
-                    "type": "array",
-                    "required": [],
-                    "items": {
-                        "$ref": "streams_metadata_update.schema.json"
-                    }
-                }
-            }
+        "streams": {
+            "type": "array",
+            "items": { "$ref": "normalize_configuration-streams.schema.json" },
+            "default": []
         }
     }
 }

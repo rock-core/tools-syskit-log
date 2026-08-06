@@ -198,6 +198,32 @@ module Syskit::Log
                     )
                     assert_equal(2, stream.size)
                 end
+                it "rejects a sample if its real time is equal " \
+                   "to the last sample's and it is configured to do so" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 2, base_time + 40, 2
+                        write_logfile_sample base_time + 2, base_time + 50, 3
+                    end
+                    normalize.config
+                             .stream_config_for_type("/int32_t")
+                             .rt_allow_duplicates = false
+
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  rt_time_duplicate: 1"
+                    assert_includes warnings, "  rejected_samples: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(1, stream.size)
+                end
                 it "skips the sample if a potential followup stream has a non-matching "\
                    "logical time range" do
                     create_logfile "file0.1.log" do
@@ -245,7 +271,7 @@ module Syskit::Log
                     assert_equal(1, stream.size)
                     assert_equal(2, stream[0][2])
                 end
-                it "does not skip a sample if its logical time is equal " \
+                it "by default, does not skip a sample if its logical time is equal " \
                    "to the last sample's" do
                     create_logfile "file0.1.log" do
                         create_logfile_stream("stream0", metadata: {
@@ -265,6 +291,32 @@ module Syskit::Log
                         ["normalized", "task0::port.0.log"], "task0.port"
                     )
                     assert_equal(2, stream.size)
+                end
+                it "rejects a sample if its logical time is equal " \
+                   "to the last sample's and it is configured to do so" do
+                    create_logfile "file0.1.log" do
+                        create_logfile_stream("stream0", metadata: {
+                                                  "rock_task_name" => "task0",
+                                                  "rock_task_object_name" => "port"
+                                              })
+                        write_logfile_sample base_time + 1, base_time + 40, 2
+                        write_logfile_sample base_time + 2, base_time + 40, 3
+                    end
+                    normalize.config
+                             .stream_config_for_type("/int32_t")
+                             .lg_allow_duplicates = false
+
+                    warnings = record_warnings do |reporter|
+                        normalize.normalize(
+                            [logfile_pathname("file0.1.log")], reporter: reporter
+                        )
+                    end
+                    assert_includes warnings, "  lg_time_duplicate: 1"
+                    assert_includes warnings, "  rejected_samples: 1"
+                    stream = open_logfile_stream(
+                        ["normalized", "task0::port.0.log"], "task0.port"
+                    )
+                    assert_equal(1, stream.size)
                 end
                 it "skips a sample if its imported logical time " \
                    "is before the last sample's" do

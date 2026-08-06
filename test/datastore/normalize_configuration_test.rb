@@ -12,28 +12,26 @@ module Syskit
                 before do
                     @config = NormalizeConfiguration.from_hash(
                         {
-                            "metadata" => {
-                                "streams" => [
-                                    {
-                                        "match" => { "type" => "typename" },
-                                        "op" => "set", "key" => "somek",
-                                        "value" => "somev"
-                                    }
-                                ]
-                            }
+                            "streams" => [{
+                                "match" => { "type" => "typename" },
+                                "metadata" => {
+                                    "op" => "set", "key" => "somek",
+                                    "value" => "somev"
+                                }
+                            }]
                         }
                     )
                 end
 
                 it "overrides existing keys" do
-                    update = @config.stream_metadata_update_for_type("typename")
-                    updated = update.update({ "somek" => "otherv" })
+                    update = @config.stream_config_for_type("typename")
+                    updated = update.metadata_update({ "somek" => "otherv" })
                     assert_equal({ "somek" => "somev" }, updated)
                 end
 
                 it "sets new keys" do
-                    update = @config.stream_metadata_update_for_type("typename")
-                    updated = update.update({})
+                    update = @config.stream_config_for_type("typename")
+                    updated = update.metadata_update({})
                     assert_equal({ "somek" => "somev" }, updated)
                 end
 
@@ -41,16 +39,14 @@ module Syskit
                     assert_raises(JSON::Schema::ValidationError) do
                         NormalizeConfiguration.from_hash(
                             {
-                                "metadata" => {
-                                    "streams" => [
-                                        {
-                                            "match" => { "invalid" => "typename" },
-                                            "op" => "invalid",
-                                            "invalid" => "somek",
-                                            "value" => "somev"
-                                        }
-                                    ]
-                                }
+                                "streams" => [{
+                                    "match" => { "invalid" => "typename" },
+                                    "metadata" => {
+                                        "op" => "invalid",
+                                        "invalid" => "somek",
+                                        "value" => "somev"
+                                    }
+                                }]
                             }
                         )
                     end
