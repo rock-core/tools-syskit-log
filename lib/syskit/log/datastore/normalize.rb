@@ -345,6 +345,39 @@ module Syskit::Log
                     true
                 end
 
+                def validate_time_followup(data_block_header)
+                    rt = data_block_header.rt_time
+                    lg = data_block_header.lg_time
+                    return true unless last_data_block_time
+
+                    previous_rt, previous_lg = last_data_block_time
+                    rt_valid =
+                        validate_time_followup_rtlg("rt", previous_rt, rt)
+                    lg_valid =
+                        validate_time_followup_rtlg("lg", previous_lg, lg)
+
+                    unless rt_valid && lg_valid
+                        stats.rejected_samples += 1
+                        return
+                    end
+
+                    true
+                end
+
+                def validate_time_followup_rtlg(field, previous, actual)
+                    return true if previous < actual
+
+                    if previous > actual
+                        stats["#{field}_time_not_monotonic"] += 1
+                        return false
+                    elsif previous == actual
+                        stats["#{field}_time_duplicate"] += 1
+                        return true
+                    end
+
+                    true
+                end
+
                 # Validates that a compound's field offset is fixed in its
                 # marshalled form
                 #
@@ -572,44 +605,8 @@ module Syskit::Log
                 Time.at(time_us / 1_000_000).strftime("%Y-%m-%d %H:%M:%S:%6N")
             end
 
-            NormalizationState =
-                Struct.new(:out_io_streams, :control_blocks, :followup_stream_time) do
-                    def validate_time_followup(stream_index, data_block_header, stats)
-                        last_stream_time = followup_stream_time[stream_index]
-                        rt = data_block_header.rt_time
-                        lg = data_block_header.lg_time
-                        unless last_stream_time
-                            followup_stream_time[stream_index] = [rt, lg]
-                            return true
-                        end
-
-                        previous_rt, previous_lg = last_stream_time
-                        rt_valid =
-                            validate_time_followup_rtlg("rt", previous_rt, rt, stats)
-                        lg_valid =
-                            validate_time_followup_rtlg("lg", previous_lg, lg, stats)
-
-                        unless rt_valid && lg_valid
-                            stats.rejected_samples += 1
-                            return
-                        end
-
-                        followup_stream_time[stream_index] = [rt, lg]
-                        true
-                    end
-
-                    def validate_time_followup_rtlg(field, previous, actual, stats)
-                        return true if previous < actual
-
-                        if previous > actual
-                            stats["#{field}_time_not_monotonic"] += 1
-                            return false
-                        end
-
-                        stats["#{field}_time_duplicate"] += 1 if previous == actual
-                        true
-                    end
-                end
+            NormalizationState = Struct.new(:config, :out_io_streams, :control_blocks,
+                                            keyword_init: true)
 
             # @api private
             #
@@ -623,7 +620,9 @@ module Syskit::Log
             #   exception that has been raised during processing, and the IOs that
             #   have been touched by the call.
             def normalize_logfile(logfile_path, output_path, reporter: NullReporter.new)
-                state = NormalizationState.new([], +"", [])
+                state = NormalizationState.new(
+                    config: @config, out_io_streams: [], control_blocks: +""
+                )
 
                 in_io = Syskit::Log.open_in_stream(logfile_path)
                 in_block_stream =
@@ -753,11 +752,6 @@ module Syskit::Log
                     output_path, raw_data, stream_block, state.control_blocks
                 )
                 state.out_io_streams[stream_index] = output
-
-                # If we're reusing a stream, save the time of the last
-                # written block so that we can validate that the two streams
-                # actually follow each other
-                state.followup_stream_time[stream_index] = output.last_data_block_time
             end
 
             # @api private
@@ -800,9 +794,7 @@ module Syskit::Log
                     data_block_header.lg_time = lg_time_override
                 end
 
-                valid = state.validate_time_followup(
-                    stream_index, data_block_header, output.stats
-                )
+                valid = output.validate_time_followup(data_block_header)
                 return unless valid
 
                 if lg_time_override
