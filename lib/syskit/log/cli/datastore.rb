@@ -254,10 +254,9 @@ module Syskit::Log
                     paths
                 end
 
-                def import_dataset( # rubocop:disable Metrics/ParameterLists
+                def import_dataset(
                     paths, datastore,
-                    include:, delete_input: false, compress: false, parallel: 1,
-                    config_path: nil
+                    include:, delete_input: false, compress: false, config_path: nil
                 )
                     config = Syskit::Log::NormalizeConfiguration.new
                     if config_path
@@ -267,8 +266,7 @@ module Syskit::Log
                     datastore.in_incoming(keep: delete_input) do |core_path, cache_path|
                         importer = Syskit::Log::Datastore::Import.new(
                             core_path,
-                            cache_path: cache_path, reporter: reporter,
-                            compress: compress, parallel: parallel
+                            cache_path: cache_path, reporter: reporter, compress: compress
                         )
                         dataset = importer.normalize_dataset(
                             paths,
@@ -571,9 +569,6 @@ module Syskit::Log
             method_option :compress,
                           desc: "compress the resulting dataset",
                           type: :boolean, default: false
-            method_option :parallel,
-                          desc: "use this many cores",
-                          type: :numeric, default: 1
             method_option :config_path,
                           desc: "additional configuration file",
                           type: :string, default: nil
@@ -641,8 +636,7 @@ module Syskit::Log
                     dataset = import_dataset(
                         paths, datastore,
                         include: include, delete_input: options[:delete_input],
-                        compress: options[:compress], parallel: options[:parallel],
-                        config_path: options[:config_path]
+                        compress: options[:compress], config_path: options[:config_path]
                     )
 
                     if dataset
