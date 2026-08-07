@@ -435,7 +435,11 @@ module Syskit::Log
                     /\.\d+\.log(?:\.zst)?$/.match(_1.basename.to_s).pre_match
                 end
 
-                result = logfile_groups.map do |key, files|
+                properties_files = logfile_groups.delete("properties")
+                groups = logfile_groups.to_a
+                groups.unshift(["properties", properties_files]) if properties_files
+
+                result = groups.map do |key, files|
                     reporter.info "Normalizing group #{key}"
                     group_result = normalize_logfile_group(
                         files, output_path: output_path, reporter: reporter
