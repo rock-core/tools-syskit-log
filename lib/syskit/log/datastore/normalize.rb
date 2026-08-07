@@ -414,7 +414,6 @@ module Syskit::Log
             )
                 @out_files = {}
                 @executor = executor
-                @finalization_executor = Concurrent::ImmediateExecutor.new
                 @compress = compress
                 @config = config
             end
@@ -476,7 +475,7 @@ module Syskit::Log
                 end
 
                 path = output.path
-                future.then_on(@finalization_executor) do |digest|
+                future.then_on(@executor) do |digest|
                     size = path.stat.size
                     final_path_basename =
                         if compress?
