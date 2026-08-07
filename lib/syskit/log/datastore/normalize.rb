@@ -463,12 +463,9 @@ module Syskit::Log
                     group_postprocess =
                         Concurrent::Promises
                         .zip_futures_on(@finalization_executor, *group_postprocess)
-                    group_postprocess = group_postprocess.then_on(
-                        @finalization_executor, files, temp_output_path
-                    ) do |*identities, f, p|
-                        f.each { _1.unlink } if delete_input
-                        p.rmdir
-                        identities
+                    group_postprocess.on_fulfillment! do
+                        files.each { _1.unlink } if delete_input
+                        temp_output_path.rmdir
                     end
                     postprocess << group_postprocess
                 end
