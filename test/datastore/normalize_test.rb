@@ -158,7 +158,7 @@ module Syskit::Log
                     assert_equal [[base_time + 2, base_time + 20, 2],
                                   [base_time + 3, base_time + 30, 3]], stream.samples.to_a
                 end
-                it "skips the sample if a potential followup stream has a non-matching "\
+                it "skips the sample if a potential followup stream has an non-matching "\
                    "realtime range" do
                     create_logfile "file0.1.log" do
                         create_logfile_stream(
@@ -251,7 +251,7 @@ module Syskit::Log
                     )
                     assert_equal(1, stream.size)
                 end
-                it "skips the sample if a potential followup stream has a non-matching "\
+                it "skips the sample if a potential followup stream has an non-matching "\
                    "logical time range" do
                     create_logfile "file0.1.log" do
                         create_logfile_stream(
