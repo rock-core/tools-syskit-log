@@ -15,20 +15,14 @@ module Syskit::Log
             BASENAME_IMPORT_TAG = ".syskit-pocolog-import"
 
             def initialize(
-                output_path, cache_path: output_path,
-                compress: false, reporter: NullReporter.new, parallel: 1
+                output_path,
+                cache_path: output_path, compress: false, reporter: NullReporter.new
             )
                 @reporter = reporter
 
                 @output_path = output_path
                 @cache_path = cache_path
                 @compress = compress
-                @executor =
-                    if parallel == 1
-                        Concurrent::ImmediateExecutor.new
-                    else
-                        Concurrent::ThreadPoolExecutor.new(max_threads: parallel - 1)
-                    end
             end
 
             def compress?
@@ -263,7 +257,7 @@ module Syskit::Log
 
                 entries = Syskit::Log::Datastore.normalize(
                     files,
-                    output_path: out_pocolog_dir, executor: @executor, config: config,
+                    output_path: out_pocolog_dir, config: config,
                     delete_input: delete_input, compress: @compress, reporter: @reporter
                 )
                 entries.each { |e| e.path = identity_path(e.path) }
