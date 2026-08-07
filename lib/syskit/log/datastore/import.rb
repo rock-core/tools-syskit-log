@@ -222,14 +222,8 @@ module Syskit::Log
             def normalize_roby_logs(roby_event_logs)
                 sql_path = @output_path + "roby.sql"
                 roby_sql_index = RobySQLIndex::Index.create(sql_path)
-                roby_event_logs.filter_map do |roby_event_log|
+                roby_event_logs.map do |roby_event_log|
                     copy_roby_event_log(roby_event_log, roby_sql_index)
-                rescue Roby::DRoby::Logfile::InvalidFileError => e
-                    @reporter.error "Invalid Roby log file, skipping"
-                    e.full_message.split("\n").each do |line|
-                        @reporter.error line
-                    end
-                    nil
                 rescue TypeError, RuntimeError => e
                     @reporter.error "Failed to create index from Roby log file"
                     @reporter.error "The log file will still be part of the dataset. "\
