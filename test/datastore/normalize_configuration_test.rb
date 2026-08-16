@@ -14,10 +14,10 @@ module Syskit
                         {
                             "streams" => [{
                                 "match" => { "type" => "typename" },
-                                "metadata" => {
+                                "metadata" => [{
                                     "op" => "set", "key" => "somek",
                                     "value" => "somev"
-                                }
+                                }]
                             }]
                         }
                     )
@@ -41,11 +41,11 @@ module Syskit
                             {
                                 "streams" => [{
                                     "match" => { "invalid" => "typename" },
-                                    "metadata" => {
+                                    "metadata" => [{
                                         "op" => "invalid",
                                         "invalid" => "somek",
                                         "value" => "somev"
-                                    }
+                                    }]
                                 }]
                             }
                         )

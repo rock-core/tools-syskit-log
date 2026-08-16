@@ -43,6 +43,33 @@ module Syskit::Log
                     assert_equal [[base_time + 1, base_time + 10, 1]],
                                  stream.samples.to_a
                 end
+
+                it "allows setting critical metadata via the configuration file" do
+                    create_logfile "file1.0.log" do
+                        create_logfile_stream("stream0")
+                        write_logfile_sample(base_time, base_time + 5, 12)
+                    end
+                    normalize.update_config_from_hash(
+                        {
+                            "streams" => [{
+                                "match" => { "type" => "/int32_t" },
+                                "metadata" => [
+                                    { "op" => "set", "key" => "rock_task_name",
+                                      "value" => "task1" },
+                                    { "op" => "set", "key" => "rock_task_object_name",
+                                      "value" => "port1" }
+                                ]
+                            }]
+                        }
+                    )
+                    normalize.normalize([logfile_pathname("file1.0.log")])
+
+                    stream = open_logfile_stream(
+                        ["normalized", "task1::port1.0.log"], "task1.port1"
+                    )
+                    assert_equal [[base_time, base_time + 5, 12]], stream.samples.to_a
+                end
+
                 it "deletes input files if delete_input is true" do
                     logfile_pathname("normalized").mkdir
                     input_path = logfile_pathname("file0.0.log")

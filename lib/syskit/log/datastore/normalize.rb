@@ -771,12 +771,17 @@ module Syskit::Log
                 metadata = Streams.sanitize_metadata(
                     metadata, stream_name: stream_block.name
                 )
-                name = Streams.normalized_stream_name(metadata)
                 metadata = apply_metadata_from_config(stream_block, metadata)
+                name = Streams.normalized_stream_name(metadata)
                 Pocolog::BlockStream::StreamBlock.new(
                     name, stream_block.typename,
                     stream_block.registry_xml, YAML.dump(metadata)
                 )
+            end
+
+            # Update configuration
+            def update_config_from_hash(hash)
+                @config.update_from_hash(hash)
             end
 
             # @api private

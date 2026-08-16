@@ -28,7 +28,7 @@ module Syskit
                         @stream_config_per_type[typename] = StreamConfig.new(
                             lg_allow_duplicates: entry["lg_allow_duplicates"],
                             rt_allow_duplicates: entry["rt_allow_duplicates"],
-                            metadata_ops: [entry["metadata"]]
+                            metadata_ops: entry["metadata"]
                         )
                     end
                 end
