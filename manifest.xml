@@ -9,6 +9,7 @@
     <depend package="ruby-sqlite3" />
     <depend package="zstd-ruby" />
     <depend package="minitar" />
+    <depend package="ruby-json-schema" />
     <depend_optional package="data_processing/daru" />
     <depend_optional package="gui/vega-rb" />
     <depend_optional package="data_processing/rb-gsl" />
@@ -20,4 +21,3 @@
     <test_depend package="data_processing/daru" />
     <test_depend package="iruby" />
 </package>
-

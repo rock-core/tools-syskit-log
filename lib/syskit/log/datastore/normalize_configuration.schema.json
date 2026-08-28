@@ -1,0 +1,12 @@
+{
+    "type": "object",
+    "required": [],
+    "additionalProperties": false,
+    "properties": {
+        "streams": {
+            "type": "array",
+            "items": { "$ref": "normalize_configuration-streams.schema.json" },
+            "default": []
+        }
+    }
+}

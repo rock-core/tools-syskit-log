@@ -1,0 +1,45 @@
+{
+    "type": "object",
+    "required": ["match"],
+    "additionalProperties": false,
+    "properties": {
+        "match": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "required": ["type"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "type": { "type": "string" }
+                    }
+                }
+            ]
+        },
+        "rt_allow_duplicates": { "type": "boolean", "default": true },
+        "lg_allow_duplicates": { "type": "boolean", "default": true },
+        "metadata": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {
+                        "required": ["op", "key"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "op": { "enum": ["delete"] },
+                            "key": { "type": "string" }
+                        }
+                    },
+                    {
+                        "required": ["op", "key", "value"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "op": { "enum": ["set"] },
+                            "key": { "type": "string" },
+                            "value": {}
+                        }
+                    }
+                ]
+            }
+        }
+    }
+}

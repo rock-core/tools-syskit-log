@@ -14,6 +14,8 @@ require "digest/sha2"
 require "metaruby/dsls/find_through_method_missing"
 require "pocolog/cli/null_reporter"
 require "zstd-ruby"
+require "json-schema"
+
 require "syskit/log/version"
 require "syskit/log/exceptions"
 require "syskit/log/digest_io"
