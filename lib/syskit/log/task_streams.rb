@@ -205,10 +205,11 @@ module Syskit::Log
             task_m = Syskit::TaskContext.new_submodel do
                 srv_m.each_port do |p|
                     component_name = service_to_component_port[p.name] || p.name
+                    type = Roby.app.default_loader.opaque_type_for(p.type)
                     if p.input?
-                        input_port component_name, p.type
+                        input_port component_name, type
                     else
-                        output_port component_name, p.type
+                        output_port component_name, type
                     end
                 end
                 provides srv_m, service_to_component_port, as: "replayed_service"
@@ -229,11 +230,15 @@ module Syskit::Log
             srv_m.each_port.map do |p|
                 stream_name = service_to_component_port[p.name] || p.name
                 stream = find_port_by_name(stream_name)
-                unless stream
-                    raise ArgumentError,
-                          "cannot find stream #{stream_name} for service port #{p.name}"
+                next(stream) if stream
+
+                available_ports = each_port_stream.sort_by(&:first).map do |name, s|
+                    "#{name} (#{s.type.name})"
                 end
-                stream
+                raise ArgumentError,
+                      "cannot find stream #{stream_name} for "\
+                      "service port #{p.name}, available ports: "\
+                      "#{available_ports.join(", ")}"
             end
         end
     end
