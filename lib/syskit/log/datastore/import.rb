@@ -15,20 +15,14 @@ module Syskit::Log
             BASENAME_IMPORT_TAG = ".syskit-pocolog-import"
 
             def initialize(
-                output_path, cache_path: output_path,
-                compress: false, reporter: NullReporter.new, parallel: 1
+                output_path,
+                cache_path: output_path, compress: false, reporter: NullReporter.new
             )
                 @reporter = reporter
 
                 @output_path = output_path
                 @cache_path = cache_path
                 @compress = compress
-                @executor =
-                    if parallel == 1
-                        Concurrent::ImmediateExecutor.new
-                    else
-                        Concurrent::ThreadPoolExecutor.new(max_threads: parallel - 1)
-                    end
             end
 
             def compress?
@@ -222,14 +216,8 @@ module Syskit::Log
             def normalize_roby_logs(roby_event_logs)
                 sql_path = @output_path + "roby.sql"
                 roby_sql_index = RobySQLIndex::Index.create(sql_path)
-                roby_event_logs.filter_map do |roby_event_log|
+                roby_event_logs.map do |roby_event_log|
                     copy_roby_event_log(roby_event_log, roby_sql_index)
-                rescue Roby::DRoby::Logfile::InvalidFileError => e
-                    @reporter.error "Invalid Roby log file, skipping"
-                    e.full_message.split("\n").each do |line|
-                        @reporter.error line
-                    end
-                    nil
                 rescue TypeError, RuntimeError => e
                     @reporter.error "Failed to create index from Roby log file"
                     @reporter.error "The log file will still be part of the dataset. "\
@@ -269,7 +257,7 @@ module Syskit::Log
 
                 entries = Syskit::Log::Datastore.normalize(
                     files,
-                    output_path: out_pocolog_dir, executor: @executor, config: config,
+                    output_path: out_pocolog_dir, config: config,
                     delete_input: delete_input, compress: @compress, reporter: @reporter
                 )
                 entries.each { |e| e.path = identity_path(e.path) }
