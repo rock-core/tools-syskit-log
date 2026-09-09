@@ -15,12 +15,6 @@ module Syskit
                     name:, path:, type:, value_transform:, global_transform:,
                     dtype: nil
                 )
-                    if dtype && !dtype.respond_to?(:to_sym)
-                        raise ArgumentError,
-                              "'dtype' must be given in symbol form (e.g. :f32 "\
-                              "instead of Polars::Float32)"
-                    end
-
                     @path = path
                     @type = type
                     @dtype =
